@@ -25,37 +25,44 @@ def _json_serializer(obj: Any) -> str:
     return str(obj)
 
 
-def truncate_payload(value: Any, limit: int = 20000) -> tuple[Any, bool]:
+def truncate_payload(value: Any, limit: int = 20000) -> tuple[str | Any, bool]:
     """Truncate large payloads to a size limit.
+
+    For str/bytes: returns the original or truncated value as-is.
+    For other types: serializes to JSON string and returns that string
+    (truncated if needed).
 
     Args:
         value: The value to potentially truncate
         limit: Maximum character count for serialized value
 
     Returns:
-        Tuple of (potentially truncated value, was_truncated boolean)
+        Tuple of (value or JSON string, was_truncated boolean).
+        For str/bytes: returns the value itself (possibly truncated).
+        For other types: returns the JSON string representation (possibly truncated).
     """
-    # Serialize to check size
+    # str/bytes: return as-is
     if isinstance(value, (str, bytes)):
         if len(value) > limit:
             return value[:limit], True
         return value, False
 
-    # For other types, serialize and check
+    # For other types, serialize to JSON string
     try:
         serialized = json.dumps(value, ensure_ascii=False, default=_json_serializer)
         if len(serialized) > limit:
-            # Truncate the serialized form
-            truncated = serialized[:limit]
-            # Try to parse it back, if it fails just return the truncated string
-            try:
-                return json.loads(truncated), True
-            except json.JSONDecodeError:
-                return truncated, True
-        return value, False
+            return serialized[:limit], True
+        return serialized, False
     except (TypeError, ValueError):
-        # Can't serialize, return as-is
-        return value, False
+        # Can't serialize, convert to string as fallback
+        try:
+            fallback = str(value)
+            if len(fallback) > limit:
+                return fallback[:limit], True
+            return fallback, False
+        except Exception:
+            # Even str() failed, return a placeholder
+            return "<unserializable>", True
 
 
 class Tracer(Protocol):
@@ -131,21 +138,28 @@ class InMemoryTracer:
         type: str,
         **payload: Any
     ) -> None:
-        """Record event to memory."""
-        event = {
-            "ts": utc_now().isoformat(),
-            "session_id": session_id,
-            "turn_id": turn_id,
-            "step": step,
-            "type": type,
-            **payload
-        }
-        self.events.append(event)
+        """Record event to memory.
 
-        # Track prompt versions
-        if type in ("session_started", "system_prompt_changed"):
-            if "prompt_version" in payload:
-                self._prompt_versions[session_id] = payload["prompt_version"]
+        Swallows all exceptions to ensure tracing never breaks the orchestrator.
+        """
+        try:
+            event = {
+                "ts": utc_now().isoformat(),
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "step": step,
+                "type": type,
+                **payload
+            }
+            self.events.append(event)
+
+            # Track prompt versions
+            if type in ("session_started", "system_prompt_changed"):
+                if "prompt_version" in payload:
+                    self._prompt_versions[session_id] = payload["prompt_version"]
+        except Exception:
+            # Silently swallow - tracing must not break the orchestrator
+            pass
 
     def needs_system_prompt(self, session_id: str, prompt_version: str) -> bool:
         """Check if prompt version has changed."""
@@ -224,33 +238,33 @@ class FileTracer:
     ) -> None:
         """Record event to file.
 
-        Validates session_id and swallows write errors (logging once per session).
+        Validates session_id and swallows all errors (logging once per session).
         """
-        # Validate session ID
-        if not self._validate_session_id(session_id):
-            return
-
-        # Skip if we've already failed to write to this session
-        if session_id in self._failed_sessions:
-            return
-
-        # Build event
-        event = {
-            "ts": self.clock().isoformat(),
-            "session_id": session_id,
-            "turn_id": turn_id,
-            "step": step,
-            "type": type,
-            **payload
-        }
-
-        # Track prompt versions in memory
-        if type in ("session_started", "system_prompt_changed"):
-            if "prompt_version" in payload:
-                self._prompt_versions[session_id] = payload["prompt_version"]
-
-        # Write to file
         try:
+            # Validate session ID
+            if not self._validate_session_id(session_id):
+                return
+
+            # Skip if we've already failed to write to this session
+            if session_id in self._failed_sessions:
+                return
+
+            # Build event
+            event = {
+                "ts": self.clock().isoformat(),
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "step": step,
+                "type": type,
+                **payload
+            }
+
+            # Track prompt versions in memory
+            if type in ("session_started", "system_prompt_changed"):
+                if "prompt_version" in payload:
+                    self._prompt_versions[session_id] = payload["prompt_version"]
+
+            # Write to file
             trace_path = self._trace_path(session_id)
 
             # Ensure parent directory exists
@@ -262,7 +276,7 @@ class FileTracer:
                 f.write("\n")
                 f.flush()
 
-        except (OSError, IOError, TypeError, ValueError) as e:
+        except Exception as e:
             # Log warning once per session
             if session_id not in self._failed_sessions:
                 logger.warning(
@@ -275,16 +289,21 @@ class FileTracer:
         """Check if system prompt needs to be written.
 
         Reads from file on first use for this session to handle tracer restarts.
+        Swallows all errors and returns True (safe default: write the prompt).
         """
-        # Check memory cache first
-        if session_id in self._prompt_versions:
-            return self._prompt_versions[session_id] != prompt_version
+        try:
+            # Check memory cache first
+            if session_id in self._prompt_versions:
+                return self._prompt_versions[session_id] != prompt_version
 
-        # Load from file
-        current = self._load_prompt_version(session_id)
-        if current is not None:
-            self._prompt_versions[session_id] = current
-            return current != prompt_version
+            # Load from file
+            current = self._load_prompt_version(session_id)
+            if current is not None:
+                self._prompt_versions[session_id] = current
+                return current != prompt_version
 
-        # No version found, prompt is needed
-        return True
+            # No version found, prompt is needed
+            return True
+        except Exception:
+            # On any error, return True (safe default: write the prompt)
+            return True

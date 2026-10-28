@@ -197,17 +197,19 @@ def test_truncation_marker():
     assert value == "x" * 20000
     assert truncated is True
 
-    # Dict with long value
+    # Dict with long value - should return truncated JSON string
     large_dict = {"data": "y" * 30000}
     value, truncated = truncate_payload(large_dict, limit=20000)
     assert truncated is True
-    # The serialized JSON should be truncated
-    assert len(str(value)) <= 20000
+    assert isinstance(value, str)
+    assert len(value) == 20000
 
-    # List with long content
+    # List with long content - should return truncated JSON string
     large_list = ["z" * 10000, "a" * 10000, "b" * 10000]
     value, truncated = truncate_payload(large_list, limit=20000)
     assert truncated is True
+    assert isinstance(value, str)
+    assert len(value) == 20000
 
 
 def test_settings_trace_defaults_and_env():
@@ -253,3 +255,76 @@ def test_in_memory_tracer_stores_events():
     assert tracer.events[0]["type"] == "model_call"
     assert tracer.events[0]["session_id"] == "sess_1"
     assert tracer.events[1]["type"] == "tool_call"
+
+
+class BadObject:
+    """Object whose __str__ raises an exception."""
+    def __str__(self):
+        raise RuntimeError("Cannot serialize")
+
+
+def test_file_tracer_handles_bad_serialization(test_tmp_dir, valid_session_id, caplog):
+    """FileTracer handles objects that raise on serialization without propagating exception."""
+    tracer = FileTracer(test_tmp_dir)
+
+    with caplog.at_level(logging.WARNING, logger="src.agent.trace"):
+        # Record with an object that raises on __str__
+        tracer.record(valid_session_id, "turn_1", 1, "test_event", bad_obj=BadObject())
+
+        # Should log a warning
+        assert len(caplog.records) == 1
+        assert "failed to write" in caplog.text.lower()
+
+        # Second attempt should not log again (already failed for this session)
+        caplog.clear()
+        tracer.record(valid_session_id, "turn_1", 2, "test_event", data="test")
+        assert len(caplog.records) == 0
+
+
+def test_file_tracer_handles_bad_clock(test_tmp_dir, valid_session_id, caplog):
+    """FileTracer handles clock that raises without propagating exception."""
+    def bad_clock():
+        raise RuntimeError("Clock failure")
+
+    tracer = FileTracer(test_tmp_dir, clock=bad_clock)
+
+    with caplog.at_level(logging.WARNING, logger="src.agent.trace"):
+        # Record should not raise even though clock raises
+        tracer.record(valid_session_id, "turn_1", 1, "test_event", data="test")
+
+        # Should log a warning
+        assert len(caplog.records) == 1
+        assert "failed to write" in caplog.text.lower()
+
+
+def test_in_memory_tracer_handles_bad_serialization():
+    """InMemoryTracer does not raise even with bad objects."""
+    tracer = InMemoryTracer()
+
+    # Should not raise
+    tracer.record("sess_1", "turn_1", 1, "test_event", bad_obj=BadObject())
+
+    # Event should still be recorded (we store as-is, don't serialize)
+    assert len(tracer.events) == 1
+
+
+def test_truncate_payload_returns_string_for_complex():
+    """truncate_payload returns JSON string for non-str/bytes values."""
+    # Dict - should return string
+    value, truncated = truncate_payload({"key": "value"}, limit=100)
+    assert isinstance(value, str)
+    assert value == '{"key": "value"}'
+    assert truncated is False
+
+    # List - should return string
+    value, truncated = truncate_payload([1, 2, 3], limit=100)
+    assert isinstance(value, str)
+    assert value == '[1, 2, 3]'
+    assert truncated is False
+
+    # Large dict - should return truncated string
+    large_dict = {"data": "x" * 30000}
+    value, truncated = truncate_payload(large_dict, limit=100)
+    assert isinstance(value, str)
+    assert len(value) == 100
+    assert truncated is True

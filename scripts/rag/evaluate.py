@@ -12,6 +12,7 @@ from scripts.rag import CONNECT_TIMEOUT_S, run_cli  # noqa: E402
 from scripts.rag.search import build_service  # noqa: E402
 from src.core.errors import KnowledgeStoreUnavailable  # noqa: E402
 from src.core.settings import load_rag_settings  # noqa: E402
+from src.integrations.llm.embeddings import PrecomputedQueryEmbedder  # noqa: E402
 from src.services.retrieval.evaluation import EvalReport, check_labels, evaluate, load_eval_split  # noqa: E402
 
 EVAL_DIR = Path("config/rag/eval")
@@ -54,6 +55,8 @@ def main() -> int:
     parser.add_argument("--as-of", type=date.fromisoformat, default=date.today())
     parser.add_argument("--check-labels", action="store_true",
                         help="only check that every label matches an indexed chunk")
+    parser.add_argument("--query-vectors", type=Path,
+                        help="precomputed question vectors (scripts/rag/embed_eval_queries.py); no model is loaded")
     args = parser.parse_args()
 
     questions = load_eval_split(EVAL_DIR / f"{args.split}.yaml")
@@ -69,7 +72,8 @@ def main() -> int:
         print(f"labels: {labels} unmatched: {len(unmatched)}")
         return 0
 
-    report = evaluate(build_service(settings).search, questions, k=args.k, as_of=args.as_of)
+    embedder = PrecomputedQueryEmbedder(args.query_vectors) if args.query_vectors else None
+    report = evaluate(build_service(settings, embedder).search, questions, k=args.k, as_of=args.as_of)
     print_report(report)
     if args.split == "validation":
         passed = passes_gate(report)

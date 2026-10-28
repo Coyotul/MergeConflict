@@ -10,15 +10,17 @@ import psycopg  # noqa: E402
 
 from scripts.rag import CONNECT_TIMEOUT_S, run_cli  # noqa: E402
 from src.core.settings import RagSettings, load_rag_settings  # noqa: E402
-from src.integrations.llm.embeddings import BgeM3Embedder  # noqa: E402
+from src.integrations.llm.embeddings import BgeM3Embedder, Embedder  # noqa: E402
 from src.models.knowledge import SearchQuery, SearchResult, Topic  # noqa: E402
 from src.services.retrieval.service import RetrievalService  # noqa: E402
 
 
-def build_service(settings: RagSettings) -> RetrievalService:
-    """A retrieval service over the configured database with the local BGE-M3 embedder."""
-    embedder = BgeM3Embedder(settings.embedding_model, settings.embedding_device)
-    return RetrievalService(lambda: psycopg.connect(settings.database_url, connect_timeout=CONNECT_TIMEOUT_S), embedder, settings)
+def build_service(settings: RagSettings, embedder: Embedder | None = None) -> RetrievalService:
+    """A retrieval service over the configured database; the local BGE-M3 embedder unless one is given."""
+    embedder = embedder or BgeM3Embedder(settings.embedding_model, settings.embedding_device)
+    return RetrievalService(
+        lambda: psycopg.connect(settings.database_url, connect_timeout=CONNECT_TIMEOUT_S), embedder, settings
+    )
 
 
 def print_result(result: SearchResult) -> None:

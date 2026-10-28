@@ -332,3 +332,51 @@ The migration command prints the newly applied files (`[]` when up to date).
 ### Frontend integration
 
 See [contracts/http/README.md](contracts/http/README.md) for the chat API contract, endpoints, request/response formats, and rendering guidance.
+
+### Agent decision trace
+
+The orchestrator records every decision, model call, tool invocation, and turn outcome to an append-only trace file for debugging and evaluation. Traces are written as JSON Lines (one event per line) and survive crashes mid-turn.
+
+**Environment variables:**
+
+- `ORCHESTRATOR_TRACE`: `file` (default) or `off` — enables or disables trace recording
+- `ORCHESTRATOR_TRACES_DIR`: Directory for trace files (default: `data/local/traces`)
+
+**Trace location:**
+
+Each session's trace is stored at `<ORCHESTRATOR_TRACES_DIR>/<session_id>.jsonl`. Traces live in the ignored `data/local/` directory and are never committed to Git.
+
+**Generating a readable report:**
+
+Use `scripts/trace_report.py` to convert a trace file into a Markdown timeline:
+
+```bash
+python scripts/trace_report.py <session_id> [--traces-dir DIR] [--out FILE] [--full]
+```
+
+The report shows:
+- Session metadata (customer, model, prompt version)
+- Per-turn timeline with stage transitions and duration
+- Model calls with latency, token usage, and context
+- Tool calls with caller (model or code), status, and duration
+- Field updates with acceptance/rejection reasons (✓/✗)
+- Citations kept and dropped
+- Turn outcomes (replied, fallback, step_cap, model_unavailable, error)
+
+Use `--full` to include complete context JSON and tool outputs.
+
+**Event types:**
+
+- `session_started`: Session created with model settings and system prompt
+- `system_prompt_changed`: Prompt version updated mid-session
+- `turn_started`: New turn with triggering event and current needs
+- `model_call`: LLM request with context, latency, tokens, and raw output
+- `action_parsed`: Successfully parsed intent and action from model output
+- `action_invalid`: Parse failure, with retry flag
+- `field_updates`: Field validation results (accepted/rejected with reasons)
+- `tool_call`: Tool execution (model-invoked or code-triggered) with outcome
+- `citations_filtered`: Citation IDs kept vs. dropped after validation
+- `code_event`: Code-handled events (upload processed, offer selected, confirmation)
+- `turn_finished`: Turn outcome, reply, citations, and final stage
+
+**Warning:** Traces contain conversation content and context. Use synthetic data only for development and testing.

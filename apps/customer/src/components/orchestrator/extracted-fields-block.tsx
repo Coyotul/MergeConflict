@@ -44,8 +44,8 @@ export function ExtractedFieldsBlockComponent({
               </span>
             </div>
             {hasConflict && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <p className="w-full text-xs text-amber-800">
+              <div className="mt-3">
+                <p className="mb-2 text-xs text-amber-800">
                   Conflict with {field.conflict_with}
                 </p>
                 <Button
@@ -55,14 +55,6 @@ export function ExtractedFieldsBlockComponent({
                   onClick={() => onSend("Yes, use the document value")}
                 >
                   Use document value
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={disabled}
-                  onClick={() => onSend("Use the other value")}
-                >
-                  Use other
                 </Button>
               </div>
             )}

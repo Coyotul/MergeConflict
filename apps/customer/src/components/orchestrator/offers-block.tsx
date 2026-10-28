@@ -3,15 +3,9 @@
 import { useState } from "react";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import type { OffersBlock, Awaiting } from "@banking/demo/orchestrator";
+import { formatMoneyString } from "@banking/demo/orchestrator-format";
 import { Button } from "@banking/ui/button";
 import { Pill } from "@banking/ui/primitives";
-
-function formatMoney(amount: string, currency: string): string {
-  return `${new Intl.NumberFormat("en-GB", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(amount))} ${currency}`;
-}
 
 export function OffersBlockComponent({
   block,
@@ -64,7 +58,7 @@ export function OffersBlockComponent({
                   <div>
                     <p className="text-xs text-slate-500">Monthly installment</p>
                     <p className="mt-1 text-lg font-semibold text-ink">
-                      {formatMoney(
+                      {formatMoneyString(
                         offer.monthly_installment.amount,
                         offer.monthly_installment.currency
                       )}
@@ -73,7 +67,7 @@ export function OffersBlockComponent({
                   <div>
                     <p className="text-xs text-slate-500">Total cost</p>
                     <p className="mt-1 text-lg font-semibold text-ink">
-                      {formatMoney(offer.total_cost.amount, offer.total_cost.currency)}
+                      {formatMoneyString(offer.total_cost.amount, offer.total_cost.currency)}
                     </p>
                   </div>
                   <div>
@@ -85,7 +79,7 @@ export function OffersBlockComponent({
                   <div>
                     <p className="text-xs text-slate-500">Total repayment</p>
                     <p className="mt-1 text-sm font-semibold text-slate-700">
-                      {formatMoney(
+                      {formatMoneyString(
                         offer.total_repayment.amount,
                         offer.total_repayment.currency
                       )}

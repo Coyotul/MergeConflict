@@ -12,18 +12,34 @@ function Citations({ citations }: { citations: Array<{ id: string; publisher: st
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
       <span className="text-[10px] text-slate-400">Sources</span>
-      {citations.map((citation) => (
-        <a
-          key={citation.id}
-          href={citation.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-[10px] font-medium text-brand-ink ring-1 ring-slate-200 hover:bg-brand-soft"
-        >
-          <BookOpen className="size-3" />
-          {citation.title}
-        </a>
-      ))}
+      {citations.map((citation) => {
+        const isLink = /^https?:\/\//i.test(citation.url);
+        const content = (
+          <>
+            <BookOpen className="size-3" />
+            {citation.title} · {citation.publisher}
+          </>
+        );
+
+        return isLink ? (
+          <a
+            key={citation.id}
+            href={citation.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-[10px] font-medium text-brand-ink ring-1 ring-slate-200 hover:bg-brand-soft"
+          >
+            {content}
+          </a>
+        ) : (
+          <span
+            key={citation.id}
+            className="inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200"
+          >
+            {content}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -40,7 +56,7 @@ export function OrchestratorConversation({
   onSend: (text: string) => void;
   onUpload: (docType: string, file: File) => void;
   onChooseOffer: (offerId: string) => void;
-  onConfirm: (decision: "confirm" | "decline") => void;
+  onConfirm: (summaryVersion: string, decision: "confirm" | "decline") => void;
   disabled: boolean;
 }) {
   return (

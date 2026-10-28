@@ -66,11 +66,9 @@ export function DocumentChecklistBlockComponent({
                 </Pill>
               )}
             </div>
-            {isAccepted ? (
-              <CircleCheck className="size-4 text-emerald-500" />
-            ) : isRejected ? (
-              <XCircle className="size-4 text-red-500" />
-            ) : uploadEnabled && (isRequested || isRejected) ? (
+            {isAccepted && <CircleCheck className="size-4 text-emerald-500" />}
+            {isRejected && <XCircle className="size-4 text-red-500" />}
+            {uploadEnabled && (isRequested || isRejected) && (
               <>
                 <Button
                   variant="secondary"
@@ -79,10 +77,9 @@ export function DocumentChecklistBlockComponent({
                   onClick={() =>
                     fileInputRefs.current[item.doc_type]?.click()
                   }
-                  aria-label={`Upload ${item.label}`}
                 >
                   <UploadCloud />
-                  Add file
+                  Upload {item.label}
                 </Button>
                 <input
                   ref={(el) => {
@@ -102,7 +99,8 @@ export function DocumentChecklistBlockComponent({
                   }}
                 />
               </>
-            ) : (
+            )}
+            {!isAccepted && !uploadEnabled && (
               <Pill tone="slate">Pending</Pill>
             )}
           </div>

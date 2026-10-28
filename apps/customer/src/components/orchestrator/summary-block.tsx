@@ -2,15 +2,9 @@
 
 import { FileText } from "lucide-react";
 import type { ApplicationSummaryBlock } from "@banking/demo/orchestrator";
+import { formatMoneyString } from "@banking/demo/orchestrator-format";
 import { Button } from "@banking/ui/button";
 import { Pill } from "@banking/ui/primitives";
-
-function formatMoney(amount: string, currency: string): string {
-  return `${new Intl.NumberFormat("en-GB", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(amount))} ${currency}`;
-}
 
 export function SummaryBlockComponent({
   block,
@@ -20,7 +14,7 @@ export function SummaryBlockComponent({
 }: {
   block: ApplicationSummaryBlock;
   canConfirm: boolean;
-  onConfirm: (decision: "confirm" | "decline") => void;
+  onConfirm: (summaryVersion: string, decision: "confirm" | "decline") => void;
   disabled: boolean;
 }) {
   const { summary } = block;
@@ -32,11 +26,11 @@ export function SummaryBlockComponent({
           {summary.application_id} · {summary.product_name}
         </p>
         <h3 className="mt-1.5 text-xl font-semibold tracking-tight text-ink">
-          {formatMoney(summary.amount.amount, summary.amount.currency)}
+          {formatMoneyString(summary.amount.amount, summary.amount.currency)}
         </h3>
         <p className="mt-1 text-xs text-slate-500">
           {summary.term_months} months ·{" "}
-          {formatMoney(
+          {formatMoneyString(
             summary.offer.monthly_installment.amount,
             summary.offer.monthly_installment.currency
           )}{" "}
@@ -101,7 +95,7 @@ export function SummaryBlockComponent({
           <div>
             <p className="text-xs text-slate-500">Monthly</p>
             <p className="mt-0.5 text-sm font-semibold text-slate-700">
-              {formatMoney(
+              {formatMoneyString(
                 summary.offer.monthly_installment.amount,
                 summary.offer.monthly_installment.currency
               )}
@@ -110,7 +104,7 @@ export function SummaryBlockComponent({
           <div>
             <p className="text-xs text-slate-500">Total cost</p>
             <p className="mt-0.5 text-sm font-semibold text-slate-700">
-              {formatMoney(
+              {formatMoneyString(
                 summary.offer.total_cost.amount,
                 summary.offer.total_cost.currency
               )}
@@ -124,7 +118,7 @@ export function SummaryBlockComponent({
           <Button
             className="flex-1"
             disabled={disabled}
-            onClick={() => onConfirm("confirm")}
+            onClick={() => onConfirm(summary.summary_version, "confirm")}
             aria-label="Confirm & submit for human review"
           >
             Confirm & submit for human review
@@ -132,7 +126,7 @@ export function SummaryBlockComponent({
           <Button
             variant="outline"
             disabled={disabled}
-            onClick={() => onConfirm("decline")}
+            onClick={() => onConfirm(summary.summary_version, "decline")}
             aria-label="Not yet"
           >
             Not yet

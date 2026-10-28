@@ -59,6 +59,15 @@ export function EligibilityResultBlock({
   );
 }
 
+function humanReadableStatus(status: string): string {
+  const statusMap: Record<string, string> = {
+    PENDING_HUMAN_REVIEW: "Pending human review",
+    APPROVED: "Approved",
+    REJECTED: "Rejected",
+  };
+  return statusMap[status] || status;
+}
+
 export function ApplicationSubmittedBlock({
   block,
 }: {
@@ -68,8 +77,11 @@ export function ApplicationSubmittedBlock({
     <div className="mt-4">
       <InfoNote>
         <ShieldCheck className="mr-1 inline size-3.5" />
-        <strong>Application {block.application_id}</strong> submitted for human
-        review — no decision yet.
+        <strong>
+          Application {block.application_id} · {humanReadableStatus(block.status)}
+        </strong>
+        <br />
+        Submitted for human review — no decision yet.
       </InfoNote>
     </div>
   );

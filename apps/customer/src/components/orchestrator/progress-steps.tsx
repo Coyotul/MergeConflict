@@ -34,16 +34,16 @@ export function ProgressSteps({ progress }: { progress: Progress }) {
 
   if (sideStage) {
     return (
-      <div aria-label="Application progress" className="mb-6">
+      <section aria-label="Application progress" className="mb-6">
         <Pill tone={sideStage === "not_eligible" ? "red" : "amber"}>
           {SIDE_STAGE_LABELS[sideStage]}
         </Pill>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div aria-label="Application progress" className="mb-6">
+    <section aria-label="Application progress" className="mb-6">
       <div className="flex items-center gap-2">
         {progress.steps.map((step, index) => {
           const label = STEP_LABELS[step.stage] || step.stage;
@@ -92,6 +92,6 @@ export function ProgressSteps({ progress }: { progress: Progress }) {
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

@@ -28,7 +28,7 @@ export function Blocks({
   onSend: (text: string) => void;
   onUpload: (docType: string, file: File) => void;
   onChooseOffer: (offerId: string) => void;
-  onConfirm: (decision: "confirm" | "decline") => void;
+  onConfirm: (summaryVersion: string, decision: "confirm" | "decline") => void;
   disabled: boolean;
 }) {
   if (!latest.blocks.length) {

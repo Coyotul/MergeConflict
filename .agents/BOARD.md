@@ -6,6 +6,7 @@
 | STRUCTURE-01 | ARCHITECTURE.md, README.md, scaffold directories, .gitignore | Codex | DONE | 2026-10-28 | All diagram components mapped; scaffold and documentation created locally. |
 | SCOPE-01 | IDEAS.md, CONTEXT.md, README.md, ARCHITECTURE.md | Codex | DONE | 2026-10-28 | Focus documentation exclusively on the AI credit application assistant. |
 | SPEC-01 | SPECIFICATION.md, scope docs, apps/, additional service packages | Codex | DONE | 2026-10-28 | Preserve owner specification and align scaffold with the complete credit lifecycle. |
+| ELIGIBILITY-01 | src/models/eligibility.py; src/services/eligibility/; src/rules/eligibility/; synthetic verification adapters; affordability; eligibility API/tool, core/security/storage; config/rules/; eligibility tests/docs/scripts; requirements.txt | Cline | IN_PROGRESS | 2026-10-28 | Resume only on feature/eligibility-check. No pushes to master. Synthetic preliminary assessment, no final decisions or workflow transitions. |
 
 ---
 

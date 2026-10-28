@@ -3,9 +3,12 @@
 Bank-agnostic agentic AI banking and credit management platform, covering loan
 applications, refinancing, repayment and ongoing credit assistance. Developed in
 the VibeHack challenge context; it is not affiliated with or endorsed by a bank.
-On `feature/eligibility-check`, the repository includes a working **synthetic
-preliminary eligibility service** alongside the broader platform scaffold.
-It does not implement live banking services or the complete credit lifecycle.
+The repository contains a working local frontend prototype for customers and bank
+agents. On `feature/eligibility-check`, it also includes a working **synthetic
+Python preliminary eligibility service** alongside the broader platform scaffold.
+Authentication, data and decisions in the prototype are synthetic only.
+The Python service is not yet wired into the frontend's temporary Node adapter;
+neither implements live banking or the complete credit lifecycle.
 
 Start with [SPECIFICATION.md](SPECIFICATION.md), the main product reference supplied
 by the project owner. See [ARCHITECTURE.md](ARCHITECTURE.md) for the folder tree, mapping of every
@@ -14,6 +17,66 @@ See [CONTEXT.md](CONTEXT.md) for the challenge and [RULES.md](RULES.md) for codi
 conventions.
 
 ## Local setup
+
+### Frontend prototype
+
+Requires Node.js 22+ and npm. From the repository root in PowerShell:
+
+```powershell
+Set-Location 'C:\Users\George\repos\MergeConflict'
+npm ci
+npm run dev
+```
+
+This starts three loopback-only services:
+
+- Customer workspace: http://127.0.0.1:3000
+- Bank agent / credit reviewer: http://127.0.0.1:3001
+- Temporary synthetic demo API: http://127.0.0.1:4010/health
+
+Sign in using the public **demo** accounts below, also displayed on each login
+screen. The “Use demo account” button fills the form; signing in is a separate
+explicit action.
+
+| Workspace | Email | Demo password |
+| --- | --- | --- |
+| Customer (Alex Morgan) | `alex@example.test` | `ClientDemo123!` |
+| Bank agent (Jamie Carter) | `jamie@example.test` | `AgentDemo123!` |
+
+The interface uses a Raiffeisen-inspired yellow (`#FFED00`), black and white palette
+under the fictional **Luma** brand. It is not an official bank application.
+English UI text and the conversational, desktop-first layout are preserved from
+the earlier frontend direction; the sign-in screens also work on mobile.
+
+Customers can explore loans, use deterministic calculators, prepare applications,
+add synthetic document metadata, confirm submission and track status. Assigned
+agents can inspect cases, request additional information, add private notes and
+record justified demo approvals or rejections. Signing and funding are not implemented.
+
+The demo API persists applications, conversations and audit history in ignored
+`data/local/frontend-demo.json`. Session tokens are role-bound, expire after eight
+hours, survive page refresh in the same browser tab and are revoked at logout.
+Restarting the demo API requires signing in again, without losing saved applications.
+Public fixed credentials and browser session storage are **not production banking
+security**. Do not enter real credentials, applicant data or documents. Uploads
+store metadata only; no file contents are transmitted or verified. The assistant
+uses guided rule-based responses, not a live LLM or RAG service.
+
+Validation commands:
+
+```powershell
+npm run check       # ESLint, TypeScript, domain/API tests
+npm run build       # Both production Next.js builds
+npx playwright install chromium  # First-time browser installation, if needed
+npm run test:e2e    # Starts isolated demo services; leave ports 3000/3001/4010 free
+```
+
+Browser tests use their own JSON store under ignored `data/local/`, not the normal
+demo store. See `docs/decisions/001-local-frontend.md`,
+`docs/decisions/003-yellow-black-sign-in.md` and `contracts/http/frontend-demo.md`
+for the demo boundary and integration contract.
+
+### Python eligibility service and architecture scaffold
 
 Use Python 3.11 or newer. From the repository root in PowerShell:
 
@@ -30,8 +93,10 @@ its dependencies are declared in `requirements.txt`.
 
 ## Where to start
 
-- `apps/customer/`, `apps/staff/`: planned Next.js/React/TypeScript interfaces.
-  The staff interface includes reviewer and permission-controlled administrator views.
+- `apps/customer/`, `apps/staff/`: working local Next.js/React/TypeScript customer
+  and assigned-reviewer interfaces. Administrator views are deferred.
+- `packages/ui/`, `packages/banking/`: shared visual controls, typed demo contracts,
+  calculations, React state and the temporary Node demo adapter.
 - `src/`: Python components. Existing parser, rule, model, agent, core and UI
   packages remain in place; FastAPI is the selected backend framework.
 - `contracts/`: HTTP, event and serialized-data specifications.
@@ -43,7 +108,8 @@ its dependencies are declared in `requirements.txt`.
 
 Unimplemented Python packages contain `__init__.py` placeholders. Unimplemented
 non-Python folders contain `.gitkeep` so Git preserves the layout. Add
-implementations and tests as capabilities are built. Keep databases, uploads and indexes in ignored
+implementations and tests as capabilities are built. Keep databases, uploads and
+indexes in ignored
 `data/local/`; never commit credentials or real applicant data.
 
 ## MVP boundary

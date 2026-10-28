@@ -52,3 +52,109 @@ def test_dropped_sections_duplicates_and_site_chrome():
     assert doc.title and doc.parser_name == "html_page"
     # No empty section_path parts
     assert all(all(p for p in c.section_path) for c in doc.chunks)
+
+
+def test_section_chunks_are_normalized():
+    """Test that section chunks have normalized text (cedilla->comma, NBSP->space)."""
+    # Create HTML with ş, ţ (cedilla forms) and NBSP
+    html = b"""
+    <html><body><main>
+    <h1>Test</h1>
+    <h2>Section</h2>
+    <p>Text with \xc5\x9f \xc5\xa3 and\xc2\xa0NBSP.</p>
+    </main></body></html>
+    """
+    
+    doc = parse_html_page(html, PAGE_URL, CFG)
+    section_chunks = [c for c in doc.chunks if c.kind == ChunkKind.section]
+    
+    assert len(section_chunks) >= 1
+    # Should have comma-below forms (ș ț) and plain space, not cedilla (ş ţ) or NBSP
+    assert "ș ț" in section_chunks[0].text
+    assert "ş ţ" not in section_chunks[0].text
+    assert "\xa0" not in section_chunks[0].text
+
+
+def test_table_cell_links_extracted():
+    """Test that links in table cells are extracted."""
+    html = b"""
+    <html><body><main>
+    <h1>Test</h1>
+    <h2>Fees</h2>
+    <table>
+    <tr>
+        <td>Product</td>
+        <td><a href="/ro/persoane-fizice/produsele-noastre/credite/credite-de-nevoi-personale/conditii-credit-nevoi-personale.html">Details</a></td>
+    </tr>
+    </table>
+    </main></body></html>
+    """
+    
+    doc = parse_html_page(html, PAGE_URL, CFG)
+    section_chunks = [c for c in doc.chunks if c.kind == ChunkKind.section]
+    
+    assert len(section_chunks) >= 1
+    # Table chunk should have the link
+    table_chunk = [c for c in section_chunks if "Product" in c.text and "Details" in c.text]
+    assert len(table_chunk) == 1
+    assert len(table_chunk[0].links) == 1
+    assert "conditii-credit-nevoi-personale.html" in table_chunk[0].links[0].target_url
+
+
+def test_worked_examples_in_document_order():
+    """Test that worked examples appear in document order after preceding sections."""
+    doc = _page()
+    
+    # Get indices of different chunk types
+    acte_idx = next(i for i, c in enumerate(doc.chunks) if "Ce acte" in " ".join(c.section_path))
+    example_indices = [i for i, c in enumerate(doc.chunks) if c.kind == ChunkKind.worked_example]
+    
+    # Worked examples should come after "Ce acte" section
+    assert all(idx > acte_idx for idx in example_indices)
+    
+    # And before any chunk from a later h2 (FAQ section)
+    faq_idx = next((i for i, c in enumerate(doc.chunks) if c.kind == ChunkKind.faq), len(doc.chunks))
+    assert all(idx < faq_idx for idx in example_indices)
+
+
+def test_accordion_in_dropped_section_not_emitted():
+    """Test that accordions inside dropped sections are not emitted."""
+    # Add an accordion to the dropped "Articole utile" section
+    html = b"""
+    <html><body><main>
+    <h1>Credit Demo</h1>
+    <h2>Kept Section</h2>
+    <p>This stays.</p>
+    <h2>Articole utile</h2>
+    <p>Dropped intro.</p>
+    <div class="cmp-accordion">
+        <div class="cmp-accordion__item">
+            <div class="cmp-accordion__title">Should not appear</div>
+            <div class="cmp-accordion__panel">
+                <p>This should be dropped.</p>
+            </div>
+        </div>
+    </div>
+    </main></body></html>
+    """
+    
+    doc = parse_html_page(html, PAGE_URL, CFG)
+    
+    # No FAQ chunk should contain "Should not appear"
+    faq_chunks = [c for c in doc.chunks if c.kind == ChunkKind.faq]
+    assert not any("Should not appear" in c.text for c in faq_chunks)
+
+
+def test_faq_exact_section_path():
+    """Test that FAQ has exact section path [h1, group_heading, question]."""
+    doc = _page()
+    faq_chunks = [c for c in doc.chunks if c.kind == ChunkKind.faq]
+    
+    assert len(faq_chunks) >= 1
+    faq = faq_chunks[0]
+    
+    # Should have 3 parts: [h1, group_heading, question]
+    assert len(faq.section_path) == 3
+    assert faq.section_path[0] == "Credit Demo"
+    assert faq.section_path[1] == "Întrebări frecvente"
+    assert faq.section_path[2] == "Pot rambursa anticipat?"

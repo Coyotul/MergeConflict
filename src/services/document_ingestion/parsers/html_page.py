@@ -143,9 +143,9 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
         if not current_buffer:
             return
 
-        # Join lines
-        text = "\n".join(line.text for line in current_buffer)
-        text = normalize_text(text)
+        # Normalize each line text first
+        for line in current_buffer:
+            line.text = normalize_text(line.text)
 
         # Pack lines and split links accordingly
         line_texts = [line.text for line in current_buffer]
@@ -274,7 +274,6 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                 flush_buffer()
                 drop_until_heading = heading_level
                 section_path = []
-                all_text_parts.append(heading_text)
                 i += 1
                 continue
 
@@ -382,9 +381,6 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                     elif next_elem.name in ('h1', 'h2', 'h3'):
                         # Heading, stop
                         break
-                    elif next_elem.name == 'p' and extract_text(next_elem).startswith("Exemplu de calcul"):
-                        # Another example, stop
-                        break
                     else:
                         j += 1
 
@@ -446,13 +442,17 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                 all_text_parts.append(text)
 
         elif elem.name == 'table':
-            # Convert table to | -joined rows
+            # Convert table to | -joined rows and extract links from cells
             rows = []
+            table_links = []
             for row in elem.select('tr'):
                 cells = [extract_text(cell) for cell in row.select('td, th')]
                 if cells:
                     row_text = " | ".join(cells)
                     rows.append(row_text)
+                # Extract links from all cells in this row
+                for cell in row.select('td, th'):
+                    table_links.extend(extract_inline_links(cell))
             if rows:
                 table_text = "\n".join(rows)
 
@@ -462,7 +462,7 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                     continue
                 seen_block_texts.add(table_text)
 
-                current_buffer.append(BufferedLine(text=table_text))
+                current_buffer.append(BufferedLine(text=table_text, links=table_links))
                 all_text_parts.append(table_text)
 
         i += 1

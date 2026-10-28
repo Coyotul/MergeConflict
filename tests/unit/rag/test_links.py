@@ -42,36 +42,33 @@ def test_clean_html_keeps_teaser_header_links():
 
 def test_links_split_with_pack_lines():
     """Test that links are attached to the correct piece when a section splits."""
-    from src.services.document_ingestion.parsers.html_page import BufferedLine
-    from src.services.document_ingestion.chunking import ExtractedLink, pack_lines
+    # Create HTML with enough paragraphs to exceed MAX_TOKENS, with link only in last paragraph
+    html = b"""
+    <html><body><main>
+    <h1>Test</h1>
+    <h2>Large Section</h2>
+    <p>""" + b"x" * 800 + b"""</p>
+    <p>""" + b"y" * 800 + b"""</p>
+    <p>""" + b"z" * 800 + b"""</p>
+    <p>""" + b"w" * 700 + b""" <a href="/ro/persoane-fizice/produsele-noastre/credite/credite-de-nevoi-personale/test.html">vezi aici</a>.</p>
+    </main></body></html>
+    """
 
-    # Create lines: first 600 tokens (3 lines), then a line with a link (200 tokens)
-    lines = [
-        BufferedLine(text="x" * 800, links=[]),  # 200 tokens
-        BufferedLine(text="y" * 800, links=[]),  # 200 tokens
-        BufferedLine(text="z" * 800, links=[]),  # 200 tokens
-        BufferedLine(text="w" * 800, links=[ExtractedLink(
-            target_url="https://www.raiffeisen.ro/test", anchor_text="link", link_kind=LinkKind.inline
-        )]),  # 200 tokens, in second piece
-    ]
+    doc = parse_html_page(html, PAGE_URL, CFG)
 
-    line_texts = [l.text for l in lines]
-    packed = pack_lines(line_texts, max_tokens=500)
+    # Find section chunks with "Large Section" path
+    large_section_chunks = [c for c in doc.chunks if "Large Section" in c.section_path]
 
-    # Should split into 2 pieces
-    assert len(packed) >= 2
+    # Should have split into at least 2 pieces
+    assert len(large_section_chunks) >= 2
 
-    # Simulate link attachment logic from html_page.py flush_buffer
-    piece_0_links = []
-    piece_1_links = []
-
-    for line in lines:
-        if line.text in packed[0].split('\n'):
-            piece_0_links.extend(line.links)
-        if len(packed) > 1 and line.text in packed[1].split('\n'):
-            piece_1_links.extend(line.links)
+    # All pieces should have same section_path
+    assert all(c.section_path == large_section_chunks[0].section_path for c in large_section_chunks)
 
     # First piece should not have the link
-    assert len(piece_0_links) == 0
-    # Second piece should have the link
-    assert len(piece_1_links) == 1
+    assert len(large_section_chunks[0].links) == 0
+
+    # Last piece should have the link (contains "vezi aici")
+    last_piece = [c for c in large_section_chunks if "vezi aici" in c.text]
+    assert len(last_piece) == 1
+    assert len(last_piece[0].links) == 1

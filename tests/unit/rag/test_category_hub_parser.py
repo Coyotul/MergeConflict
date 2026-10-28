@@ -99,7 +99,7 @@ def test_chip_rule_button_only_card():
     assert len(cards) == 1
     assert len(cards[0].links) == 1  # Card link should be present
 
-    # The article teasers block should not have product_url (it's a chip)
+    # The article teasers block should not have product_url (filtered as chip)
     teasers = [c for c in doc.chunks if c.kind == ChunkKind.hub_teasers]
     assert len(teasers) == 1
     assert all("product-demo.html" not in l.target_url for l in teasers[0].links)

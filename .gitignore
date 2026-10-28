@@ -68,3 +68,5 @@ coverage/
 .taste-skill/
 !apps/*/src/lib/
 !apps/*/src/lib/**
+
+factura_scanata.pdf

@@ -270,3 +270,12 @@ canonical liabilities, missing-data completeness, evidence provenance/freshness,
 preliminary inquiry semantics and the application's revolving affordability
 rules. The global SQL reporting date must not be mutated concurrently per request.
 The import makes no frontend, provider, workflow, API-contract or decision change.
+
+## Document processing pipeline ownership & architecture
+
+Implemented under `src/services/document_processing/`, `src/parsers/`, and `src/storage/secure_documents/`:
+- **Stage 1 (Ingestion & Secure Storage)**: `SecureDocumentStore` stores applicant files under `data/local/secure_documents/<customer_id>/` with sanitized UUIDs, MIME/size enforcement, and SHA-256 tamper-evident integrity hashing.
+- **Stage 2 (OCR & Extraction)**: `PdfExtractor` handles native vector text and integrates `winocr` (Windows Media OCR with `ro-RO` and `en-US` language models) for scanned raster PDFs and images with auto-rotation detection. Extracted data models (`ExtractedIdentity`, `ExtractedIncome`, `ExtractedStatement`) are parsed by dedicated extractors.
+- **Stage 3 (Validation & Verification)**: `DocumentValidator` verifies Romanian banking norms (BNR Regulations 17/2012 and 12/2018), Modulo 11 CNP & CUI algorithms, ISO 7064 MOD 97-10 IBAN checksums, income recency (<= 30 days), employment stability (>= 3 months, indefinite contract), and bank statement balance integrity.
+- **Stage 4 (Cross-Document Reconciliation)**: Evaluates identity consistency (name, CNP) across all submitted documents and reconciles declared net income against detected statement salary deposits.
+- See ADR 007 (`docs/decisions/007-document-processing-pipeline.md`) and specification table (`docs/reference/document-processing-specification.md`).

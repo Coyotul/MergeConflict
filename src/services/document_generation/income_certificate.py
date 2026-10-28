@@ -1,13 +1,15 @@
 """Romanian Salary & Income Certificate (Adeverință de Venit) generator.
 
 Generates professional A4 synthetic income certificates in PDF and PNG formats,
-with realistic employer headers, salary tables, stamps and disclaimers.
+with realistic employer headers, salary tables, stamps, disclaimers and embedded text.
 """
 
 from datetime import date
+import io
 from pathlib import Path
 from typing import List, Optional
 from PIL import Image, ImageDraw, ImageFont
+import pypdf
 
 from src.services.document_generation.models import CustomerDocumentProfile, SalaryMonth
 
@@ -27,14 +29,12 @@ def _format_money(amount: float) -> str:
 
 def _build_salary_months(net_amount: float) -> List[SalaryMonth]:
     """Calculate 6 months of breakdown matching the net monthly income."""
-    # Approximate Romanian tax reverse calculation:
-    # Gross = Net / 0.585 approx (or slightly rounded)
     gross = round(net_amount / 0.585, 2)
     cas = round(gross * 0.25, 2)
     cass = round(gross * 0.10, 2)
-    taxable = max(0.0, gross - cas - cass - 300.0)  # deducere personala de baza
+    taxable = max(0.0, gross - cas - cass - 300.0)
     tax = round(taxable * 0.10, 2)
-    meal_tickets = 700.00  # 35 RON * 20 zile
+    meal_tickets = 700.00
 
     months = ["Mai", "Iunie", "Iulie", "August", "Septembrie", "Octombrie"]
     result = []
@@ -127,7 +127,6 @@ def generate_income_certificate(
     col_widths = [160, 160, 140, 140, 130, 170, 200]
     headers = ["Luna / An", "Venit Brut", "CAS (25%)", "CASS (10%)", "Impozit", "Tichete Masă", "Venit Net Încasat"]
 
-    # Table Header Row
     header_y = curr_y
     draw.rectangle([(table_x, header_y), (table_x + sum(col_widths), header_y + 36)], fill="#0F172A")
     cx = table_x
@@ -163,7 +162,6 @@ def generate_income_certificate(
         total_net += s.net_ron
         curr_y += 34
 
-    # Table Average / Total Footer
     avg_net = total_net / len(salary_rows)
     draw.rectangle([(table_x, curr_y), (table_x + sum(col_widths), curr_y + 40)], fill="#EEF2F6", outline="#CBD5E1", width=2)
     draw.text((table_x + 10, curr_y + 10), "MEDIA VENITULUI NET LUNAR:", fill="#0F172A", font=font_bold_md)
@@ -186,7 +184,6 @@ def generate_income_certificate(
     draw.text((sig_left_x, curr_y), "Popescu Andrei", fill="#64748B", font=font_regular_sm)
     draw.text((sig_right_x, curr_y), "Ionescu Elena", fill="#64748B", font=font_regular_sm)
 
-    # Stamp Mockup (Center bottom)
     stamp_center = (width // 2, curr_y + 60)
     draw.ellipse([(stamp_center[0] - 65, stamp_center[1] - 65), (stamp_center[0] + 65, stamp_center[1] + 65)], outline="#DC2626", width=3)
     draw.ellipse([(stamp_center[0] - 56, stamp_center[1] - 56), (stamp_center[0] + 56, stamp_center[1] + 56)], outline="#DC2626", width=1)
@@ -195,7 +192,6 @@ def generate_income_certificate(
     draw.text((stamp_center[0] - 45, stamp_center[1] + 8), profile.employer_cui, fill="#DC2626", font=_load_font("arialbd.ttf", 9))
     draw.text((stamp_center[0] - 46, stamp_center[1] + 24), "ROMÂNIA", fill="#DC2626", font=_load_font("arialbd.ttf", 9))
 
-    # Signature scribble effect
     draw.line([(sig_left_x, curr_y + 50), (sig_left_x + 60, curr_y + 40), (sig_left_x + 90, curr_y + 55), (sig_left_x + 150, curr_y + 45)], fill="#002B7F", width=2)
     draw.line([(sig_right_x, curr_y + 50), (sig_right_x + 50, curr_y + 42), (sig_right_x + 110, curr_y + 52), (sig_right_x + 160, curr_y + 46)], fill="#002B7F", width=2)
 
@@ -212,6 +208,34 @@ def generate_income_certificate(
 
     if output_pdf:
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
-        img.save(output_pdf, "PDF", resolution=150.0)
+        text_transcript = (
+            f"{profile.employer_name.upper()}\n"
+            f"C.U.I. / C.I.F.: {profile.employer_cui}\n"
+            f"Nr. Reg. Com.: {profile.employer_reg_com}\n"
+            f"Sediu social: {profile.employer_address}\n"
+            f"Nr. Înregistrare: 418 / HR\n"
+            f"Data emiterii: 28.10.2026\n"
+            f"ADEVERINȚĂ DE VENIT\n"
+            f"Prin prezenta se adeverește că dl./dna. {profile.full_name.upper()}, având CNP {profile.cnp}, "
+            f"este angajat în baza Contractului Individual de Muncă nr. 1042 / {profile.employment_start_date}, "
+            f"încheiat pe perioadă NEDETERMINATĂ, ocupând în prezent funcția de {profile.job_title}.\n"
+            f"MEDIA VENITULUI NET LUNAR: {_format_money(avg_net)} RON / lună\n"
+            f"Venit net lunar: {profile.monthly_net_income:,.2f} RON"
+        )
+
+        buf = io.BytesIO()
+        img.save(buf, "PDF", resolution=150.0)
+        buf.seek(0)
+        reader = pypdf.PdfReader(buf)
+        writer = pypdf.PdfWriter()
+        for p in reader.pages:
+            writer.add_page(p)
+        writer.add_metadata({
+            "/Title": "Adeverință de Venit",
+            "/Author": profile.employer_name,
+            "/Subject": text_transcript,
+        })
+        with open(output_pdf, "wb") as f:
+            writer.write(f)
 
     return img

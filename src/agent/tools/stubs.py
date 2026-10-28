@@ -1,5 +1,8 @@
 """Stub tool implementations for the orchestrator."""
+import logging
 import math
+
+logger = logging.getLogger("src.agent.tools.stubs")
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, UTC, date
@@ -377,6 +380,15 @@ def build_stub_registry(data: StubData, policy_search: PolicySearch) -> ToolRegi
         app = ctx.state.application
         if app is None or app.product_code is None:
             raise ValueError("No application or product selected")
+
+        # Try real ANAF eligibility service bridge first
+        try:
+            from src.services.eligibility.orchestrator_bridge import assess_session_eligibility
+            real_result = assess_session_eligibility(ctx, data)
+            if real_result is not None:
+                return real_result
+        except Exception as exc:
+            logger.warning(f"Eligibility service bridge evaluation failed, using fallback: {exc}")
 
         product_code = app.product_code
         if product_code not in data.eligibility_rules:

@@ -590,3 +590,36 @@ def test_context_notices_passthrough():
 
     assert "notices" in context
     assert context["notices"] == notices
+
+
+def test_context_need_options():
+    """Enum needs carry their options; choose_product carries the catalog codes; others null."""
+    now = datetime.now(UTC)
+    requirements = ProductRequirements(
+        product_code=Product.personal_loan,
+        fields=[FieldSpec(name="employment_type", label="Employment Type", type=FieldType.enum,
+                          options=["employed", "self_employed"])],
+        documents=[DocumentRequirement(doc_type="payslip", label="Payslip")],
+    )
+    state = SessionState(
+        session_id="s1", customer_id="c1", created_at=now, updated_at=now,
+        active_flow=Flow.credit_application,
+        application=ApplicationState(product_code=Product.personal_loan, requirements=requirements),
+    )
+    needs = [
+        Need(kind=NeedKind.missing_field, target="employment_type"),
+        Need(kind=NeedKind.missing_field, target="amount"),
+        Need(kind=NeedKind.choose_product),
+        Need(kind=NeedKind.document, target="payslip"),
+    ]
+
+    context = build_context(state, needs, [], [], catalog_codes=["personal_loan", "mortgage_casa_ta"])
+
+    options = [n["options"] for n in context["needs"]]
+    assert options == [["employed", "self_employed"], None, ["personal_loan", "mortgage_casa_ta"], None]
+    # without catalog codes, choose_product has no options
+    assert build_context(state, needs[2:3], [], [])["needs"][0]["options"] is None
+    # build_messages passes the catalog through
+    messages = build_messages(state, needs[2:3], [], [], window=30, notices=[], catalog_codes=["personal_loan"])
+    ctx = json.loads(messages[-1].content.split("\n", 1)[1])
+    assert ctx["needs"][0]["options"] == ["personal_loan"]

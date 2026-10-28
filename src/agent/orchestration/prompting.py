@@ -8,7 +8,7 @@ from src.agent.orchestration.progress import Need, NeedKind, derive_stage
 from src.agent.orchestration.state import SessionState, StoredMessage
 from src.agent.tools.registry import ToolSpec
 from src.integrations.llm.chat import ChatMessage
-from src.models.credit import DocumentRequirement, FieldSpec
+from src.models.credit import DocumentRequirement, FieldSpec, FieldType
 
 
 PROMPT_VERSION = "orchestrator-v1"
@@ -34,7 +34,9 @@ def build_context(
     state: SessionState,
     needs: list[Need],
     tools: list[ToolSpec],
-    notices: list[str]
+    notices: list[str],
+    *,
+    catalog_codes: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build the context dictionary for CONTEXT_JSON.
 
@@ -43,6 +45,7 @@ def build_context(
         needs: Ordered list of needs
         tools: Available tool specs
         notices: System notices
+        catalog_codes: Product codes offered as options for choose_product
 
     Returns:
         Context dictionary with all required keys
@@ -52,7 +55,7 @@ def build_context(
         "language": state.language,
         "flow": state.active_flow,
         "stage": derive_stage(state) if state.application is not None else None,
-        "needs": _serialize_needs(state, needs),
+        "needs": _serialize_needs(state, needs, catalog_codes),
         "fields": {},
         "conflicts": [],
         "documents": [],
@@ -132,7 +135,9 @@ def build_messages(
     tools: list[ToolSpec],
     history: list[StoredMessage],
     window: int,
-    notices: list[str]
+    notices: list[str],
+    *,
+    catalog_codes: list[str] | None = None,
 ) -> list[ChatMessage]:
     """Build the complete message list for the LLM.
 
@@ -143,6 +148,7 @@ def build_messages(
         history: Full message history
         window: Number of recent messages to include
         notices: System notices
+        catalog_codes: Product codes offered as options for choose_product
 
     Returns:
         List of ChatMessage with system prompt, windowed history, and context JSON
@@ -161,7 +167,7 @@ def build_messages(
         messages.append(chat_msg)
 
     # 3. Context JSON as final system message
-    context = build_context(state, needs, tools, notices)
+    context = build_context(state, needs, tools, notices, catalog_codes=catalog_codes)
     context_json = json.dumps(context, indent=2)
     context_message = ChatMessage(
         role="system",
@@ -172,15 +178,20 @@ def build_messages(
     return messages
 
 
-def _serialize_needs(state: SessionState, needs: list[Need]) -> list[dict[str, Any]]:
-    """Serialize needs with labels and field_types from specs.
+def _serialize_needs(
+    state: SessionState, needs: list[Need], catalog_codes: list[str] | None = None
+) -> list[dict[str, Any]]:
+    """Serialize needs with labels, field_types and options from specs.
+
+    options: the enum FieldSpec's options, the catalog codes for choose_product,
+    else None.
 
     Args:
         state: Session state (to get requirements)
         needs: List of needs
 
     Returns:
-        List of serialized needs with kind, target, detail, label, field_type
+        List of serialized needs with kind, target, detail, label, field_type, options
     """
     # Build combined spec dict
     specs_dict: dict[str, FieldSpec] = {spec.name: spec for spec in DISCOVERY_FIELDS}
@@ -201,7 +212,8 @@ def _serialize_needs(state: SessionState, needs: list[Need]) -> list[dict[str, A
         need_dict: dict[str, Any] = {
             "kind": need.kind,
             "target": need.target,
-            "detail": need.detail
+            "detail": need.detail,
+            "options": None,
         }
 
         # Determine label and field_type
@@ -218,6 +230,8 @@ def _serialize_needs(state: SessionState, needs: list[Need]) -> list[dict[str, A
                 spec = specs_dict[need.target]
                 need_dict["label"] = spec.label
                 need_dict["field_type"] = spec.type.value
+                if spec.type == FieldType.enum and spec.options:
+                    need_dict["options"] = list(spec.options)
             else:
                 # Fallback
                 need_dict["label"] = need.kind.value
@@ -226,6 +240,8 @@ def _serialize_needs(state: SessionState, needs: list[Need]) -> list[dict[str, A
             # No target - use kind as label
             need_dict["label"] = need.kind.value
             need_dict["field_type"] = None
+            if need.kind == NeedKind.choose_product and catalog_codes:
+                need_dict["options"] = list(catalog_codes)
 
         serialized.append(need_dict)
 

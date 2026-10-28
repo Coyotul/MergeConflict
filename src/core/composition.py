@@ -34,7 +34,7 @@ def build_chat_model(settings: OrchestratorSettings) -> ChatModel:
         ConfigurationError: If the Featherless configuration is invalid
     """
     if settings.model == "fake":
-        return DemoChatModel(settings.config_dir)
+        return DemoChatModel()
     return FeatherlessChatModel(settings)
 
 

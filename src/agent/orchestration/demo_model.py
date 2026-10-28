@@ -3,17 +3,15 @@
 It reads the last CONTEXT_JSON system message and the current turn's history
 and returns one action JSON, following a few fixed rules on the first need.
 It is not a classifier: it only exercises every screen of the chat API.
-Values it proposes are parsed with the same FieldSpecs the orchestrator
-validates with; replies that summarise tool results take their values from
+Values it proposes are parsed with fields.parse_field_value (types and enum
+options from CONTEXT_JSON needs); replies that summarise tool results take their values from
 CONTEXT_JSON (or, for passages and product names, from the tool result).
 """
 import json
 import re
-from pathlib import Path
 from typing import Any
 
 from src.agent.orchestration.fields import DISCOVERY_FIELDS, FieldValueError, parse_field_value, parse_money
-from src.agent.tools.stubs import StubData
 from src.integrations.llm.chat import ChatMessage
 from src.models.credit import FieldSpec, FieldType
 
@@ -24,7 +22,6 @@ _TOOL_LINE = re.compile(r"^(TOOL_RESULT|TOOL_REJECTED) (\w+): ?(.*)$", re.DOTALL
 _CREDIT_WORDS = re.compile(r"\b(?:credit\w*|loan\w*|împrumut\w*|imprumut\w*)", re.IGNORECASE)
 _NUMBER = re.compile(r"\d[\d.,]*")
 _YES = {"da", "yes", "ok", "corect", "correct"}
-_DEFAULT_CONFIG_DIR = Path("config/orchestrator")
 OFFER_TERM_OPTIONS = [36, 48]
 
 # ---- texts ------------------------------------------------------------------
@@ -223,12 +220,10 @@ class _Turn:
 class DemoChatModel:
     """Scripted ChatModel for mock mode: same inputs, same output."""
 
-    def __init__(self, config_dir: Path = _DEFAULT_CONFIG_DIR):
-        self._specs: dict[str, FieldSpec] = {spec.name: spec for spec in DISCOVERY_FIELDS}
-        data = StubData.load(config_dir)
-        for requirements in data.requirements.values():
-            for spec in requirements.fields:
-                self._specs.setdefault(spec.name, spec)
+    def __init__(self):
+        # Discovery limits are known up front; other fields are validated by the
+        # orchestrator, and a rejected value makes this model ask again.
+        self._discovery = {spec.name: spec for spec in DISCOVERY_FIELDS}
 
     def complete(self, messages: list[ChatMessage]) -> str:
         turn = _Turn(messages)
@@ -385,9 +380,8 @@ class DemoChatModel:
         kind = need["kind"]
         if kind == "missing_field":
             text = _text("ask_field", lang, label=need.get("label") or need.get("target"))
-            spec = self._specs.get(need.get("target") or "")
-            if spec is not None and spec.type == FieldType.enum and spec.options:
-                text += _text("options", lang, options=", ".join(spec.options))
+            if need.get("options"):
+                text += _text("options", lang, options=", ".join(need["options"]))
             return text
         if kind == "choose_product":
             return _text("choose_product", lang)
@@ -447,10 +441,11 @@ class DemoChatModel:
     def _extract(self, need: dict, text: str) -> str | int | None:
         """A value for the need from the customer's message that passes validation, or None."""
         name = need["target"]
-        spec = self._specs.get(name)
+        spec = self._discovery.get(name)
         if spec is None:
             try:
-                spec = FieldSpec(name=name, label=need.get("label") or name, type=FieldType(need["field_type"]))
+                spec = FieldSpec(name=name, label=need.get("label") or name, type=FieldType(need["field_type"]),
+                                 options=need.get("options"))
             except (KeyError, ValueError, TypeError):
                 return None
         candidate: str | int | None = None

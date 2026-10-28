@@ -161,7 +161,8 @@ class Orchestrator(CodeEventsMixin):
         action_type, outcome = None, "fallback_greeting"
         try:
             messages = build_messages(
-                state, [], self._registry.model_tools(state), turn.transcript, self._history_window, []
+                state, [], self._registry.model_tools(state), turn.transcript, self._history_window, [],
+                catalog_codes=self._catalog_codes,
             )
             action = parse_model_output(self._model.complete(messages))
             action_type = action.action.type
@@ -308,6 +309,7 @@ class Orchestrator(CodeEventsMixin):
                 turn.transcript,
                 self._history_window,
                 pending,
+                catalog_codes=self._catalog_codes,
             )
             pending = []
             started = time.perf_counter()

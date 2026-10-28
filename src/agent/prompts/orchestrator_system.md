@@ -128,7 +128,7 @@ You will receive a CONTEXT_JSON message at the end of the conversation containin
 - `language`: Customer's language ("ro" or "en")
 - `flow`: Current conversation flow
 - `stage`: Current application stage (if applicable)
-- `needs`: Ordered list of needs blocking progress (follow this order!)
+- `needs`: Ordered list of needs blocking progress (follow this order!). When a need has `options` (enum fields, and the product codes for `choose_product`), propose exactly one of those values.
 - `fields`: Collected field values with source and confirmation status
 - `conflicts`: Conflicts between customer and document values
 - `documents`: Uploaded documents with their status

@@ -5,8 +5,6 @@ from src.agent.orchestration.actions import CallTool, Respond, parse_model_outpu
 from src.agent.orchestration.demo_model import DemoChatModel
 from src.integrations.llm.chat import ChatMessage
 
-from tests.unit.orchestrator.conftest import CONFIG_DIR
-
 
 def context(**overrides) -> ChatMessage:
     ctx = {
@@ -17,25 +15,34 @@ def context(**overrides) -> ChatMessage:
     return ChatMessage(role="system", content="CONTEXT_JSON:\n" + json.dumps(ctx))
 
 
-def need(kind, target=None, label=None, field_type=None, detail=None) -> dict:
-    return {"kind": kind, "target": target, "detail": detail, "label": label or kind, "field_type": field_type}
+def need(kind, target=None, label=None, field_type=None, detail=None, options=None) -> dict:
+    return {"kind": kind, "target": target, "detail": detail, "label": label or kind,
+            "field_type": field_type, "options": options}
 
 
 def run(*messages: ChatMessage):
-    return parse_model_output(DemoChatModel(CONFIG_DIR).complete(list(messages)))
+    return parse_model_output(DemoChatModel().complete(list(messages)))
 
 
 def test_same_input_same_output():
     messages = [ChatMessage(role="user", content="30000 lei"),
                 context(needs=[need("missing_field", "amount", "Amount", "money")])]
-    model = DemoChatModel(CONFIG_DIR)
+    model = DemoChatModel()
     assert model.complete(messages) == model.complete(messages)
 
 
 def test_enum_prefers_longest_option():
     action = run(ChatMessage(role="user", content="sunt self-employed"),
-                 context(needs=[need("missing_field", "employment_type", "Employment Type", "enum")]))
+                 context(needs=[need("missing_field", "employment_type", "Employment Type", "enum",
+                                       options=["employed", "self_employed", "retired"])]))
     assert [(u.field, u.value) for u in action.field_updates] == [("employment_type", "self_employed")]
+
+
+def test_enum_options_come_from_context():
+    action = run(ChatMessage(role="user", content="employed"),
+                 context(needs=[need("missing_field", "employment_type", "Employment Type", "enum", options=["retired"])]))
+    assert action.field_updates == []
+    assert isinstance(action.action, Respond) and "retired" in action.action.message
 
 
 def test_invalid_value_is_not_proposed():

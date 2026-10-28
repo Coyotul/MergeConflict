@@ -324,3 +324,26 @@ def test_run_eligibility_input_validates_empty_dict():
     # Extra fields are ignored (Pydantic default behavior)
     input_obj = RunEligibilityInput.model_validate({"extra": "ignored"})
     assert input_obj is not None
+
+
+def test_model_tools_lists_product_tools_before_any_flow(registry, state):
+    """With no application and flow none, product_info tools are listed (first message)."""
+    state.active_flow = Flow.none
+    state.application = None
+
+    tool_names = {spec.name for spec in registry.model_tools(state)}
+
+    assert "echo" in tool_names
+    assert "credit_tool" not in tool_names
+    assert "code_only" not in tool_names
+
+
+def test_listed_product_tool_runs_before_any_flow(registry, state, ctx):
+    """A tool listed in flow none also passes the flow check when executed."""
+    state.active_flow = Flow.none
+    state.application = None
+
+    outcome, _ = registry.execute("echo", {"message": "hi"}, ctx, caller="model")
+    assert outcome.ok
+    outcome, _ = registry.execute("credit_tool", {"message": "hi"}, ctx, caller="model")
+    assert outcome.error_code == ToolErrorCode.not_allowed_in_flow

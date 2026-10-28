@@ -64,6 +64,15 @@ class ToolCallOutcome(BaseModel):
             return f"TOOL_REJECTED {self.tool}: {self.error_code}: {self.error_message}"
 
 
+def _allowed_flows(state: SessionState) -> set[Flow]:
+    """Flows whose tools the model may use in this state."""
+    if state.application is not None:
+        return {Flow.credit_application, Flow.product_info}
+    if state.active_flow == Flow.none:
+        return {Flow.none, Flow.product_info}
+    return {state.active_flow}
+
+
 class ToolRegistry:
     """Registry of available tools with validation."""
 
@@ -82,21 +91,15 @@ class ToolRegistry:
         """Return model-callable tools available for the current state.
 
         When application is active, include tools from both credit_application
-        and product_info flows. Otherwise, include tools from the active flow.
+        and product_info flows. Before any flow (none), include none and
+        product_info tools, so product questions work from the first message.
+        Otherwise, include tools from the active flow.
         """
-        if state.application is not None:
-            # Include tools from credit_application or product_info flows
-            allowed_flows = {Flow.credit_application, Flow.product_info}
-            return [
-                spec for spec in self._specs.values()
-                if spec.model_callable and not allowed_flows.isdisjoint(spec.flows)
-            ]
-        else:
-            # Include tools from the active flow
-            return [
-                spec for spec in self._specs.values()
-                if spec.model_callable and state.active_flow in spec.flows
-            ]
+        allowed_flows = _allowed_flows(state)
+        return [
+            spec for spec in self._specs.values()
+            if spec.model_callable and not allowed_flows.isdisjoint(spec.flows)
+        ]
 
     def execute(
         self,
@@ -161,8 +164,8 @@ class ToolRegistry:
                     None
                 )
         else:
-            # Otherwise, check active flow
-            if ctx.state.active_flow not in spec.flows:
+            # Otherwise, check active flow (flow none also allows product_info tools)
+            if _allowed_flows(ctx.state).isdisjoint(spec.flows):
                 return (
                     ToolCallOutcome(
                         tool=name,

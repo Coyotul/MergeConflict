@@ -1,0 +1,21 @@
+{
+  "index": "IRCC",
+  "version": "2026-10-28",
+  "description": "Romanian consumer-credit reference index (BNR). The value computed for quarter T applies to new and existing variable-rate RON loans in quarter T+2. Keys are the quarters in which the value APPLIES.",
+  "sources": [
+    "https://www.bnr.ro/1974-indicele-de-referinta-pentru-creditele-consumatorilor",
+    "https://www.bursa.ro/ircc-urca-la-5-57-procente-in-t4-2026-85224069",
+    "https://financiarul.ro/finante-personale/ce-ircc-se-foloseste-la-calculul-creditelor-si-cand-se-aplica-valoarea/"
+  ],
+  "values_by_applied_quarter": {
+    "2025-Q1": "5.66",
+    "2025-Q2": "5.55",
+    "2025-Q3": "5.55",
+    "2025-Q4": "6.06",
+    "2026-Q1": "5.68",
+    "2026-Q2": "5.58",
+    "2026-Q3": "5.56",
+    "2026-Q4": "5.57",
+    "2027-Q1": "5.61"
+  }
+}

@@ -1,7 +1,7 @@
 """Retrieval protocols and stub implementation for policy search."""
 from datetime import datetime, UTC, date
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, TYPE_CHECKING
 import yaml
 
 from src.models.knowledge import (
@@ -17,6 +17,9 @@ from src.models.knowledge import (
     Topic,
     Authority,
 )
+
+if TYPE_CHECKING:
+    from src.core.settings import OrchestratorSettings
 
 
 class PolicySearch(Protocol):
@@ -175,3 +178,66 @@ class StubPolicySearch:
             status=SearchStatus.ok,
             passages=top_passages
         )
+
+
+class RagPolicySearch:
+    """RAG-based policy search implementation."""
+
+    def __init__(self, service):
+        """Initialize with a RetrievalService instance.
+
+        Args:
+            service: RetrievalService instance
+        """
+        self.service = service
+
+    def search(self, query: SearchQuery) -> SearchResult:
+        """Search using the RAG retrieval service.
+
+        Args:
+            query: Search query
+
+        Returns:
+            Search result from RAG service
+        """
+        return self.service.search(query)
+
+
+def build_policy_search(settings: "OrchestratorSettings") -> PolicySearch:
+    """Build a PolicySearch implementation based on settings.
+
+    Args:
+        settings: Orchestrator settings
+
+    Returns:
+        PolicySearch implementation (stub or RAG)
+
+    Raises:
+        ConfigurationError: If RAG mode is selected but service is not available
+    """
+    from src.core.errors import ConfigurationError
+
+    if settings.retrieval == "stub":
+        return StubPolicySearch(settings.config_dir)
+    elif settings.retrieval == "rag":
+        # Lazy import to avoid ImportError when RAG service is not available
+        try:
+            from src.services.retrieval.service import RetrievalService
+            from src.services.retrieval.connect import build_connection
+            from src.services.retrieval.embedder import build_embedder
+            from src.core.settings import load_rag_settings
+        except ImportError:
+            raise ConfigurationError(
+                "ORCHESTRATOR_RETRIEVAL=rag needs the RAG retrieval service (feat/rag-service) to be merged"
+            )
+
+        # Build RAG dependencies
+        rag_settings = load_rag_settings()
+        connection = build_connection(rag_settings)
+        embedder = build_embedder(rag_settings)
+
+        # Create and return RAG service
+        service = RetrievalService(connection, embedder, rag_settings)
+        return RagPolicySearch(service)
+    else:
+        raise ConfigurationError(f"Unknown retrieval mode: {settings.retrieval}")

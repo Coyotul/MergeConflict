@@ -38,6 +38,7 @@ class SearchPoliciesOutput(BaseModel):
     status: Literal["ok", "insufficient_evidence"]
     passages: list[PassageView]
     simulated: bool
+    notices: list[str] = []
 
 
 class GetCreditProductsInput(BaseModel):

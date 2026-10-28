@@ -47,7 +47,7 @@ from src.agent.tools.contracts import (
 )
 from src.agent.tools.registry import ToolRegistry, ToolSpec, ToolContext, Flow
 from src.agent.tools.retrieval import PolicySearch
-from src.core.errors import ToolUnavailable
+from src.core.errors import ToolUnavailable, KnowledgeStoreUnavailable, EmbeddingModelUnavailable
 from src.models.chat import CitationRef
 from src.models.credit import (
     CreditProduct,
@@ -61,7 +61,7 @@ from src.models.credit import (
     ReasonItem,
     LoanOffer,
 )
-from src.models.knowledge import Product, SearchQuery, SearchStatus
+from src.models.knowledge import Product, SearchQuery, SearchStatus, PassageFlag
 
 
 def annuity_installment(principal: Decimal, annual_rate_percent: Decimal, months: int) -> Decimal:
@@ -233,15 +233,38 @@ def build_stub_registry(data: StubData, policy_search: PolicySearch) -> ToolRegi
 
     # Handler for search_banking_policies
     def handle_search_policies(input: SearchPoliciesInput, ctx: ToolContext) -> SearchPoliciesOutput:
-        query = SearchQuery(
-            text=input.text,
-            products=input.products
-        )
-        result = policy_search.search(query)
+        try:
+            query = SearchQuery(
+                text=input.text,
+                products=input.products
+            )
+            result = policy_search.search(query)
+        except (KnowledgeStoreUnavailable, EmbeddingModelUnavailable) as e:
+            # Map RAG exceptions to ToolUnavailable
+            raise ToolUnavailable(str(e))
+
+        # Filter passages: drop superseded/withdrawn unless they're the only ones
+        filtered_passages = []
+        has_normal_passage = False
+
+        for passage in result.passages:
+            if PassageFlag.superseded not in passage.flags and PassageFlag.withdrawn not in passage.flags:
+                has_normal_passage = True
+                filtered_passages.append(passage)
+
+        if not has_normal_passage:
+            # Include all passages if only superseded/withdrawn ones exist
+            filtered_passages = result.passages
+
+        # Build conflict mapping: chunk_id -> citation_ids
+        chunk_to_citations: dict[int, list[str]] = {}
+        for conflict in result.conflicts:
+            for chunk_id in conflict.chunk_ids:
+                chunk_to_citations.setdefault(chunk_id, [])
 
         # Convert passages to PassageView and assign citation IDs
         passages = []
-        for passage in result.passages:
+        for passage in filtered_passages:
             # Assign citation ID
             citation_id = f"c{len(ctx.state.retrieved_sources) + 1}"
 
@@ -258,15 +281,46 @@ def build_stub_registry(data: StubData, policy_search: PolicySearch) -> ToolRegi
                 effective_date=passage.citation.effective_date
             )
 
+            # Track citation for conflict mapping
+            if passage.chunk_id in chunk_to_citations:
+                chunk_to_citations[passage.chunk_id].append(citation_id)
+
+            # Build passage text with warnings
+            text = passage.text
+            warnings_to_append = []
+
+            if PassageFlag.campaign_ended in passage.flags:
+                warnings_to_append.append("campaign_ended")
+            if PassageFlag.teaser_figure in passage.flags:
+                warnings_to_append.append("teaser_figure")
+
+            for warning in warnings_to_append:
+                text = f"{text} [warning: {warning}]"
+
             # Create passage view
             passages.append(PassageView(
                 citation_id=citation_id,
                 header=passage.header,
-                text=passage.text,
+                text=text,
                 publisher=passage.citation.publisher,
                 title=passage.citation.title,
-                url=passage.citation.url
+                url=passage.citation.url,
+                flags=[f.value for f in passage.flags]
             ))
+
+        # Build notices from conflicts
+        notices = []
+        for conflict in result.conflicts:
+            # Collect all citation IDs for chunks in this conflict
+            conflict_citation_ids = []
+            for chunk_id in conflict.chunk_ids:
+                if chunk_id in chunk_to_citations:
+                    conflict_citation_ids.extend(chunk_to_citations[chunk_id])
+
+            if conflict_citation_ids:
+                # Deduplicate and sort
+                unique_ids = sorted(set(conflict_citation_ids))
+                notices.append(f"CONFLICTING_SOURCES: {', '.join(unique_ids)}")
 
         # Mark as simulated only if using stub policy search
         is_simulated = getattr(policy_search, "simulated", False)
@@ -276,7 +330,8 @@ def build_stub_registry(data: StubData, policy_search: PolicySearch) -> ToolRegi
         return SearchPoliciesOutput(
             status=result.status.value,
             passages=passages,
-            simulated=is_simulated
+            simulated=is_simulated,
+            notices=notices
         )
 
     # Handler for get_credit_products

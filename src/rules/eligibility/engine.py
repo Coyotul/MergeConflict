@@ -1,7 +1,7 @@
 """Pure preliminary reference rules. No providers, workflow writes or LLM calls."""
 
 from datetime import datetime, timedelta
-from decimal import Decimal, localcontext
+from decimal import Decimal, ROUND_DOWN, localcontext
 
 from src.models.eligibility import (
     AgePolicyCategory, ApplicationSnapshot, AssessmentStatus, CreditBureauData,
@@ -28,6 +28,8 @@ def check(
 
 def aggregate_status(checks: tuple[RuleCheck, ...]) -> AssessmentStatus:
     """Integrity/review flags outrank failure: questionable evidence cannot reject."""
+    if not checks:
+        return AssessmentStatus.INFORMATION_REQUIRED
     statuses = {item.status for item in checks}
     if RuleStatus.REVIEW_REQUIRED in statuses:
         return AssessmentStatus.REVIEW_REQUIRED
@@ -116,7 +118,7 @@ def profile_checks(
         if start is None:
             checks.append(check(policy, "EMPLOYMENT", RuleStatus.INFORMATION_REQUIRED, "EMPLOYMENT_START_REQUIRED",
                                 "Verified employment start date is missing.", evidence_ids))
-        elif start > now.date():
+        elif start > now.date() or (profile.birth_date is not None and start < profile.birth_date):
             checks.append(check(policy, "EMPLOYMENT", RuleStatus.REVIEW_REQUIRED, "INVALID_EMPLOYMENT_START",
                                 "Employment start date requires correction.", evidence_ids))
         else:
@@ -128,8 +130,12 @@ def profile_checks(
             checks.append(check(policy, "EMPLOYMENT", RuleStatus.INFORMATION_REQUIRED, "CONTRACT_TYPE_REQUIRED",
                                 "Employment contract type is missing.", evidence_ids))
         elif profile.employment_contract == EmploymentContract.INDEFINITE:
-            checks.append(check(policy, "EMPLOYMENT", RuleStatus.PASS, "INDEFINITE_CONTRACT",
-                                "The verified contract is indefinite.", evidence_ids))
+            if profile.employment_end_date is not None:
+                checks.append(check(policy, "EMPLOYMENT", RuleStatus.REVIEW_REQUIRED, "EMPLOYMENT_CONTRACT_CONFLICT",
+                                    "An indefinite contract with an end date requires clarification.", evidence_ids))
+            else:
+                checks.append(check(policy, "EMPLOYMENT", RuleStatus.PASS, "INDEFINITE_CONTRACT",
+                                    "The verified contract is indefinite.", evidence_ids))
         else:
             end = profile.employment_end_date
             if end is None:
@@ -233,18 +239,24 @@ def affordability_checks(
     if problem is not None:
         return ((check(policy, "AFFORDABILITY", RuleStatus.REVIEW_REQUIRED, problem,
                        "A current, verified pricing scenario is required.", (scenario.evidence.evidence_id,)),), None)
+    with localcontext() as context:
+        context.prec = 40
+        expected_principal = application.request.amount_ron + scenario.financed_costs_ron
     if (
         scenario.application_id != application.application_id
         or scenario.customer_id != application.customer_id
         or scenario.term_months != application.request.term_months
-        or scenario.principal_ron != application.request.amount_ron + scenario.financed_costs_ron
+        or scenario.principal_ron != expected_principal
     ):
         return ((check(policy, "AFFORDABILITY", RuleStatus.REVIEW_REQUIRED, "PRICING_SCENARIO_MISMATCH",
                        "Pricing ownership, term or financed-principal breakdown conflicts with the application.", (scenario.evidence.evidence_id,)),), None)
     if not policy.minimum_amount_ron <= scenario.principal_ron <= policy.maximum_amount_ron:
         return ((check(policy, "AFFORDABILITY", RuleStatus.FAIL, "FINANCED_PRINCIPAL_OUTSIDE_BOUNDS",
                        "Financed costs push the total principal outside the configured product bounds.", (scenario.evidence.evidence_id,)),), None)
-    if income.income_kind != IncomeKind.SALARY or not income.recurring or income.net_monthly_income_ron <= 0:
+    if income.net_monthly_income_ron == 0:
+        return ((check(policy, "AFFORDABILITY", RuleStatus.NOT_APPLICABLE, "ZERO_INCOME_NO_DTI",
+                       "No ratio is calculated for verified zero income; the minimum-income rule still applies."),), None)
+    if income.income_kind != IncomeKind.SALARY or not income.recurring:
         return ((check(policy, "AFFORDABILITY", RuleStatus.REVIEW_REQUIRED, "USABLE_INCOME_REQUIRED",
                        "Verified recurring domestic-salary income is required for this automatic calculation."),), None)
     try:
@@ -253,19 +265,24 @@ def affordability_checks(
     except FinancialInputError:
         return ((check(policy, "OBLIGATIONS", RuleStatus.REVIEW_REQUIRED, "OBLIGATION_RECONCILIATION_REQUIRED",
                        "Missing, conflicting, foreign-currency or unequal-payment evidence requires review.", evidence_ids),), None)
-    total = existing + proposed
+    with localcontext() as context:
+        context.prec = 40
+        total = existing + proposed
+    if total >= Decimal("1000000000000"):
+        return ((check(policy, "OBLIGATIONS", RuleStatus.REVIEW_REQUIRED, "OBLIGATION_TOTAL_OUT_OF_RANGE",
+                       "The combined debt service exceeds the supported monetary range.", evidence_ids),), None)
     with localcontext() as context:
         context.prec = 40
         ratio = total / income.net_monthly_income_ron
         remaining = max(Decimal("0"), income.net_monthly_income_ron * policy.maximum_debt_to_income_ratio - existing)
+        capacity = remaining.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
     # Capacity is indicative; do not round it upward above the exact configured cap.
-    from decimal import ROUND_DOWN
     financial = FinancialAssessment(
         verified_net_income_ron=income.net_monthly_income_ron,
         existing_monthly_debt_ron=existing, proposed_monthly_debt_ron=proposed,
         total_monthly_debt_ron=total, debt_to_income_ratio=ratio,
         maximum_debt_to_income_ratio=policy.maximum_debt_to_income_ratio,
-        remaining_installment_capacity_ron=remaining.quantize(Decimal("0.01"), rounding=ROUND_DOWN),
+        remaining_installment_capacity_ron=capacity,
     )
     passed = within_dti_limit(total, income.net_monthly_income_ron, policy.maximum_debt_to_income_ratio)
     return ((check(policy, "AFFORDABILITY", RuleStatus.PASS if passed else RuleStatus.FAIL,

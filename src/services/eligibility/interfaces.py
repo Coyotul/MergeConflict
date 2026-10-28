@@ -1,6 +1,7 @@
 """Ports owned by eligibility; concrete synthetic/storage adapters live elsewhere."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable, Protocol
 
 from src.models.eligibility import (
@@ -27,6 +28,8 @@ class StoredAssessment:
 
 
 class AssessmentRepository(Protocol):
+    def get_assessment(self, assessment_id: str) -> EligibilityAssessment | None: ...
+
     def get_run(self, actor_id: str, key: str) -> StoredAssessment | None: ...
 
     def save_run(
@@ -36,8 +39,8 @@ class AssessmentRepository(Protocol):
 
     def append_audit(self, event: AuditEvent) -> None: ...
 
+    def healthcheck(self) -> bool: ...
+
 
 # Kept callable/injected to make time deterministic in tests and orchestration.
-from datetime import datetime
-
 Clock = Callable[[], datetime]

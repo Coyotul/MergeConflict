@@ -13,7 +13,9 @@ class FinancialInputError(ValueError):
 
 
 def money_round(value: Decimal) -> Decimal:
-    return value.quantize(CENT, rounding=ROUND_HALF_UP)
+    with localcontext() as context:
+        context.prec = 40
+        return value.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
 def proposed_monthly_debt(scenario: PricingScenario) -> Decimal:
@@ -50,7 +52,9 @@ def liability_monthly_debt(debt: DebtObligation, revolving_factor: Decimal) -> D
             raise FinancialInputError("A revolving facility requires its granted limit.")
         if revolving_factor < Decimal("0.03"):
             raise FinancialInputError("Revolving factor cannot be below the regulatory floor.")
-        floor = (debt.credit_limit * revolving_factor).quantize(CENT, rounding=ROUND_CEILING)
+        with localcontext() as context:
+            context.prec = 40
+            floor = (debt.credit_limit * revolving_factor).quantize(CENT, rounding=ROUND_CEILING)
         return max(floor, debt.monthly_payment or Decimal("0"), debt.maximum_monthly_payment or Decimal("0"))
     if debt.repayment_type != RepaymentType.EQUAL:
         if debt.maximum_monthly_payment is None:
@@ -78,14 +82,18 @@ def reconcile_monthly_debt(
         if previous is not None and previous != debt:
             raise FinancialInputError("Conflicting reports for a canonical liability.")
         liabilities[debt.liability_id] = debt
-    return sum(
-        (liability_monthly_debt(debt, revolving_factor) for debt in liabilities.values()),
-        start=Decimal("0.00"),
-    )
+    with localcontext() as context:
+        context.prec = 40
+        return sum(
+            (liability_monthly_debt(debt, revolving_factor) for debt in liabilities.values()),
+            start=Decimal("0.00"),
+        )
 
 
 def within_dti_limit(total_debt: Decimal, net_income: Decimal, limit: Decimal) -> bool:
     if net_income <= 0:
         return False
     # Compare exact money before any percentage rounding or repeating division.
-    return total_debt <= net_income * limit
+    with localcontext() as context:
+        context.prec = 40
+        return total_debt <= net_income * limit

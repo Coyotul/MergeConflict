@@ -1,0 +1,59 @@
+{
+  "fixture_id": "eligibility-reference-2026-10-28",
+  "simulated": true,
+  "reference_time": "2026-10-28T12:00:00Z",
+  "application": {
+    "application_id": "demo-app-eligible",
+    "customer_id": "demo-customer",
+    "revision": 1,
+    "workflow_state": "PRELIMINARY_ASSESSMENT",
+    "request": {"product_id": "personal_loan_ron", "amount_ron": "30000.00", "term_months": 60},
+    "profile": {
+      "customer_id": "demo-customer",
+      "birth_date": "1991-06-15",
+      "age_policy_category": "FEMALE_REFERENCE",
+      "income_kind": "SALARY",
+      "employment_start_date": "2024-01-15",
+      "employment_contract": "INDEFINITE"
+    },
+    "profile_evidence": {"evidence_id": "profile-demo-customer", "source": "CUSTOMER_PROFILE", "recorded_at": "2026-10-27T12:00:00Z", "status": "VERIFIED", "source_version": "synthetic-profile-v1", "simulated": true},
+    "identity_document": {"evidence_id": "identity-demo-customer", "source": "DOCUMENT", "recorded_at": "2026-10-27T12:00:00Z", "status": "VERIFIED", "source_version": "synthetic-validation-v1", "document_kind": "IDENTITY", "expires_on": "2031-06-15", "simulated": true},
+    "declared_net_income_ron": "6500.00",
+    "authorizations": [
+      {"authorization_id": "demo-anaf-authorization", "customer_id": "demo-customer", "scope": "INCOME_VERIFICATION", "legal_basis": "CONSENT", "recorded_at": "2026-10-27T12:00:00Z", "notice_version": "demo-income-notice-v1", "notice_acknowledged": true, "consent_recorded_at": "2026-10-27T12:00:00Z", "expires_at": "2026-11-27T12:00:00Z", "simulated": true},
+      {"authorization_id": "demo-bureau-authorization", "customer_id": "demo-customer", "scope": "BUREAU_PRECHECK", "legal_basis": "LEGITIMATE_INTEREST", "recorded_at": "2026-10-27T12:00:00Z", "notice_version": "demo-bureau-notice-v1", "notice_acknowledged": true, "expires_at": "2026-11-27T12:00:00Z", "simulated": true},
+      {"authorization_id": "demo-loans-authorization", "customer_id": "demo-customer", "scope": "INTERNAL_LOANS", "legal_basis": "CONTRACT", "recorded_at": "2026-10-27T12:00:00Z", "notice_version": "demo-loans-notice-v1", "notice_acknowledged": true, "expires_at": "2026-11-27T12:00:00Z", "simulated": true}
+    ],
+    "pricing_scenarios": [{
+      "scenario_id": "demo-quote-eligible", "application_id": "demo-app-eligible", "customer_id": "demo-customer",
+      "principal_ron": "30200.00", "financed_costs_ron": "200.00", "term_months": 60,
+      "annual_interest_percent": "10.00", "repayment_type": "EQUAL", "monthly_fee_ron": "5.00", "monthly_insurance_ron": "0.00",
+      "evidence": {"evidence_id": "quote-demo-app-eligible", "source": "PRICING", "recorded_at": "2026-10-27T12:00:00Z", "status": "VERIFIED", "source_version": "synthetic-quote-v1", "simulated": true}, "indicative": true
+    }],
+    "simulated": true
+  },
+  "verifications": {
+    "ANAF": {
+      "provider": "ANAF", "customer_id": "demo-customer", "status": "SUCCESS",
+      "data": {"customer_id": "demo-customer", "income_kind": "SALARY", "net_monthly_income_ron": "6500.00", "period_end": "2026-09-30", "recurring": true},
+      "evidence": {"evidence_id": "anaf-demo-customer", "source": "ANAF", "recorded_at": "2026-10-27T12:00:00Z", "status": "VERIFIED", "source_version": "synthetic-anaf-v1", "simulated": true}, "simulated": true
+    },
+    "CREDIT_BUREAU": {
+      "provider": "CREDIT_BUREAU", "customer_id": "demo-customer", "status": "SUCCESS",
+      "data": {
+        "customer_id": "demo-customer", "complete": true, "inquiry_purpose": "PRELIMINARY", "fico_score": 700,
+        "no_credit_history": false, "has_enforced_loans": false, "has_large_repeated_delays": false, "disputed": false, "payment_incidents": [],
+        "obligations": [
+          {"liability_id": "demo-internal-loan", "kind": "INSTALLMENT", "currency": "RON", "active": true, "monthly_payment": "700.00", "repayment_type": "EQUAL"},
+          {"liability_id": "demo-unused-card", "kind": "REVOLVING", "currency": "RON", "active": true, "monthly_payment": "0.00", "credit_limit": "10000.00", "repayment_type": "EQUAL"}
+        ]
+      },
+      "evidence": {"evidence_id": "bureau-demo-customer", "source": "CREDIT_BUREAU", "recorded_at": "2026-10-27T12:00:00Z", "status": "VERIFIED", "source_version": "synthetic-bureau-v1", "simulated": true}, "simulated": true
+    },
+    "INTERNAL_LOANS": {
+      "provider": "INTERNAL_LOANS", "customer_id": "demo-customer", "status": "SUCCESS",
+      "data": {"customer_id": "demo-customer", "complete": true, "obligations": [{"liability_id": "demo-internal-loan", "kind": "INSTALLMENT", "currency": "RON", "active": true, "monthly_payment": "700.00", "repayment_type": "EQUAL"}]},
+      "evidence": {"evidence_id": "loans-demo-customer", "source": "INTERNAL_LOANS", "recorded_at": "2026-10-27T12:00:00Z", "status": "VERIFIED", "source_version": "synthetic-loans-v1", "simulated": true}, "simulated": true
+    }
+  }
+}

@@ -4,7 +4,7 @@ HTTP/tool callers supply identifiers, never the trusted evidence models below.
 Money is encoded as decimal strings; binary floating-point inputs are rejected.
 """
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from enum import Enum
 from typing import Annotated, Generic, Literal, TypeVar
@@ -15,6 +15,7 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    HttpUrl,
     StrictBool,
     model_validator,
 )
@@ -23,6 +24,12 @@ from pydantic import (
 def _exact_decimal(value: object) -> object:
     if isinstance(value, (float, bool)):
         raise ValueError("Use decimal strings or integers, not floats or booleans.")
+    return value
+
+
+def _synthetic_only(value: object) -> object:
+    if value is not True:
+        raise ValueError("This boundary requires an explicit synthetic=true marker.")
     return value
 
 
@@ -43,16 +50,18 @@ Rate = Annotated[
     Field(ge=0, le=100, max_digits=9, decimal_places=6),
 ]
 Ratio = Annotated[
-    Decimal, BeforeValidator(_exact_decimal), Field(ge=0, le=1)
+    Decimal, BeforeValidator(_exact_decimal),
+    Field(ge=0, le=1, max_digits=12, decimal_places=9),
 ]
 NonNegativeInt = Annotated[int, Field(strict=True, ge=0)]
 PositiveInt = Annotated[int, Field(strict=True, gt=0)]
+SyntheticFlag = Annotated[Literal[True], BeforeValidator(_synthetic_only)]
 
 
 class ContractModel(BaseModel):
     model_config = ConfigDict(
         extra="forbid", frozen=True, validate_default=True,
-        str_strip_whitespace=True, allow_inf_nan=False,
+        str_strip_whitespace=True, allow_inf_nan=False, revalidate_instances="always",
     )
 
 
@@ -108,7 +117,7 @@ class EvidenceReference(ContractModel):
     source_version: Identifier
     document_kind: Literal["IDENTITY", "INCOME", "BANK_STATEMENT"] | None = None
     expires_on: date | None = None
-    simulated: Literal[True] = True
+    simulated: SyntheticFlag
 
 
 class AgePolicyCategory(str, Enum):
@@ -193,7 +202,7 @@ class AuthorizationRecord(ContractModel):
     consent_recorded_at: AwareDatetime | None = None
     expires_at: AwareDatetime | None = None
     revoked_at: AwareDatetime | None = None
-    simulated: Literal[True] = True
+    simulated: SyntheticFlag
 
 
 class ApplicationSnapshot(ContractModel):
@@ -208,7 +217,7 @@ class ApplicationSnapshot(ContractModel):
     declared_net_income_ron: Money | None = None
     authorizations: tuple[AuthorizationRecord, ...] = ()
     pricing_scenarios: tuple[PricingScenario, ...] = ()
-    simulated: Literal[True] = True
+    simulated: SyntheticFlag
 
     @model_validator(mode="after")
     def unique_records(self) -> "ApplicationSnapshot":
@@ -313,7 +322,7 @@ class VerificationResult(ContractModel, Generic[DataT]):
     status: VerificationStatus
     data: DataT | None = None
     evidence: EvidenceReference | None = None
-    simulated: Literal[True] = True
+    simulated: SyntheticFlag
 
     @model_validator(mode="after")
     def valid_envelope(self) -> "VerificationResult[DataT]":
@@ -379,6 +388,23 @@ class PolicyReference(ContractModel):
     effective_to: date
 
 
+class SourceReference(ContractModel):
+    source_id: Identifier
+    classification: Literal["REGULATORY", "PUBLIC_BANK_REFERENCE", "SYNTHETIC_ASSUMPTION"]
+    title: str
+    url: HttpUrl | None = None
+    retrieved_on: date
+    section: str
+
+    @model_validator(mode="after")
+    def public_source_url(self) -> "SourceReference":
+        if self.classification != "SYNTHETIC_ASSUMPTION" and self.url is None:
+            raise ValueError("Public/regulatory sources require a URL.")
+        if self.url is not None and self.url.scheme != "https":
+            raise ValueError("Source URLs must use HTTPS.")
+        return self
+
+
 class EligibilityAssessment(ContractModel):
     assessment_id: Identifier
     application_id: Identifier
@@ -391,6 +417,8 @@ class EligibilityAssessment(ContractModel):
     financial_assessment: FinancialAssessment | None = None
     evidence: tuple[EvidenceReference, ...] = ()
     source_urls: tuple[str, ...] = ()
+    source_references: tuple[SourceReference, ...] = ()
+    assumptions: tuple[str, ...] = ()
     final_credit_decision: Literal[False] = False
     human_review_required: Literal[True] = True
     simulated: Literal[True] = True

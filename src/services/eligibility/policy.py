@@ -3,14 +3,15 @@
 import hashlib
 import json
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, HttpUrl, model_validator
+from pydantic import Field, model_validator
 
 from src.models.eligibility import (
     AgePolicyCategory, ContractModel, EvidenceSource, Identifier, PositiveInt,
-    PositiveMoney, Ratio,
+    PositiveMoney, Ratio, SourceReference,
 )
 
 
@@ -20,21 +21,7 @@ DEFAULT_POLICY_PATH = (
 )
 
 
-class PolicySource(ContractModel):
-    source_id: Identifier
-    classification: Literal["REGULATORY", "PUBLIC_BANK_REFERENCE", "SYNTHETIC_ASSUMPTION"]
-    title: str
-    url: HttpUrl | None = None
-    retrieved_on: date
-    section: str
-
-    @model_validator(mode="after")
-    def public_source_url(self) -> "PolicySource":
-        if self.classification != "SYNTHETIC_ASSUMPTION" and self.url is None:
-            raise ValueError("Public/regulatory sources require a URL.")
-        if self.url is not None and self.url.scheme != "https":
-            raise ValueError("Source URLs must use HTTPS.")
-        return self
+PolicySource = SourceReference
 
 
 class EligibilityPolicy(ContractModel):
@@ -71,9 +58,9 @@ class EligibilityPolicy(ContractModel):
             raise ValueError("Policy amount bounds are inverted.")
         if self.minimum_term_months > self.maximum_term_months:
             raise ValueError("Policy term bounds are inverted.")
-        if not DecimalZero < self.maximum_debt_to_income_ratio <= DecimalFortyPercent:
+        if not Decimal("0") < self.maximum_debt_to_income_ratio <= Decimal("0.40"):
             raise ValueError("Ordinary RON personal-loan DTI limit must be in (0, .40].")
-        if self.revolving_limit_factor < DecimalThreePercent:
+        if self.revolving_limit_factor < Decimal("0.03"):
             raise ValueError("Revolving facility factor must be at least .03.")
         expected = {AgePolicyCategory.FEMALE_REFERENCE, AgePolicyCategory.MALE_REFERENCE}
         if set(self.maximum_maturity_age_years) != expected:
@@ -106,14 +93,6 @@ class EligibilityPolicy(ContractModel):
     def digest(self) -> str:
         content = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
-
-
-# Decimal constants are never derived from binary floats.
-from decimal import Decimal
-
-DecimalZero = Decimal("0")
-DecimalFortyPercent = Decimal("0.40")
-DecimalThreePercent = Decimal("0.03")
 
 
 def load_policy(path: Path = DEFAULT_POLICY_PATH) -> EligibilityPolicy:

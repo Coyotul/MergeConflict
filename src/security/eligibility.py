@@ -25,8 +25,11 @@ class ActorContext:
     assigned_application_ids: frozenset[str] = frozenset()
 
 
-def authorize_assessment(actor: ActorContext, application: ApplicationSnapshot) -> None:
-    if "eligibility:assess" not in actor.permissions:
+def authorize_assessment(
+    actor: ActorContext, application: ApplicationSnapshot,
+    permission: str = "eligibility:assess",
+) -> None:
+    if permission not in actor.permissions:
         raise AccessDenied()
     if actor.role == ActorRole.CUSTOMER:
         if actor.customer_id == application.customer_id:
@@ -50,6 +53,8 @@ def authorization_is_valid(
     if record.revoked_at is not None:
         return False
     if record.expires_at is not None and record.expires_at <= now:
+        return False
+    if record.expires_at is not None and record.expires_at <= record.recorded_at:
         return False
     needs_consent = (
         scope == AuthorizationScope.INCOME_VERIFICATION

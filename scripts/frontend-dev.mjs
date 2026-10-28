@@ -15,7 +15,7 @@ for (const envFile of [".env.local", ".env"]) {
   }
 }
 const processes = [
-  ["demo API", ["--import", "tsx", "packages/banking/server/index.ts"], root],
+  ["demo API", ["--watch", "--import", "tsx", "packages/banking/server/index.ts"], root],
   ["customer", [resolve(root, "node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", "3000", "--webpack"], resolve(root, "apps/customer")],
   ["reviewer", [resolve(root, "node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", "3001", "--webpack"], resolve(root, "apps/staff")],
 ];

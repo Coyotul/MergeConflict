@@ -55,7 +55,7 @@ Respond ONLY with a valid JSON object matching this structure:
 }
 
 Instructions for "kind":
-- "loan": When the user expresses interest in calculating, simulating, or taking out a specific loan (personal, mortgage, car). ALWAYS set productId to "personal", "mortgage", or "car". If user mentioned amount (e.g. 20000 or 50000 lei) and/or term (e.g. 3 ani or 36 luni), set "amount" as a string number and "months" as an integer (convert years to months).
+- "loan": When the user expresses interest in calculating, simulating, or taking out a specific loan (personal, mortgage, car). ALWAYS set productId to "personal", "mortgage", or "car". If user mentioned amount (e.g. 20000, 35k, 35.000, or 50000 lei) and/or term (e.g. 3 ani or 36 luni), set "amount" as a string number of pure digits (e.g. "35000", convert "35k" to "35000") and "months" as an integer (convert years to months).
 - "products": When the user asks generally what loans or products are offered without picking one yet.
 - "repayment": When the user asks about early repayment (rambursare anticipata) or paying down a loan.
 - "refinance": When the user asks about refinancing (refinantare) or lowering payments.
@@ -93,6 +93,17 @@ function parseBedrockJson(raw: string): BedrockParsedResponse | null {
   } catch {
     return null;
   }
+}
+
+function normalizeAmount(raw?: string | number | null): string | undefined {
+  if (!raw) return undefined;
+  const str = String(raw).trim().toLowerCase();
+  const kMatch = str.match(/^(\d+(?:\.\d+)?)\s*k$/);
+  if (kMatch) {
+    return String(Math.round(Number(kMatch[1]) * 1000));
+  }
+  const clean = str.replace(/[ ,.]00$/, "").replace(/[ ,.]/g, "");
+  return /^\d+$/.test(clean) ? clean : undefined;
 }
 
 export async function interpretWithBedrock(
@@ -212,7 +223,7 @@ export async function interpretWithBedrock(
     if (kind === "loan" && productId) {
       params = {
         productId,
-        amount: parsed.amount ? String(parsed.amount).replace(/[ ,]/g, "") : undefined,
+        amount: normalizeAmount(parsed.amount),
         months: typeof parsed.months === "number" ? parsed.months : undefined,
       };
     }

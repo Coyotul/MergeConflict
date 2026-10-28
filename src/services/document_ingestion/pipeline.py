@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from pgvector.psycopg import register_vector
 from psycopg import Connection
+from psycopg.pq import TransactionStatus
 from pydantic import BaseModel
 
 from src.core.errors import IngestionError
@@ -56,7 +57,8 @@ class IngestionPipeline:
     """Parses fetched documents and stores new versions with embedded chunks.
 
     Each document is written in its own transaction, so a failure leaves the
-    previous version in force.
+    previous version in force. That needs a connection with no open transaction
+    (or autocommit); the public methods raise IngestionError otherwise.
     """
 
     def __init__(self, conn: Connection, embedder: "Embedder", cfg: SourceConfig):
@@ -68,6 +70,7 @@ class IngestionPipeline:
 
     def ingest_entries(self, entries: list[ManifestEntry], raw_dir: Path) -> IngestReport:
         """Ingest every manifest entry and record the run in index_runs."""
+        self._require_idle()
         shared = shared_dated_folders([e.final_url for e in entries])
         with self.conn.transaction():
             run_id = self.conn.execute(
@@ -94,6 +97,7 @@ class IngestionPipeline:
 
     def rebuild(self, entries: list[ManifestEntry], raw_dir: Path) -> IngestReport:
         """Empty the knowledge tables, then ingest everything again (used when the chunker changes)."""
+        self._require_idle()
         with self.conn.transaction():
             self.conn.execute(f"TRUNCATE {KNOWLEDGE_TABLES} RESTART IDENTITY")
         return self.ingest_entries(entries, raw_dir)
@@ -105,6 +109,7 @@ class IngestionPipeline:
 
         Returns the outcome and messages: the error for `failed`, parser warnings otherwise.
         """
+        self._require_idle()
         try:
             if entry.raw_path is None:
                 raise IngestionError(f"{entry.url}: entry has no raw_path")
@@ -179,8 +184,13 @@ class IngestionPipeline:
         self, entry: ManifestEntry, raw_dir: Path, shared: frozenset[str]
     ) -> tuple[IngestOutcome, list[str]]:
         if entry.withdrawn:
-            with self.conn.transaction():
-                self.documents.mark_withdrawn([canonical_key(entry.url, shared)])
+            try:
+                with self.conn.transaction():
+                    changed = self.documents.mark_withdrawn([canonical_key(entry.final_url or entry.url, shared)])
+            except Exception as exc:
+                return IngestOutcome.failed, [f"{entry.url}: withdrawal failed: {exc}"]
+            if changed == 0:
+                return IngestOutcome.skipped, ["withdrawal target not indexed"]
             return IngestOutcome.withdrawn, []
         if not entry.index or entry.raw_path is None or entry.status_code != 200:
             return IngestOutcome.skipped, []
@@ -192,6 +202,10 @@ class IngestionPipeline:
         except OSError as exc:
             return IngestOutcome.failed, [f"{entry.url}: cannot read raw file: {exc}"]
         return self.ingest_one(entry, data, shared)
+
+    def _require_idle(self) -> None:
+        if self.conn.info.transaction_status != TransactionStatus.IDLE:
+            raise IngestionError("IngestionPipeline requires an idle connection (no open transaction) or autocommit")
 
     def _chunk_products(self, doc_kind: DocKind, chunk: ChunkDraft, doc_products: list[Product]) -> list[Product]:
         if chunk.products_override is not None:

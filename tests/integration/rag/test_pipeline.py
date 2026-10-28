@@ -4,7 +4,9 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import psycopg
+import pytest
 
+from src.core.errors import IngestionError
 from src.services.document_ingestion.chunking import CHUNKER_VERSION
 from src.services.document_ingestion.manifest import ManifestEntry
 from src.services.document_ingestion.pipeline import IngestionPipeline, IngestOutcome
@@ -38,9 +40,8 @@ def entry(url, sha="h1", **kw):
 
 def fee_list_pdf(date_text: str, first_section: str = "1. Conturi demo") -> bytes:
     return make_pdf([
-        [(50, 80, "Tarife și comisioane Demo")],
+        [(50, 80, "Tarife și comisioane Demo"), (50, 100, f"Valabil din {date_text}")],
         [
-            (50, 40, f"Valabil din {date_text}"),  # the fee-list parser reads dates from page 2 on
             (50, 60, first_section),
             (50, 80, "1.1. Produs demo"),
             (50, 100, "Tip"), (300, 100, "Comision"),
@@ -52,7 +53,42 @@ def fee_list_pdf(date_text: str, first_section: str = "1. Conturi demo") -> byte
 
 
 def count(conn, table):
-    return conn.execute(f"select count(*) from {table}").fetchone()[0]
+    """Row count; ends the read transaction so the pipeline gets an idle connection."""
+    n = conn.execute(f"select count(*) from {table}").fetchone()[0]
+    conn.commit()
+    return n
+
+
+def committed(sql, params=()):
+    """Rows as seen from a separate connection, i.e. only committed data."""
+    with psycopg.connect(TEST_DB_URL) as other:
+        return other.execute(sql, params).fetchall()
+
+
+def pdf_entries(tmp_path, stems):
+    """Entries for distinct one-page PDFs, dated, in one shared folder."""
+    entries = []
+    for stem in stems:
+        sha, path = save_raw(tmp_path, make_pdf_from_lines([f"Informare {stem}", f"Text demonstrativ despre {stem}."]), ".pdf")
+        entries.append(entry(f"{DOCS}credite/demo/20260901-{stem}.pdf", sha=sha, raw_path=path.name))
+    return entries
+
+
+class FailsOn(HashingEmbedder):
+    """Embedder that raises `error` when any text mentions `word`."""
+
+    def __init__(self, word, error):
+        super().__init__()
+        self.word, self.error = word, error
+
+    def embed_documents(self, texts):
+        if any(self.word in t for t in texts):
+            raise self.error
+        return super().embed_documents(texts)
+
+
+class Abort(BaseException):
+    """Escapes ingest_one's `except Exception`, like KeyboardInterrupt."""
 
 
 def test_ingest_creates_document_version_and_chunks(db_conn, tmp_path):
@@ -84,12 +120,13 @@ def test_reingest_same_content_is_unchanged(db_conn):
     assert count(db_conn, "knowledge_chunks") == chunks_after_first
 
 
-def test_alias_and_dated_pdf_share_one_version(db_conn):
+def test_alias_and_dated_pdf_share_one_version(db_conn, tmp_path):
     # same bytes under ".../tarife-demo.sv.pdf" and ".../tarife-demo/20260901-x.pdf.coredownload.pdf"
-    data = fee_list_pdf("1 septembrie 2026")
+    sha, path = save_raw(tmp_path, fee_list_pdf("1 septembrie 2026"), ".pdf")
     p = IngestionPipeline(db_conn, HashingEmbedder(), CFG)
-    outcomes = [p.ingest_one(entry(DOCS + "tarife-demo.sv.pdf"), data)[0],
-                p.ingest_one(entry(DOCS + "tarife-demo/20260901-x.pdf.coredownload.pdf"), data)[0]]
+    rep = p.ingest_entries([entry(DOCS + "tarife-demo.sv.pdf", sha=sha, raw_path=path.name),
+                            entry(DOCS + "tarife-demo/20260901-x.pdf.coredownload.pdf", sha=sha, raw_path=path.name)], tmp_path)
+    outcomes = list(rep.outcomes.values())
     assert outcomes == [IngestOutcome.created, IngestOutcome.unchanged]
     assert db_conn.execute("select count(*) from knowledge_document_versions").fetchone()[0] == 1
     assert count(db_conn, "knowledge_documents") == 1
@@ -143,9 +180,12 @@ def test_failed_ingest_rolls_back(db_conn):
 def test_withdrawn_entry_marks_document(db_conn, tmp_path):
     p = IngestionPipeline(db_conn, HashingEmbedder(), CFG)
     p.ingest_one(entry(PRODUCT_URL), PRODUCT_HTML)
-    rep = p.ingest_entries([entry(PRODUCT_URL, withdrawn=True)], tmp_path)
-    assert rep.outcomes == {PRODUCT_URL: IngestOutcome.withdrawn}
+    # The withdrawal is keyed on final_url: the requested URL redirected to the indexed page.
+    old_url = CREDITE + "credit-demo-vechi.html"
+    rep = p.ingest_entries([entry(old_url, final_url=PRODUCT_URL, withdrawn=True)], tmp_path)
+    assert rep.outcomes == {old_url: IngestOutcome.withdrawn} and rep.warnings == {}
     assert db_conn.execute("select status from knowledge_documents").fetchone()[0] == "withdrawn"
+    db_conn.commit()
     # Re-ingesting the page later makes it active again.
     p.ingest_one(entry(PRODUCT_URL), PRODUCT_HTML)
     assert db_conn.execute("select status from knowledge_documents").fetchone()[0] == "active"
@@ -194,12 +234,7 @@ def test_ingest_entries_records_index_run(db_conn, tmp_path):
 
 
 def test_dated_pdfs_with_distinct_stems_are_distinct_documents(db_conn, tmp_path):
-    folder = DOCS + "credite/demo/"
-    entries = []
-    for stem in ("alfa", "beta", "gama"):
-        sha, path = save_raw(tmp_path, make_pdf_from_lines([f"Informare {stem}", f"Text demonstrativ despre {stem}."]), ".pdf")
-        entries.append(entry(f"{folder}20260901-{stem}.pdf", sha=sha, raw_path=path.name))
-    rep = IngestionPipeline(db_conn, HashingEmbedder(), CFG).ingest_entries(entries, tmp_path)
+    rep = IngestionPipeline(db_conn, HashingEmbedder(), CFG).ingest_entries(pdf_entries(tmp_path, ["alfa", "beta", "gama"]), tmp_path)
     assert list(rep.outcomes.values()) == [IngestOutcome.created] * 3
     keys = sorted(r[0] for r in db_conn.execute("select canonical_key from knowledge_documents"))
     base = "/content/dam/rbi/retail/eu/ro/documents/pf/credite/demo/"
@@ -220,3 +255,78 @@ def test_campaign_window_stored_on_version(db_conn):
     # product fixture containing "Perioada campaniei: 15.10 - 26.11.2026"
     IngestionPipeline(db_conn, HashingEmbedder(), CFG).ingest_one(entry(PRODUCT_URL), PRODUCT_HTML)
     assert db_conn.execute("select campaign_valid_until from knowledge_document_versions").fetchone()[0] == date(2026, 11, 26)
+
+
+def test_withdrawal_of_unindexed_document_is_skipped(db_conn, tmp_path):
+    p = IngestionPipeline(db_conn, HashingEmbedder(), CFG)
+    p.ingest_one(entry(PRODUCT_URL), PRODUCT_HTML)
+    unknown = CREDITE + "nu-exista.html"
+    rep = p.ingest_entries([entry(unknown, withdrawn=True)], tmp_path)
+    assert rep.outcomes == {unknown: IngestOutcome.skipped}
+    assert rep.warnings == {unknown: ["withdrawal target not indexed"]}
+    assert committed("select status from knowledge_documents") == [("active",)]
+
+
+def test_failed_withdrawal_is_recorded_and_run_continues(db_conn, tmp_path, monkeypatch):
+    p = IngestionPipeline(db_conn, HashingEmbedder(), CFG)
+
+    def broken(keys):
+        db_conn.execute("select * from no_such_table")
+
+    monkeypatch.setattr(p.documents, "mark_withdrawn", broken)
+    sha, path = save_raw(tmp_path, PRODUCT_HTML, ".html")
+    gone = CREDITE + "retras.html"
+    rep = p.ingest_entries([entry(gone, withdrawn=True), entry(PRODUCT_URL, sha=sha, raw_path=path.name)], tmp_path)
+    assert rep.outcomes == {gone: IngestOutcome.failed, PRODUCT_URL: IngestOutcome.created}
+    assert "withdrawal failed" in rep.errors[gone] and "no_such_table" in rep.errors[gone]
+    assert committed("select status, failures, versions_created from index_runs") == [("completed", 1, 1)]
+
+
+def test_pipeline_rejects_connection_with_open_transaction(db_conn, tmp_path):
+    p = IngestionPipeline(db_conn, HashingEmbedder(), CFG)
+    db_conn.execute("select 1")  # opens a transaction and leaves it open
+    with pytest.raises(IngestionError, match="idle connection"):
+        p.ingest_one(entry(PRODUCT_URL), PRODUCT_HTML)
+    with pytest.raises(IngestionError, match="idle connection"):
+        p.ingest_entries([], tmp_path)
+    with pytest.raises(IngestionError, match="idle connection"):
+        p.rebuild([], tmp_path)
+    db_conn.rollback()
+    assert count(db_conn, "index_runs") == 0 and count(db_conn, "knowledge_documents") == 0
+
+
+def test_document_failing_mid_run_leaves_others_committed(db_conn, tmp_path):
+    p = IngestionPipeline(db_conn, FailsOn("beta", RuntimeError("embedder down")), CFG)
+    entries = pdf_entries(tmp_path, ["alfa", "beta", "gama"])
+    rep = p.ingest_entries(entries, tmp_path)
+    assert list(rep.outcomes.values()) == [IngestOutcome.created, IngestOutcome.failed, IngestOutcome.created]
+    assert rep.errors == {entries[1].url: "embedder down"}
+    base = "/content/dam/rbi/retail/eu/ro/documents/pf/credite/demo/"
+    assert committed("select canonical_key from knowledge_documents order by canonical_key") == [(base + "alfa",), (base + "gama",)]
+    assert committed("select count(*) from knowledge_document_versions") == [(2,)]
+
+
+def test_exception_escaping_run_marks_index_run_failed(db_conn, tmp_path):
+    p = IngestionPipeline(db_conn, FailsOn("beta", Abort()), CFG)
+    entries = pdf_entries(tmp_path, ["alfa", "beta", "gama"])
+    with pytest.raises(Abort):
+        p.ingest_entries(entries, tmp_path)
+    rows = committed("select status, finished_at is not null, documents_seen, versions_created, failures from index_runs")
+    assert rows == [("failed", True, 1, 1, 0)]
+    # The document committed before the abort stays; the aborted one left nothing behind.
+    assert committed("select count(*) from knowledge_documents") == [(1,)]
+
+
+def test_links_normalizing_to_one_key_are_stored_once(db_conn):
+    # The parser dedupes by canonical_key without shared folders, so these two hrefs survive it
+    # (".../demo/alfa" vs ".../demo"). With "demo" as a shared folder both become ".../demo/alfa",
+    # and only ON CONFLICT DO NOTHING keeps the insert from failing.
+    folder = "/content/dam/rbi/retail/eu/ro/documents/pf/credite/demo"
+    html = f"""<html><body><main><h1>Credit Demo</h1><h2>Documente demo</h2>
+        <p>Vezi <a href="{folder}/alfa.pdf">informarea</a> sau <a href="{folder}/20260901-alfa.pdf">ediția datată</a>.</p>
+        </main></body></html>""".encode("utf-8")
+    p = IngestionPipeline(db_conn, HashingEmbedder(), CFG)
+    out, msgs = p.ingest_one(entry(PRODUCT_URL), html, shared_folders=frozenset({folder}))
+    assert out is IngestOutcome.created, msgs
+    rows = db_conn.execute("select target_canonical_key, anchor_text, ordinal from knowledge_chunk_links").fetchall()
+    assert rows == [(folder + "/alfa", "informarea", 0)]

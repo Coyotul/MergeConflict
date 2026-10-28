@@ -1,5 +1,6 @@
 """FastAPI application factory for the orchestrator."""
 import logging
+import sys
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -45,6 +46,17 @@ def create_app(
     # Load settings if not provided
     if settings is None:
         settings = load_orchestrator_settings()
+
+    # Configure logging for src.* loggers if not already configured
+    src_logger = logging.getLogger("src")
+    if not src_logger.handlers:
+        handler = logging.StreamHandler(sys.stderr)
+        formatter = logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s %(message)s"
+        )
+        handler.setFormatter(formatter)
+        src_logger.addHandler(handler)
+        src_logger.setLevel(logging.INFO)
 
     # Build orchestrator if not provided
     if orchestrator is None:

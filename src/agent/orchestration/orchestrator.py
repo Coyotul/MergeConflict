@@ -24,6 +24,7 @@ from src.agent.orchestration.actions import (
     Respond,
     parse_model_output,
 )
+from src.agent.orchestration.trace import NullTracer, Tracer
 from src.agent.orchestration.blocks import all_specs, build_summary, build_turn_response
 from src.agent.orchestration.events import (  # noqa: F401  (event types re-exported)
     EVENT_TEXTS,
@@ -143,6 +144,7 @@ class Orchestrator(CodeEventsMixin):
         *,
         max_steps: int = 4,
         history_window: int = 30,
+        tracer: Tracer = NullTracer(),
         clock: Callable[[], datetime] = utcnow,
         new_id: Callable[[], str] = lambda: uuid4().hex,
     ):
@@ -150,6 +152,7 @@ class Orchestrator(CodeEventsMixin):
         self._model = model
         self._registry = registry
         self._catalog_codes = list(catalog_codes)
+        self._tracer = tracer
         self._max_steps = max_steps
         self._history_window = history_window
         self._clock = clock

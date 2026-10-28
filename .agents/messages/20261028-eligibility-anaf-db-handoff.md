@@ -47,7 +47,7 @@ Same retry key returns its saved historical result; use a new key for fresh data
 
 ## Validation
 
-- 210 Python tests pass, with only the existing optional benchmark skipped.
+- All 210 Python tests pass with benchmark enabled (zero skips/failures/errors).
   Includes 27 new adapter tests and queries covering all 323 fixture people.
 - Generated public OpenAPI/assessment/tool artifacts are unchanged and match the
   executable models. The new internal provider schema is

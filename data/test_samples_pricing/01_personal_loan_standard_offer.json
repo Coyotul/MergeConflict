@@ -1,0 +1,33 @@
+{
+  "scenario_name": "Credit de Nevoi Personale - Ofertă Standard (Alex Morgan)",
+  "description": "Simulare credit de consum 50.000 RON pe 5 ani, cont salariu standard și asigurare viață/șomaj inclusă",
+  "product_id": "personal_loan_fixed",
+  "request": {
+    "product_id": "personal_loan_fixed",
+    "amount": "50000.00",
+    "term_months": 60,
+    "repayment_method": "annuity",
+    "salary_account": "standard",
+    "with_insurance": true,
+    "net_monthly_income": "8500.00",
+    "existing_monthly_debt_payments": "0.00",
+    "simulation_date": "2026-10-28"
+  },
+  "expected_results": {
+    "status": "ok",
+    "annual_rate": "5.55",
+    "base_rate": "8.55",
+    "salary_discount": "-1.00",
+    "insurance_discount": "-2.00",
+    "first_monthly_payment": "961.21",
+    "dae": "9.49",
+    "total_payable": "57672.72",
+    "total_cost_of_credit": "11472.72",
+    "net_amount_paid_out": "46200.00",
+    "analysis_fee": "200.00",
+    "insurance_premium": "3600.00",
+    "monthly_charge": "5.00",
+    "affordability_within_limit": true,
+    "debt_service_ratio": "0.1131"
+  }
+}

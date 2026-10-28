@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import AwareDatetime, Field
 
-from src.integrations.anaf.mock import SyntheticAnafProvider
+from src.integrations.anaf.sqlite import DEFAULT_DATABASE as DEFAULT_ANAF_DATABASE, SqliteAnafProvider
 from src.integrations.credit_bureau.mock import SyntheticCreditBureauProvider
 from src.integrations.customer_loans.mock import SyntheticCustomerLoansProvider
 from src.models.eligibility import ApplicationSnapshot, ContractModel, EvidenceSource
@@ -56,6 +56,11 @@ def demo_cases() -> tuple[DemoCase, ...]:
         application_id = f"demo-app-{name}"
         raw.update(application_id=application_id, customer_id=customer_id)
         raw["profile"]["customer_id"] = customer_id
+        # Explicit server-owned demo binding to CALENDAR_TIME_TRAVEL in the supplied
+        # fixture. These are applicant declarations; the ANAF provider queries the
+        # database independently and never manufactures matching verified income.
+        raw["profile"].update(birth_date="1973-05-19", employment_start_date="2020-01-01")
+        raw["declared_net_income_ron"] = "5000.33"
         for field in ("profile_evidence", "identity_document"):
             raw[field]["evidence_id"] = f"{field}-{customer_id}"
         for authorization in raw["authorizations"]:
@@ -70,8 +75,10 @@ def demo_cases() -> tuple[DemoCase, ...]:
             result["data"]["customer_id"] = customer_id
             result["evidence"]["evidence_id"] = f"{source.value.lower()}-{customer_id}"
         if name == "high-dti":
-            raw["declared_net_income_ron"] = "3000.00"
-            verifications[EvidenceSource.ANAF]["data"]["net_monthly_income_ron"] = "3000.00"
+            # High affordability pressure comes from the requested loan, not a
+            # fabricated alternative ANAF response for the same fixture person.
+            raw["request"]["amount_ron"] = "75000.00"
+            quote["principal_ron"] = "75200.00"
         elif name == "missing-id":
             raw["identity_document"] = None
         elif name == "adverse-history":
@@ -83,12 +90,15 @@ def demo_cases() -> tuple[DemoCase, ...]:
             }
         elif name == "missing-consent":
             raw["authorizations"] = [a for a in raw["authorizations"] if a["scope"] != "INCOME_VERIFICATION"]
+        # The demo no longer uses the old hardcoded ANAF payload at all.
+        verifications.pop(EvidenceSource.ANAF)
         cases.append(DemoCase(ApplicationSnapshot.model_validate(raw), verifications))
     return tuple(cases)
 
 
 def build_demo_service(
     database_path: Path = DEFAULT_DATABASE_PATH, clock: Clock = utc_now,
+    *, anaf_database_path: Path = DEFAULT_ANAF_DATABASE,
 ) -> EligibilityService:
     cases = demo_cases()
     records = {
@@ -98,7 +108,7 @@ def build_demo_service(
     return EligibilityService(
         SyntheticApplicationRepository(tuple(case.application for case in cases)),
         SqliteAssessmentRepository(database_path),
-        (SyntheticAnafProvider(records[EvidenceSource.ANAF]),
+        (SqliteAnafProvider(anaf_database_path),
          SyntheticCreditBureauProvider(records[EvidenceSource.CREDIT_BUREAU]),
          SyntheticCustomerLoansProvider(records[EvidenceSource.INTERNAL_LOANS])),
         (load_policy(),), clock,

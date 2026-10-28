@@ -6,7 +6,7 @@ from decimal import Decimal, ROUND_DOWN, localcontext
 from src.models.eligibility import (
     AgePolicyCategory, ApplicationSnapshot, AssessmentStatus, CreditBureauData,
     EmploymentContract, EvidenceReference, EvidenceSource, EvidenceStatus,
-    FinancialAssessment, IncomeKind, IncomeVerificationData, LoanVerificationData,
+    FinancialAssessment, IncomeBasis, IncomeKind, IncomeVerificationData, LoanVerificationData,
     PricingScenario, RuleCheck, RuleStatus,
 )
 from src.rules.eligibility.calendar import add_months, completed_years
@@ -178,6 +178,9 @@ def income_checks(
     evidence: EvidenceReference, policy: EligibilityPolicy, now: datetime,
 ) -> tuple[RuleCheck, ...]:
     ids = (evidence.evidence_id,)
+    if data.income_basis == IncomeBasis.ANNUAL_AVERAGE:
+        return (check(policy, "INCOME", RuleStatus.REVIEW_REQUIRED, "ANAF_HISTORICAL_INCOME_ONLY",
+                      f"ANAF fiscal year {data.fiscal_year} provides a historical average only; it is not current verified recurring income.", ids),)
     if data.income_kind != application.profile.income_kind:
         return (check(policy, "INCOME", RuleStatus.REVIEW_REQUIRED, "INCOME_TYPE_MISMATCH",
                       "Verified income type conflicts with the profile.", ids),)

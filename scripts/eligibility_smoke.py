@@ -13,12 +13,17 @@ import uvicorn
 
 from src.api.gateway.eligibility_demo import create_app
 from src.core.eligibility_demo import build_demo_service, load_reference_fixture
+from scripts.credit_sources.setup import create_database
 
 
 def smoke() -> dict:
     reference_time = load_reference_fixture().reference_time
     with TemporaryDirectory(prefix="eligibility-http-") as directory:
-        service = build_demo_service(Path(directory) / "smoke.sqlite3", lambda: reference_time)
+        anaf_database = create_database(Path(directory) / "credit_sources.db")
+        service = build_demo_service(
+            Path(directory) / "smoke.sqlite3", lambda: reference_time,
+            anaf_database_path=anaf_database,
+        )
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
             listener.bind(("127.0.0.1", 0))
             port = listener.getsockname()[1]

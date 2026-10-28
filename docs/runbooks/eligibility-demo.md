@@ -6,7 +6,7 @@ From PowerShell, use Python 3.11+ and the declared project dependencies:
 
 ```powershell
 Set-Location 'c:\Users\Cosmin\Desktop\MergeConflict'
-git switch feature/eligibility-check
+git switch feature/eligibility-anaf-db
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
@@ -24,8 +24,70 @@ Neither script leaves a running process or changes workflow state.
 Run the local API (current UTC clock, ignored local persistence):
 
 ```powershell
+python -B -m scripts.credit_sources.setup
 python -m uvicorn src.api.gateway.eligibility_demo:create_app --factory --host 127.0.0.1 --port 8000
 ```
+
+`setup` creates `c:\Users\Cosmin\Desktop\MergeConflict\data\local\credit_sources.db`
+from the unchanged SQL/schema/manifest under
+`c:\Users\Cosmin\Desktop\MergeConflict\data\synthetic\credit_sources`.
+It refuses to overwrite an existing file; if already present, verify it instead:
+
+```powershell
+python -B -m scripts.credit_sources.verify_credit_sources --replay
+```
+
+The ANAF provider opens that database **read-only**. It never creates, resets,
+updates, refreshes reporting dates or substitutes dictionary responses when the
+source is absent. Missing/unavailable source data yields information/review
+outcomes. The offline demo and smoke explicitly reconstruct and validate their
+own temporary database with the existing setup tooling; no shared DB is reset.
+
+## ANAF source and trusted identity bindings
+
+On `feature/eligibility-anaf-db`, the demo uses `SqliteAnafProvider` instead of
+the previous hardcoded ANAF response. Bureau/internal-loan providers remain the
+existing separate synthetic dictionaries; this is **ANAF-only wiring**.
+It issues parameterized SQL reads against `report_params`, `persons`,
+`employments`, `monthly_salary_declarations` and `v_anaf_income` in one consistent
+read-only transaction. `v_dsti_inputs`/bureau totals never decide eligibility.
+
+`c:\Users\Cosmin\Desktop\MergeConflict\config\rules\eligibility_anaf_bindings.json`
+binds server-owned customer IDs to known fictional source CNPs. Clients and the
+LLM still send only application/scenario IDs and retry keys; CNPs/contact fields
+are not echoed in results. These CNPs deliberately have invalid checksums and
+must never be used for real ANAF inquiries. Production identity linking is not
+implemented by the public demo configuration.
+
+The six demo cases explicitly reuse `CALENDAR_TIME_TRAVEL` for ANAF income to
+exercise the other unchanged rule outcomes. The demo profile/declaration is
+aligned with that fixture (birth date 1973-05-19, employer start 2020-01-01,
+declared salary 5,000.33 RON). The adapter independently reads **September 2026
+net salary 5,000.33 RON**; current/future declarations are excluded. High-DTI
+now requests 75,000 RON rather than fabricating a different ANAF salary.
+These are cloned demo applications, not distinct real identities or a migration
+of frontend accounts into the dataset.
+
+Income behavior:
+
+- Use the latest **completed** monthly salary period, sum employers in Decimal
+  and round once to RON cents. A three-consecutive-month, same-employer-set and
+  employment-coverage check is an explicit demo recurrence assumption; the
+  eligibility policy still independently enforces income-period freshness.
+- If only completed-year records exist, use the latest year in `v_anaf_income`
+  (its three-completed-year window), sum raw net income in Decimal and divide by
+  12. Preserve `income_basis: ANNUAL_AVERAGE`, fiscal year, source reference date
+  and income types; set `recurring: false`. Never mark historical averages as
+  current salary. `ANAF_HISTORICAL_INCOME_ONLY` requires review and no automatic
+  affordability pass.
+- Missing/old-outside-window income returns `NOT_FOUND`, not invented zero.
+  Explicit declared zero is returned as zero evidence; unsupported non-salary
+  income remains subject to the existing product-specific review policy.
+- Provenance uses the source reporting date at UTC midnight, not inquiry time
+  artificially refreshed on every request; amounts are decimal strings and
+  evidence IDs are content-derived without raw CNPs.
+- A new key rereads source changes. Same-key replay retains the historical
+  assessment, as documented below; do not treat it as refreshed database evidence.
 
 Interactive API documentation: `http://127.0.0.1:8000/docs`.
 `main.py` remains the original interpreter diagnostic; it is not the API entry
@@ -139,5 +201,7 @@ support all four assessment statuses and retain citations/assumptions. Its
 metadata-only document checklist is not verified evidence, and its temporary
 tokens are not accepted by this Python demo gateway.
 
-Work remains on `feature/eligibility-check`. Push only the explicit feature ref;
-merge into `master` through a reviewed pull request, never a direct push.
+ANAF integration was developed on `feature/eligibility-anaf-db`. The owner
+subsequently authorized integration/push to `main` after conflict checks and
+combined regression validation. Future changes should still start on separate
+branches; never force-push or publish unvalidated changes to `main`.

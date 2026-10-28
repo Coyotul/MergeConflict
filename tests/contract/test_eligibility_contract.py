@@ -26,7 +26,7 @@ class EligibilityContractTests(unittest.TestCase):
         self.assertEqual(tool_definition()["name"], "run_eligibility_check")
 
     def test_request_rejects_actor_consent_and_evidence_injection(self):
-        for field in ("actor", "income", "consent", "profile", "evidence", "annual_interest_percent"):
+        for field in ("actor", "role", "consent", "profile", "evidence", "annual_interest_percent", "cnp"):
             with self.subTest(field=field), self.assertRaises(ValidationError):
                 EligibilityCheckRequest.model_validate({"application_id": "demo-app-eligible", "idempotency_key": "test-key-0001", field: "injected"})
 

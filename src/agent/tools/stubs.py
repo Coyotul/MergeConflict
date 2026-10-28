@@ -19,6 +19,7 @@ from src.agent.orchestration.state import (
     SessionState,
     ExtractedField,
     FieldSource,
+    EscalationRecord,
 )
 from src.agent.tools.contracts import (
     PassageView,
@@ -267,13 +268,15 @@ def build_stub_registry(data: StubData, policy_search: PolicySearch) -> ToolRegi
                 url=passage.citation.url
             ))
 
-        # Mark as simulated
-        ctx.state.used_stubs = True
+        # Mark as simulated only if using stub policy search
+        is_simulated = getattr(policy_search, "simulated", False)
+        if is_simulated:
+            ctx.state.used_stubs = True
 
         return SearchPoliciesOutput(
             status=result.status.value,
             passages=passages,
-            simulated=True
+            simulated=is_simulated
         )
 
     # Handler for get_credit_products
@@ -479,19 +482,31 @@ def build_stub_registry(data: StubData, policy_search: PolicySearch) -> ToolRegi
         amount = Decimal(str(app.fields["amount"].value))
         term_months = int(app.fields["term_months"].value)
 
-        # Build list of terms: [term_months] + input options, deduped and clamped
-        terms = {term_months}
+        # Build list of terms: [term_months] + input options, maintaining order
+        # Customer's term_months is always first
+        terms_list = [term_months]
+
+        # Add options in order, clamping each to product range
         if input.term_options_months:
-            terms.update(input.term_options_months)
+            for opt in input.term_options_months:
+                # Clamp to product range
+                clamped = max(product.min_term_months, min(product.max_term_months, opt))
+                terms_list.append(clamped)
 
-        # Clamp to product range
-        terms = {
-            t for t in terms
-            if product.min_term_months <= t <= product.max_term_months
-        }
+        # Clamp customer's term too
+        terms_list[0] = max(product.min_term_months, min(product.max_term_months, terms_list[0]))
 
-        # Sort and take up to 3
-        sorted_terms = sorted(terms)[:3]
+        # Dedupe while maintaining order, take up to 3
+        seen = set()
+        deduped_terms = []
+        for t in terms_list:
+            if t not in seen:
+                seen.add(t)
+                deduped_terms.append(t)
+                if len(deduped_terms) >= 3:
+                    break
+
+        sorted_terms = deduped_terms
 
         # Build offers
         offers = []
@@ -594,6 +609,14 @@ def build_stub_registry(data: StubData, policy_search: PolicySearch) -> ToolRegi
     # Handler for request_human_review
     def handle_request_review(input: RequestHumanReviewInput, ctx: ToolContext) -> RequestHumanReviewOutput:
         ticket_id = f"HR-{secrets.token_hex(4)}"
+
+        # Set escalation in state
+        ctx.state.escalation = EscalationRecord(
+            ticket_id=ticket_id,
+            reason=input.reason,
+            created_at=ctx.now
+        )
+
         ctx.state.used_stubs = True
         return RequestHumanReviewOutput(
             ticket_id=ticket_id,

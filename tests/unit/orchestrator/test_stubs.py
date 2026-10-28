@@ -461,3 +461,169 @@ def test_config_files_load():
     assert rule.max_age_at_maturity == 70
     assert rule.min_monthly_income == Decimal("2500")
     assert rule.max_dti == Decimal("0.40")
+
+
+def test_request_human_review_sets_escalation():
+    """Test that request_human_review sets state.escalation."""
+    config_dir = Path("config/orchestrator")
+    data = StubData.load(config_dir)
+    policy_search = StubPolicySearch(config_dir)
+    registry = build_stub_registry(data, policy_search)
+
+    now = datetime.now(UTC)
+    state = SessionState(
+        session_id="test",
+        customer_id="cust-001",
+        created_at=now,
+        updated_at=now,
+        active_flow=Flow.product_info
+    )
+    ctx = ToolContext(state=state, now=now)
+
+    # Initially no escalation
+    assert state.escalation is None
+
+    # Request review
+    outcome, output = registry.execute(
+        "request_human_review",
+        {"reason": "Customer needs assistance with complex case"},
+        ctx,
+        caller="model"
+    )
+
+    assert outcome.ok
+    assert output.ticket_id.startswith("HR-")
+
+    # Check escalation is set
+    assert state.escalation is not None
+    assert state.escalation.ticket_id == output.ticket_id
+    assert state.escalation.reason == "Customer needs assistance with complex case"
+    assert state.escalation.created_at == now
+
+
+def test_non_stub_policy_search_not_simulated():
+    """Test that non-stub PolicySearch results in simulated=False."""
+    from src.models.knowledge import SearchResult, SearchStatus
+
+    config_dir = Path("config/orchestrator")
+    data = StubData.load(config_dir)
+
+    # Create a fake non-stub policy search
+    class FakePolicySearch:
+        def search(self, query):
+            return SearchResult(status=SearchStatus.ok, passages=[])
+
+    fake_search = FakePolicySearch()
+    registry = build_stub_registry(data, fake_search)
+
+    now = datetime.now(UTC)
+    state = SessionState(
+        session_id="test",
+        customer_id="cust-001",
+        created_at=now,
+        updated_at=now,
+        active_flow=Flow.product_info
+    )
+    ctx = ToolContext(state=state, now=now)
+
+    # Initially used_stubs is False
+    assert state.used_stubs is False
+
+    # Search
+    outcome, output = registry.execute(
+        "search_banking_policies",
+        {"text": "test query"},
+        ctx,
+        caller="model"
+    )
+
+    assert outcome.ok
+    assert output.simulated is False
+    assert state.used_stubs is False
+
+
+def test_offer_term_ordering_and_clamping():
+    """Test offer term ordering: customer term first, then options in order, clamped and deduped."""
+    config_dir = Path("config/orchestrator")
+    data = StubData.load(config_dir)
+    policy_search = StubPolicySearch(config_dir)
+    registry = build_stub_registry(data, policy_search)
+
+    now = datetime.now(UTC)
+
+    # Helper to build state with specific term and check offer terms
+    def check_offers(term_months: int, options: list[int] | None, expected_terms: list[int]):
+        app = make_app(
+            product_code=Product.personal_loan,
+            requirements=ProductRequirements(
+                product_code=Product.personal_loan,
+                fields=[],
+                documents=[]
+            ),
+            fields={
+                "amount": FieldValue(
+                    kind="money",
+                    value=Decimal("30000"),
+                    source=FieldSource.customer,
+                    confirmed=True,
+                    updated_at=now
+                ),
+                "term_months": FieldValue(
+                    kind="integer",
+                    value=term_months,
+                    source=FieldSource.customer,
+                    confirmed=True,
+                    updated_at=now
+                ),
+            }
+        )
+        app.eligibility = EligibilityRecord(
+            result=data.eligibility_rules[Product.personal_loan].make_satisfied_result(),
+            input_fingerprint=fingerprint(app, []),
+            verified_inputs=True
+        )
+
+        state = SessionState(
+            session_id="test",
+            customer_id="cust-001",
+            created_at=now,
+            updated_at=now,
+            active_flow=Flow.credit_application,
+            application=app
+        )
+        ctx = ToolContext(state=state, now=now)
+
+        outcome, output = registry.execute(
+            "calculate_loan_offer",
+            {"term_options_months": options},
+            ctx,
+            caller="model"
+        )
+
+        assert outcome.ok
+        actual_terms = [o.term_months for o in output.offers]
+        assert actual_terms == expected_terms, f"Expected {expected_terms}, got {actual_terms}"
+
+    # Test 1: options [12, 24] with term 60 → terms [60, 12, 24]
+    check_offers(60, [12, 24], [60, 12, 24])
+
+    # Test 2: term_months beyond max (personal_loan max is 84) → clamped to max
+    # term 100 should be clamped to 84
+    check_offers(100, None, [84])
+
+    # Test 3: options duplicating term → deduped
+    # term 60 with options [60, 72] → [60, 72] (60 deduped)
+    check_offers(60, [60, 72], [60, 72])
+
+    # Test 4: term below min (personal_loan min is 6) → clamped to min
+    check_offers(3, None, [6])
+
+    # Test 5: options that would exceed product limits are clamped
+    # term 60 with options [10, 80] → [60, 10, 80] but 80 is clamped to 84 (product max)
+    # Actually 80 is within range (6-84 for personal_loan), so let's test edge case
+    # term 60 with options [12, 84] where 84 is at the product max → [60, 12, 84]
+    check_offers(60, [12, 84], [60, 12, 84])
+
+    # Test 6: customer term outside product range is clamped
+    # term 200 (way beyond personal_loan max 84) with options [36, 60] → [84, 36, 60]
+    check_offers(200, [36, 60], [84, 36, 60])

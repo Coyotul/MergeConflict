@@ -37,6 +37,8 @@ class PolicySearch(Protocol):
 class StubPolicySearch:
     """Stub implementation using keyword overlap matching."""
 
+    simulated = True  # Marker for stub implementation
+
     def __init__(self, config_dir: Path):
         """Initialize stub with policy passages from YAML.
 

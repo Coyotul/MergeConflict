@@ -22,6 +22,11 @@ from src.services.financial_calculations.calculations import (CENT, RatePeriod, 
 
 from .models import (Affordability, CalcError, EarlyRepaymentRequest, EarlyRepaymentResult, FeeLine,
                      LoanOffer, LoanOfferRequest, OfferTotals, RefinancingComparison, RefinancingRequest)
+from src.core.catalogue import Catalogue
+from src.core.errors import DomainError
+from src.models.banking import LoanQuote
+from src.models.requests import LoanScenarioInput
+from src.services.financial_calculations.engine import calculate_loan
 
 CONFIG_DIR = Path(__file__).resolve().parents[3] / "config"
 ZERO = Decimal("0.00")
@@ -281,3 +286,22 @@ def _gross_up(product: ProductConfig, needed: Decimal, months: int, with_insuran
     while with_insurance and amount - financed_fixed - insurance_premium(product, amount, months) < needed:
         amount += CENT  # premium rounding can leave the payout a cent short
     return amount
+
+# --- Simple catalogue-based quote used by the typed backend API (src/core/container.py). ---
+# TODO(pricing/backend): unify with calculate_loan_offer so there is one pricing engine.
+
+
+class PricingService:
+    def __init__(self, catalogue: Catalogue):
+        self.catalogue = catalogue
+
+    def calculate(self, input: LoanScenarioInput) -> LoanQuote:
+        product = self.catalogue.product(input.product_id)
+        amount = Decimal(input.amount)
+        if not product.min_amount <= amount <= product.max_amount or not product.min_months <= input.months <= product.max_months:
+            raise DomainError("VALIDATION_ERROR", "Amount or duration is outside this synthetic product's range.")
+        quote = calculate_loan(amount, product.annual_rate, input.months, product.fee, product.monthly_insurance)
+        quote.policy_version = product.policy_version
+        if product.id == "mortgage":
+            quote.assumptions.append("Illustrative mortgage only: property valuation and down-payment rules are not implemented.")
+        return quote

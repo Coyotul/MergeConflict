@@ -89,17 +89,12 @@ class RetrievalService:
         dense_scores = {c.chunk_id: c.score for c in dense}
         keyword_scores = {c.chunk_id: c.score for c in keyword}
         dense_scores.update(dense_scores_for(conn, embedding, [c.chunk_id for c in keyword if c.chunk_id not in dense_scores]))
-        if not passes_evidence_threshold(
-            dense[0].score if dense else None,
-            keyword[0].score if keyword else None,
-            dense_scores.get(keyword[0].chunk_id) if keyword else None,
-            s,
-        ):
+        if not passes_evidence_threshold([c.score for c in dense], s):
             return SearchResult(status=SearchStatus.insufficient_evidence, index_info=index_info)
 
         # Authority weighting needs every candidate's row, so rows are fetched for all fused candidates
         # (at most 2 * candidate_k), then the top 3 * top_k are turned into passages.
-        fused = rrf_fuse(dense, keyword, s.rrf_k)
+        fused = rrf_fuse(dense, keyword, s.rrf_k, s.keyword_weight)
         rows = fetch_passage_rows(conn, list(fused), query.as_of)
         fused = {cid: score for cid, score in fused.items() if cid in rows}
         weighted = apply_authority(fused, {cid: rows[cid].authority for cid in fused}, s.authority_weights)

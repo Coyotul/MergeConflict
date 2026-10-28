@@ -64,8 +64,9 @@ def fee_list_pdf(date_text: str, payment_row: tuple[str, str]) -> bytes:
 
 @pytest.fixture
 def settings():
-    # HashingEmbedder scores are lower than BGE-M3's; the real floors are calibrated in Task 11.
-    return RagSettings(database_url=TEST_URL, dense_floor=0.35, secondary_dense_floor=0.2, keyword_floor=0.05)
+    # HashingEmbedder scores are lexical and the synthetic corpus is tiny, so the evidence rule keeps its
+    # shape (best dense + margin bonus) with values for this embedder: the margin is over the 2nd score.
+    return RagSettings(database_url=TEST_URL, dense_floor=0.45, dense_margin_weight=3.0, dense_margin_rank=2)
 
 
 @pytest.fixture

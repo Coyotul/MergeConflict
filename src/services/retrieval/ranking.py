@@ -30,12 +30,15 @@ def query_terms(text: str) -> list[str]:
     return terms
 
 
-def rrf_fuse(dense: list[Candidate], keyword: list[Candidate], k: int) -> dict[int, float]:
-    """Reciprocal rank fusion: each list adds 1 / (k + rank) to a chunk, ranks starting at 1."""
+def rrf_fuse(dense: list[Candidate], keyword: list[Candidate], k: int, keyword_weight: float = 1.0) -> dict[int, float]:
+    """Weighted reciprocal rank fusion, ranks starting at 1.
+
+    A dense candidate adds 1 / (k + rank) to its chunk, a keyword candidate keyword_weight / (k + rank).
+    """
     fused: dict[int, float] = {}
-    for candidates in (dense, keyword):
+    for weight, candidates in ((1.0, dense), (keyword_weight, keyword)):
         for rank, candidate in enumerate(candidates, start=1):
-            fused[candidate.chunk_id] = fused.get(candidate.chunk_id, 0.0) + 1 / (k + rank)
+            fused[candidate.chunk_id] = fused.get(candidate.chunk_id, 0.0) + weight / (k + rank)
     return fused
 
 
@@ -46,16 +49,20 @@ def apply_authority(
     return {chunk_id: score * weights[str(authority[chunk_id])] for chunk_id, score in fused.items()}
 
 
-def passes_evidence_threshold(
-    best_dense: float | None, best_keyword: float | None, keyword_top_dense: float | None, s: RagSettings
-) -> bool:
-    """Enough evidence: a strong dense hit, or a strong keyword hit that is also semantically close."""
-    if best_dense is not None and best_dense >= s.dense_floor:
-        return True
-    return (
-        best_keyword is not None and best_keyword >= s.keyword_floor
-        and keyword_top_dense is not None and keyword_top_dense >= s.secondary_dense_floor
-    )
+def passes_evidence_threshold(dense_scores: list[float], s: RagSettings) -> bool:
+    """Enough evidence: the best dense similarity, plus a bonus for how far it stands out, reaches the floor.
+
+    dense_scores are the dense candidates' similarities, best first. The margin is measured
+    against the dense_margin_rank-th score (or the last one when there are fewer). Off-topic and
+    near-miss questions score a flat profile of similar chunks; answerable ones have a clear best
+    match. A keyword-only route was dropped in calibration: generic terms gave unanswerable
+    questions keyword ranks as high as answerable ones.
+    """
+    if not dense_scores:
+        return False
+    best = dense_scores[0]
+    reference = dense_scores[min(s.dense_margin_rank, len(dense_scores)) - 1]
+    return best + s.dense_margin_weight * (best - reference) >= s.dense_floor
 
 
 def _comparable_text(text: str) -> str:

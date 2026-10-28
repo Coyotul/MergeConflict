@@ -110,17 +110,40 @@ def test_rrf_fuse():
     assert f[2] == pytest.approx(1/62 + 1/61) and max(f, key=f.get) == 2
 
 
+def test_rrf_fuse_scales_the_keyword_list_by_its_weight():
+    f = rrf_fuse([Candidate(1, .9), Candidate(2, .8)], [Candidate(3, .5), Candidate(2, .4)], k=20, keyword_weight=0.3)
+    assert f[1] == pytest.approx(1/21) and f[3] == pytest.approx(0.3/21)
+    assert f[2] == pytest.approx(1/22 + 0.3/22)
+    assert sorted(f, key=f.get, reverse=True) == [2, 1, 3]
+
+
 def test_apply_authority_scales_by_weight():
     out = apply_authority({1: 0.02, 2: 0.02}, {1: Authority.high, 2: Authority.low}, {"high": 1.0, "medium": 0.9, "low": 0.75})
     assert out == {1: pytest.approx(0.02), 2: pytest.approx(0.015)}
 
 
-def test_threshold():
+def test_threshold_rewards_a_clear_best_match_over_a_flat_profile():
+    s = RagSettings(dense_floor=0.74, dense_margin_weight=3.0, dense_margin_rank=10)
+    strong_but_flat = [0.68, 0.675, 0.67, 0.67, 0.665, 0.66, 0.66, 0.655, 0.65, 0.65]   # 0.68 + 3 * 0.03 = 0.77
+    near_miss = [0.66, 0.66, 0.655, 0.655, 0.65, 0.65, 0.65, 0.645, 0.645, 0.64]  # 0.66 + 3 * 0.02 = 0.72
+    standout = [0.62, 0.58, 0.56, 0.55, 0.55, 0.54, 0.54, 0.53, 0.52, 0.52]  # 0.62 + 3 * 0.10 = 0.92
+    assert passes_evidence_threshold(strong_but_flat, s)
+    assert not passes_evidence_threshold(near_miss, s)
+    assert passes_evidence_threshold(standout, s)
+    assert not passes_evidence_threshold([], s)
+
+
+def test_threshold_uses_the_last_score_when_fewer_than_margin_rank():
+    s = RagSettings(dense_floor=0.74, dense_margin_weight=3.0, dense_margin_rank=10)
+    assert passes_evidence_threshold([0.65, 0.60], s)        # 0.65 + 3 * 0.05 = 0.80
+    assert not passes_evidence_threshold([0.70], s)          # no margin: 0.70 < 0.74
+
+
+def test_default_settings_are_the_calibrated_values():
     s = RagSettings()
-    assert passes_evidence_threshold(0.60, None, None, s)
-    assert not passes_evidence_threshold(0.30, 0.50, 0.20, s)       # generic keyword hit only
-    assert passes_evidence_threshold(0.45, 0.20, 0.45, s)
-    assert not passes_evidence_threshold(None, None, None, s)
+    assert (s.dense_floor, s.dense_margin_weight, s.dense_margin_rank) == (0.75, 3.0, 10)
+    assert (s.rrf_k, s.keyword_weight, s.candidate_k) == (20, 0.3, 30)
+    assert s.authority_weights == {"high": 1.0, "medium": 1.0, "low": 1.0}
 
 
 def test_campaign_flags():
@@ -182,3 +205,9 @@ def test_hub_deferral_skips_superseded_and_general_only_sheets():
 
 def test_dedupe_keeps_first():
     assert [p.chunk_id for p in dedupe_passages([passage(1, text="Dobânda fixă"), passage(2, text="dobanda  fixa")])] == [1]
+
+
+def test_threshold_margin_is_against_the_margin_rank_not_the_tail():
+    s = RagSettings(dense_floor=0.74, dense_margin_weight=3.0, dense_margin_rank=10)
+    near_misses_then_noise = [0.66] + [0.655] * 8 + [0.645, 0.40, 0.30]   # 0.66 + 3 * 0.015 = 0.705
+    assert not passes_evidence_threshold(near_misses_then_noise, s)

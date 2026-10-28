@@ -1,3 +1,6 @@
+"""Shared errors: RAG and orchestrator exceptions, plus transport-independent banking capability errors."""
+
+
 class RagError(Exception):
     """Base exception for RAG-related errors."""
     pass
@@ -69,3 +72,13 @@ class InvalidUpload(OrchestratorError):
 class ConfigurationError(OrchestratorError):
     """Orchestrator configuration is invalid or missing."""
     pass
+
+
+class DomainError(Exception):
+    """Safe, transport-independent error returned by banking capabilities."""
+
+    def __init__(self, code: str, message: str, status: int = 400):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status = status

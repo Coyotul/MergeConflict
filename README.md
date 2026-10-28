@@ -4,11 +4,13 @@ Bank-agnostic agentic AI banking and credit management platform, covering loan
 applications, refinancing, repayment and ongoing credit assistance. Developed in
 the VibeHack challenge context; it is not affiliated with or endorsed by a bank.
 The repository contains a working local frontend prototype for customers and bank
-agents. On `feature/eligibility-check`, it also includes a working **synthetic
-Python preliminary eligibility service** alongside the broader platform scaffold.
-Authentication, data and decisions in the prototype are synthetic only.
-The Python service is not yet wired into the frontend's temporary Node adapter;
-neither implements live banking or the complete credit lifecycle.
+agents and an authenticated FastAPI backend with deterministic synthetic tools
+for a future AI orchestrator. They currently run independently. Authentication,
+data and decisions in the prototype are synthetic only.
+It also retains the merged evidence-based preliminary eligibility module from
+`feature/eligibility-check`. The Python services are not yet wired into the
+frontend's temporary Node adapter; none implements live banking or the complete
+credit lifecycle.
 
 Start with [SPECIFICATION.md](SPECIFICATION.md), the main product reference supplied
 by the project owner. See [ARCHITECTURE.md](ARCHITECTURE.md) for the folder tree, mapping of every
@@ -103,20 +105,59 @@ demo store. See `docs/decisions/001-local-frontend.md`,
 `docs/decisions/003-yellow-black-sign-in.md` and `contracts/http/frontend-demo.md`
 for the demo boundary and integration contract.
 
-### Python eligibility service and architecture scaffold
+### FastAPI backend and orchestrator tool routes
 
 Use Python 3.11 or newer. From the repository root in PowerShell:
 
 ```powershell
+# First-time environment only, if .venv does not already exist:
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python main.py
+& 'C:\Users\George\repos\MergeConflict\.venv\Scripts\python.exe' -m pip install -r 'C:\Users\George\repos\MergeConflict\requirements-dev.txt'
+& 'C:\Users\George\repos\MergeConflict\.venv\Scripts\python.exe' 'C:\Users\George\repos\MergeConflict\main.py'
 ```
 
-`main.py` reports the interpreter and Python version. It does not start an API or
-UI. The eligibility feature has a separate FastAPI entry point documented below;
-its dependencies are declared in `requirements.txt`.
+This starts the synthetic backend at http://127.0.0.1:8001 (the orchestrator uses 8000):
+
+- `GET /health`: real local database availability and explicitly unconfigured AI dependencies.
+- `/docs` and `/openapi.json`: typed contracts and stable logical tool operation IDs.
+- `/api/v1`: profile/loans, configured products, fictional policy search, metadata
+  checks, preliminary eligibility, Decimal loan/early-repayment/refinancing
+  calculations, durable applications, assigned human review, consent, notifications
+  and separate conversation context.
+
+`run_eligibility_check` uses the merged evidence-based service with only trusted
+application/scenario IDs and a retry key. It retains all four preliminary outcomes;
+missing profile/provider consent is not fabricated and metadata stays unverified.
+The declared-income calculator is separately labeled `affordability-preview`.
+
+Application state, history, audit and retry results persist transactionally in
+ignored `data/local/backend-demo.sqlite3`. Alex/Jamie's demo credentials above
+also work here; additional isolation-test accounts and complete commands are in
+[the backend runbook](docs/runbooks/backend.md). Tokens expire after eight hours,
+are revoked at logout and do not survive restart. Database data does survive.
+
+Every submission requires explicit customer confirmation; every final outcome
+requires the assigned reviewer. Document checks are **metadata only**, policy
+search is **synthetic keyword matching**, and calculations are **indicative**.
+`POST /api/v1/chat` deliberately returns 501 until the orchestrator is connected.
+No live LLM/RAG/OCR, real banking operation, signing or disbursement is implemented.
+
+The existing frontend still uses its Node API on port 4010. No frontend files or
+startup scripts are switched to FastAPI in this increment. `/api` aliases retain
+resource naming but are not full Node chat/input compatibility. See
+[the backend contract](contracts/http/backend-v1.md) and
+[ADR 009](docs/decisions/009-backend-api.md) before integration. SQLite is local-only;
+PostgreSQL/Supabase remains the intended deployed persistence architecture.
+
+Validate the backend from the repository root:
+
+```powershell
+& 'C:\Users\George\repos\MergeConflict\.venv\Scripts\python.exe' -m unittest discover -s 'C:\Users\George\repos\MergeConflict\tests' -t 'C:\Users\George\repos\MergeConflict' -v
+& 'C:\Users\George\repos\MergeConflict\.venv\Scripts\python.exe' -m pip check
+```
+
+Tests use temporary databases, not the normal runtime store. `requirements.txt`
+is enough for runtime; `requirements-dev.txt` adds HTTPX for FastAPI TestClient.
 
 ## Where to start
 
@@ -124,8 +165,9 @@ its dependencies are declared in `requirements.txt`.
   and assigned-reviewer interfaces. Administrator views are deferred.
 - `packages/ui/`, `packages/banking/`: shared visual controls, typed demo contracts,
   calculations, React state and the temporary Node demo adapter.
-- `src/`: Python components. Existing parser, rule, model, agent, core and UI
-  packages remain in place; FastAPI is the selected backend framework.
+- `src/`: FastAPI gateway/routes, shared Pydantic schemas and modular synthetic
+  services. Pure rules/calculations do not depend on HTTP or an LLM; the agent,
+  parsers and unimplemented capabilities retain their scaffold locations.
 - `contracts/`: HTTP, event and serialized-data specifications.
 - `config/`: versioned synthetic product and rule configuration.
 - `data/synthetic/`: synthetic demo documents and application inputs.
@@ -133,11 +175,11 @@ its dependencies are declared in `requirements.txt`.
 - `infrastructure/`, `scripts/`, `docs/`: environment definitions, maintenance
   commands, architecture decisions and operational notes.
 
-Unimplemented Python packages contain `__init__.py` placeholders. Unimplemented
-non-Python folders contain `.gitkeep` so Git preserves the layout. Add
-implementations and tests as capabilities are built. Keep databases, uploads and
-indexes in ignored
-`data/local/`; never commit credentials or real applicant data.
+Unimplemented packages/folders retain `__init__.py` or `.gitkeep` markers. Add
+capabilities in small verified increments; do not mistake the scaffold for working
+integrations. Keep databases, uploads and indexes in ignored `data/local/`; never
+commit real credentials or applicant data. Public fictional demo passwords are
+fixtures only, not production secrets.
 
 ## MVP boundary
 
@@ -151,9 +193,9 @@ Every new credit application requires authorized human review. Signing and
 disbursement are separate stages and may only be simulated in this MVP. No real
 banking inquiries, financial transactions or loan approvals occur.
 
-## Eligibility Check implementation (feature branch)
+## Evidence-based Eligibility Check implementation
 
-`feature/eligibility-check` implements the Python preliminary-screening branch:
+The merged `feature/eligibility-check` module implements Python preliminary screening:
 deterministic reference rules, Decimal affordability, synthetic ANAF/credit-bureau/
 internal-loan adapters, authorized API/tool access and local assessment/audit
 persistence. It is independent of the frontend prototype and never records a
@@ -168,7 +210,7 @@ sources and explicit synthetic assumptions. From the repository root:
 python -m unittest discover -s tests -v
 python -m scripts.eligibility_demo
 python -m scripts.eligibility_smoke
-python -m uvicorn src.api.gateway.eligibility_demo:create_app --factory --host 127.0.0.1 --port 8000
+python -m uvicorn src.api.gateway.eligibility_demo:create_app --factory --host 127.0.0.1 --port 8002
 ```
 
 The API's public demo keys and SQLite storage are **local synthetic demonstration

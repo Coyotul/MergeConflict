@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# FastAPI TestClient; tests use the standard-library unittest runner.
+httpx==0.28.1

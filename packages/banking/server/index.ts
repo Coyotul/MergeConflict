@@ -1,6 +1,17 @@
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { FileStore } from "./store";
 import { createDemoServer } from "./http";
+
+for (const envFile of [".env.local", ".env"]) {
+  if (existsSync(envFile)) {
+    try {
+      process.loadEnvFile(envFile);
+    } catch {
+      // ignore
+    }
+  }
+}
 
 const path = resolve(process.env.DEMO_STORE_PATH ?? "data/local/frontend-demo.json");
 const store = await FileStore.open(path);

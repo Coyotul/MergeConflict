@@ -1,8 +1,19 @@
+import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
+for (const envFile of [".env.local", ".env"]) {
+  const p = resolve(root, envFile);
+  if (existsSync(p)) {
+    try {
+      process.loadEnvFile(p);
+    } catch {
+      // ignore
+    }
+  }
+}
 const processes = [
   ["demo API", ["--import", "tsx", "packages/banking/server/index.ts"], root],
   ["customer", [resolve(root, "node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", "3000", "--webpack"], resolve(root, "apps/customer")],

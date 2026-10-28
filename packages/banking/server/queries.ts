@@ -1,5 +1,5 @@
 import type { Actor, DemoStore, Snapshot } from "../src/types";
-import { interpretMessage } from "../src/conversation";
+import { interpretWithBedrock } from "./bedrock";
 import { DomainError, requireRole } from "../src/workflow";
 import { addAudit } from "./helpers";
 
@@ -10,9 +10,9 @@ export function snapshot(state: DemoStore, actor: Actor): Snapshot {
   if (!customer) throw new DomainError("NOT_FOUND", "Demo customer profile not found.", 404);
   return { actor, customer, products: state.products, policies: state.policies, loans: state.loans.filter((l) => l.customerId === customerId), applications, messages: actor.role === "customer" ? state.messages[actor.id] ?? [] : [], notifications: actor.role === "customer" ? state.notifications.filter((n) => n.customerId === actor.id) : [], audit: state.audit.filter((a) => actor.role === "reviewer" ? applications.some((app) => app.id === a.objectId) : a.actorId === actor.id), consent: state.consents[customerId] ?? { financialInsights: false, notifications: false } };
 }
-export function chat(state: DemoStore, actor: Actor, text: string) {
+export async function chat(state: DemoStore, actor: Actor, text: string) {
   requireRole(actor, "customer");
-  const reply = interpretMessage(text, state, actor.id);
+  const reply = await interpretWithBedrock(text, state, actor.id);
   const at = new Date().toISOString();
   const messages = state.messages[actor.id] ??= [];
   messages.push({ id: crypto.randomUUID(), at, role: "user", text, kind: "text" });

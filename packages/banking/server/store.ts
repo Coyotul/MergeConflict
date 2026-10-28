@@ -20,10 +20,10 @@ export class FileStore {
     return new FileStore(path, state);
   }
   read<T>(fn: (state: DemoStore) => T): T { return structuredClone(fn(this.state)); }
-  transaction<T>(fn: (state: DemoStore) => T): Promise<T> {
+  transaction<T>(fn: (state: DemoStore) => Promise<T> | T): Promise<T> {
     const operation = this.tail.then(async () => {
       const draft = structuredClone(this.state);
-      const result = fn(draft);
+      const result = await fn(draft);
       const temporary = `${this.path}.${crypto.randomUUID()}.tmp`;
       await writeFile(temporary, JSON.stringify(draft, null, 2));
       await rename(temporary, this.path);

@@ -128,14 +128,16 @@ def pdf_lines(data: bytes, skip_first_page: bool = False) -> list[tuple[int, str
 
     doc.close()
 
-    # Filter out lines that appear on >= 50% of pages (only if we have multiple pages)
-    # For small documents, don't filter
+    # Filter out lines that appear on >= 50% of pages (page furniture)
+    # Require minimum 3 distinct pages to avoid filtering repeated section headings in short docs
     lines = []
     if total_pages >= 2:
         threshold = total_pages * 0.5
         for page_num, line in all_lines:
             # Count distinct pages, not occurrences
-            if len(line_pages[line]) < threshold:
+            # Require both >= 50% of pages AND >= 3 distinct pages
+            num_pages = len(line_pages[line])
+            if num_pages < threshold or num_pages < 3:
                 lines.append((page_num, line))
     else:
         lines = all_lines

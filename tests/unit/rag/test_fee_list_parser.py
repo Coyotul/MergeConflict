@@ -77,14 +77,18 @@ def test_fee_list_value_line_patterns():
             (50, 120, "60 euro sau echivalent in lei (TVA inclus)"),  # Value line
             (50, 140, "10 intrari gratuite pe an,"),  # Value line
             (50, 160, "1.1. Subsectiune valida"),  # Valid heading
+            (50, 180, "Content pentru 1.1"),  # Content for subsection
         ]
     ])
     doc = parse_fee_list(pdf)
-    # Should only have one section path (the value lines should not create sections)
+    # Value lines should not create sections; only the two headings should
     paths = [c.section_path for c in doc.chunks]
     assert len(paths) == 2
     assert paths[0] == ["1. Sectiune test"]
     assert paths[1] == ["1. Sectiune test", "1.1. Subsectiune valida"]
+    # Verify value lines are in first chunk, subsection content in second
+    assert "10 lei/operatiune" in doc.chunks[0].text
+    assert "Content pentru 1.1" in doc.chunks[1].text
 
 
 def test_fee_list_flushes_on_every_heading():
@@ -139,6 +143,8 @@ def test_fee_list_page_not_overwritten_by_repeated_heading():
 
 def test_fee_list_value_line_with_diacritics():
     """Test value line detection with accent-insensitive matching."""
+    # Note: PDF builder doesn't preserve Romanian diacritics, so test without them
+    # The accent-insensitive pattern is tested directly via is_section_heading
     pdf = make_pdf([
         [(50, 80, "Tarife Demo")],
         [
@@ -146,7 +152,7 @@ def test_fee_list_value_line_with_diacritics():
             (50, 80, "2. 5 lei"),  # Should be rejected
             (50, 100, "3. 10% din suma"),  # Should be rejected
             (50, 120, "5 intrari pe luna"),  # Should be rejected (no leading number)
-            (50, 140, "10 intrări gratuite pe an"),  # Should be rejected
+            (50, 140, "10 intrari gratuite pe an"),  # Should be rejected (value line)
             (50, 160, "1.1. Conturi curente"),  # Should match
             (50, 180, "Content demo"),
         ]
@@ -157,3 +163,8 @@ def test_fee_list_value_line_with_diacritics():
     assert len(paths) == 2
     assert paths[0] == ["1. Sectiune test"]
     assert paths[1] == ["1. Sectiune test", "1.1. Conturi curente"]
+
+    # Test accent-insensitive matching directly
+    from src.services.document_ingestion.parsers.fee_list import is_section_heading
+    assert not is_section_heading("10 intrări gratuite pe an")  # With ă
+    assert not is_section_heading("10 intrari gratuite pe an")  # Without ă

@@ -37,12 +37,17 @@ class IncomeCertificateExtractor:
         # 1. Employer Name (usually top header line)
         emp_match = re.search(r"^([^\n]+(?:S\.R\.L\.|S\.A\.|SRL|SA|Studio|Solutions|Logistics|Systems)[^\n]*)", text, re.MULTILINE | re.IGNORECASE)
         if emp_match:
-            extracted.employer_name = emp_match.group(1).strip()
+            raw_emp = emp_match.group(1).strip()
+            extracted.employer_name = re.split(r"(?:C\.?U\.?I|C\.?I\.?F|CLI|Nr\.?\s*Reg|Sediu)", raw_emp, flags=re.IGNORECASE)[0].strip(" -:;,._")
 
         # 2. Employer CUI / CIF
-        cui_match = re.search(r"C\.?U\.?I\.?\s*(?:/\s*C\.?I\.?F\.?)?[:\s]*(?:RO)?\s*(\d{2,10})", text, re.IGNORECASE)
+        cui_match = re.search(r"(?:C[\.\s_]*[UUI1L][\.\s_]*[II1L]|C[\.\s_]*I[\.\s_]*F|CUI|CIF)[^0-9a-zA-Z\n]*(?:RO|R0)?\s*(\d{2,10})", text, re.IGNORECASE)
         if cui_match:
             extracted.employer_cui = cui_match.group(1).strip()
+        if not extracted.employer_cui:
+            stamp_cui = re.search(r"\b(?:RO|R0)\s*(\d{6,10})\b", text, re.IGNORECASE)
+            if stamp_cui:
+                extracted.employer_cui = stamp_cui.group(1).strip()
 
         # Reg Com
         reg_match = re.search(r"Nr\.?\s*Reg\.?\s*Com\.?[:\s]*([JjFf]\d{2}/\d+/\d{4})", text, re.IGNORECASE)
@@ -55,7 +60,7 @@ class IncomeCertificateExtractor:
             extracted.employee_cnp = cnp_match.group(1)
 
         # 4. Employee Name
-        name_match = re.search(r"(?:dl\./dna\.|salariatul|angajatul|salariat(?:ul)?)\s+([A-ZĂÂÎȘȚ\- ]+?)(?=,|\s+având|\s+CNP)", text, re.IGNORECASE)
+        name_match = re.search(r"(?:dl[./\]\s]*dna[.]?|salariatul|angajatul|salariat(?:ul)?)\s+([A-ZĂÂÎȘȚ\- ]+?)(?=,|\s+având|\s+CNP)", text, re.IGNORECASE)
         if name_match:
             extracted.employee_name = name_match.group(1).strip()
 
@@ -76,7 +81,9 @@ class IncomeCertificateExtractor:
             extracted.employment_start_date = _parse_date_ro(start_match.group(1))
 
         # 8. Date of issue
-        issue_match = re.search(r"Data emiterii[:\s]*(\d{2,4}[.\-/]\d{2}[.\-/]\d{2,4})", text, re.IGNORECASE)
+        issue_match = re.search(r"Data\s*emiterii[^\d\n]*(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4})", text, re.IGNORECASE)
+        if not issue_match:
+            issue_match = re.search(r"\b(\d{1,2}[.\-/]\d{1,2}\.202\d)\b", text)
         if issue_match:
             extracted.issue_date = _parse_date_ro(issue_match.group(1))
 

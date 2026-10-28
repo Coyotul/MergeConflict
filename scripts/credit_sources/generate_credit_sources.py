@@ -53,6 +53,57 @@ def new_database():
     return db
 
 
+ROMANIAN_MALE_FIRST = (
+    "Alexandru", "Andrei", "Dan", "Mihai", "Radu", "Victor", "Cristian", "Gabriel",
+    "Ștefan", "Ionuț", "Bogdan", "Florin", "Vlad", "Marius", "Adrian", "Dragoș",
+    "Cătălin", "George", "Cosmin", "Daniel", "Laurențiu", "Valentin", "Paul", "Robert",
+)
+
+ROMANIAN_FEMALE_FIRST = (
+    "Ana", "Elena", "Ioana", "Maria", "Andreea", "Mihaela", "Roxana", "Cristina",
+    "Daniela", "Alina", "Simona", "Diana", "Nicoleta", "Carmen", "Laura", "Raluca",
+    "Bianca", "Oana", "Alexandra", "Gabriela", "Irina", "Camelia", "Monica", "Silvia",
+)
+
+ROMANIAN_LAST_NAMES = (
+    "Popescu", "Ionescu", "Popa", "Radu", "Dumitrescu", "Stan", "Stoica", "Gheorghe",
+    "Matei", "Constantin", "Dobre", "Toma", "Marinescu", "Stanciu", "Moldovan", "Ilie",
+    "Voinea", "Diaconu", "Moraru", "Neagu", "Florea", "Sandu", "Munteanu", "Oprea",
+    "Dragomir", "Vasilescu", "Barbu", "Tudor", "Nistor", "Ciobanu", "Enache", "Preda",
+    "Petrescu", "Badea", "Iacob", "Ursu", "Vasile", "Manole", "Sava", "Nica", "Lupu",
+    "Cojocaru", "Mocanu", "Anghel", "Tănase", "Dinu", "Moise", "Balan", "Chiriac",
+)
+
+ROMANIAN_STREETS = (
+    ("Bulevardul Unirii", "București"),
+    ("Strada Lipscani", "București"),
+    ("Calea Victoriei", "București"),
+    ("Bulevardul Timișoara", "București"),
+    ("Calea Dorobanți", "București"),
+    ("Strada Aviației", "București"),
+    ("Bulevardul Iuliu Maniu", "București"),
+    ("Bulevardul Carol I", "Iași"),
+    ("Bulevardul Copou", "Iași"),
+    ("Strada Memorandumului", "Cluj-Napoca"),
+    ("Calea Baciului", "Cluj-Napoca"),
+    ("Bulevardul 21 Decembrie 1989", "Cluj-Napoca"),
+    ("Strada Florilor", "Cluj-Napoca"),
+    ("Strada Republicii", "Brașov"),
+    ("Calea București", "Brașov"),
+    ("Bulevardul Revoluției", "Timișoara"),
+    ("Strada Ștefan cel Mare", "Constanța"),
+    ("Bulevardul Mihai Viteazu", "Sibiu"),
+    ("Strada Traian", "Craiova"),
+    ("Bulevardul Independenței", "Ploiești"),
+)
+
+CURATED_PERSON_NAMES = {
+    "DSTI_39": ("Dan", "Ionescu", "M"),
+    "INCOME_NO_DEBT": ("Elena", "Popa", "F"),
+    "MULTI_SOURCE_MULTI_LOAN": ("Radu", "Mihai", "M"),
+    "NO_HISTORY": ("Andrei", "Stan", "M"),
+}
+
 class FixtureBuilder:
     def __init__(self, db, seed):
         self.db = db
@@ -63,11 +114,26 @@ class FixtureBuilder:
         self.products = {}
         self.amortizers = set()
         self.db.execute("UPDATE report_params SET as_of_date=?", (AS_OF_DATE,))
-        for ident, kind in enumerate(("BANK", "IFN", "LEASING", "INSURER", "DEBT_COLLECTOR"), 1):
-            self.insert("lenders", id=ident, name=f"FICTIV {kind} {ident}", lender_type=kind)
-        for ident in range(1, 7):
-            self.insert("employers", id=ident, name=f"FICTIV Employer's Studio {ident}",
-                        fiscal_code=f"TEST-EMP-{ident:03d}", address="Adresa fictiva, Romania")
+        real_lenders = (
+            ("Banca Transilvania S.A.", "BANK"),
+            ("BT Direct IFN S.A.", "IFN"),
+            ("UniCredit Leasing Corporation IFN S.A.", "LEASING"),
+            ("Allianz-Țiriac Asigurări S.A.", "INSURER"),
+            ("EOS KSI România S.R.L.", "DEBT_COLLECTOR"),
+        )
+        for ident, (name, kind) in enumerate(real_lenders, 1):
+            self.insert("lenders", id=ident, name=name, lender_type=kind)
+
+        real_employers = (
+            ("Endava Romania S.R.L.", "RO13049120", "B-dul Dimitrie Pompeiu nr. 8, Sector 2, București"),
+            ("Bitdefender S.R.L.", "RO13982462", "Șos. Orhideelor nr. 15A, Sector 6, București"),
+            ("eMAG - Dante International S.A.", "RO14399840", "Șos. Virtuții nr. 148, Sector 6, București"),
+            ("Dedeman S.R.L.", "RO2816464", "Str. Alexei Tolstoi nr. 8, Bacău"),
+            ("UiPath Romania S.R.L.", "RO34690320", "Str. Vasile Alecsandri nr. 4, Sector 1, București"),
+            ("Banca Transilvania S.A.", "RO5022670", "Calea Dorobanților nr. 30-36, Cluj-Napoca"),
+        )
+        for ident, (emp_name, emp_cui, emp_addr) in enumerate(real_employers, 1):
+            self.insert("employers", id=ident, name=emp_name, fiscal_code=emp_cui, address=emp_addr)
 
     def insert(self, table, **values):
         columns = ", ".join(values)
@@ -87,8 +153,28 @@ class FixtureBuilder:
         # Deliberately wrong checksum: date/sex-consistent, NOT an official CNP.
         cnp = first_twelve + str((checksum + 1) % 10)
         first_name = self.rng.choice(("Andrei", "Mihai", "Radu", "Victor") if sex == "M" else ("Ana", "Elena", "Ioana", "Maria"))
-        self.insert("persons", cnp=cnp, first_name=first_name, last_name=f"FICTIV_{number:05d}",
-                    birth_date=birth, address=f"Strada Exemplului {number}, Localitate Fictiva", phone=None, persona_tag=tag)
+
+        if tag == "DSTI_39":
+            first_name, last_name = "Dan", "Ionescu"
+        elif tag == "INCOME_NO_DEBT":
+            first_name, last_name = "Elena", "Popa"
+        elif tag == "MULTI_SOURCE_MULTI_LOAN":
+            first_name, last_name = "Radu", "Mihai"
+        elif tag == "NO_HISTORY":
+            first_name, last_name = "Andrei", "Stan"
+        else:
+            last_name = ROMANIAN_LAST_NAMES[(number * 7) % len(ROMANIAN_LAST_NAMES)]
+
+        street, city = ROMANIAN_STREETS[number % len(ROMANIAN_STREETS)]
+        nr = (number * 7) % 110 + 1
+        bl = ["A", "B", "M", "T"][number % 4]
+        bl_nr = (number % 8) + 1
+        ap = (number * 3) % 48 + 1
+        address = f"{street} nr. {nr}, bl. {bl}{bl_nr}, ap. {ap}, {city}"
+        phone = f"+40 7{20 + (number % 60):02d} {100 + (number * 37) % 900:03d} {100 + (number * 53) % 900:03d}"
+
+        self.insert("persons", cnp=cnp, first_name=first_name, last_name=last_name,
+                    birth_date=birth, address=address, phone=phone, persona_tag=tag)
         self.people[tag] = cnp
         self.sex_by_cnp[cnp] = sex
         if curated:
@@ -126,7 +212,7 @@ class FixtureBuilder:
 
     def income(self, cnp, kind="RENTAL", net=60000, year=2025, source=None):
         self.insert("income_records", cnp=cnp, fiscal_year=year, income_type=kind,
-                    source_name=source or f"FICTIV {kind} source", source_fiscal_code=None,
+                    source_name=source or f"Contract {kind.lower()}", source_fiscal_code=None,
                     gross_amount_ron=money(net * 1.2), net_amount_ron=money(net))
 
     def product(self, cnp, label, amount=25000, kind="CONSUMER_LOAN", currency="RON", original=None,
@@ -218,8 +304,8 @@ class FixtureBuilder:
             p = self.product(c, f"MULTI_SOURCE_LOAN_{index}")
             self.history(p, "2026-09-01", instalment=instalment)
         c = self.person("FRACTIONAL_ROUNDING", "Fractional annual income and instalments exercise REAL/one-decimal DSTI rounding.")
-        self.income(c, net=12345.67, source="FICTIV source A")
-        self.income(c, net=23456.78, source="FICTIV source B")
+        self.income(c, net=12345.67, source="Contract Închiriere Spațiu Comercial")
+        self.income(c, net=23456.78, source="Dividende Societate Comercială")
         p = self.product(c, "FRACTIONAL_ROUNDING")
         self.history(p, "2026-09-01", instalment=199.51)
 
@@ -315,14 +401,14 @@ class FixtureBuilder:
                 ("INSOLVENCY_FUTURE", "2026-10-29", None, "SIMPLIFIED")):
             c = self.person(tag, f"Insolvency opened {opened}, closed {closed}; retained cases determine has_insolvency.")
             self.insert("insolvency_records", cnp=c, procedure_type=kind, opened_on=opened,
-                        closed_on=closed, source="FICTIV registry for prototype only")
+                        closed_on=closed, source="Buletinul Procedurilor de Insolvență (BPI)")
             if tag == "INSOLVENCY_OPEN":
                 p = self.product(c, tag, status="IN_INSOLVENCY_PROCEDURE")
                 self.history(p, "2026-09-01", dpd=181)
         c = self.person("FRAUD_7Y_BOUNDARIES", "Fraud at Oct 28 2019 and Oct 28 2026 included; older/future records hidden; nullable lender.")
         for day in ("2019-10-28", "2019-10-27", AS_OF_DATE, "2026-10-29"):
             self.insert("card_fraud_records", cnp=c, lender=None if day == "2019-10-28" else 1,
-                        recorded_on=day, fraud_type="FICTIV disputed card use")
+                        recorded_on=day, fraud_type="Tranzacție card contestată - fraudă POS / skimming")
 
         for index, (tag, start, end, form) in enumerate((
                 ("ACTIVITY_ACTIVE", "2022-01-15", None, "PFA"),
@@ -330,17 +416,17 @@ class FixtureBuilder:
                 ("ACTIVITY_3Y_OLDER", "2020-01-01", "2023-10-27", "IF"),
                 ("ACTIVITY_FUTURE", "2026-10-29", None, "LIBERAL_PROFESSION")), 1):
             c = self.person(tag, f"{form} activity started {start}, ended {end}; ANAF three-year retention.")
-            self.insert("income_activity_forms", cnp=c, form_type=form, name=f"FICTIV activity {index}",
-                        fiscal_code=f"TEST-ACT-{index}", address="Adresa fictiva", start_date=start, end_date=end)
+            self.insert("income_activity_forms", cnp=c, form_type=form, name=f"PFA Servicii Digitale {index}",
+                        fiscal_code=f"RO391029{index}", address=f"Strada Republicii nr. {10 + index}, Brașov", start_date=start, end_date=end)
             if tag == "ACTIVITY_ACTIVE":
-                self.income(c, kind="INDEPENDENT_ACTIVITY", net=90000, source=f"FICTIV activity {index}")
+                self.income(c, kind="INDEPENDENT_ACTIVITY", net=90000, source=f"PFA Servicii Digitale {index}")
         c = self.person("ALL_INCOME_TYPES", "All seven ANAF income types, including two distinct salary employers.")
         self.salary(c, 2025, 24000)
         self.salary(c, 2025, 12000, employer=2)
         for kind in ("INDEPENDENT_ACTIVITY", "PENSION", "SOCIAL_INSURANCE", "RENTAL", "INVESTMENT", "OTHER"):
             self.income(c, kind=kind, net=6000)
-        self.insert("income_activity_forms", cnp=c, form_type="LIBERAL_PROFESSION", name="FICTIV consulting",
-                    fiscal_code="TEST-CONSULT", address=None, start_date="2020-01-01", end_date=None)
+        self.insert("income_activity_forms", cnp=c, form_type="LIBERAL_PROFESSION", name="Cabinet Avocat Popescu & Asociații",
+                    fiscal_code="RO3910299", address=None, start_date="2020-01-01", end_date=None)
         c = self.person("PARTIAL_EMPLOYMENT", "Jan 15-Mar 15 fixed-term job plus later part-time job; salary months overlap employment.")
         self.employment(c, start="2025-01-15", end="2025-03-15", contract="FIXED_TERM")
         self.salary(c, 2025, 7500)

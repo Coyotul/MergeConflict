@@ -32,7 +32,8 @@ class PdfExtractor:
         for lang in ("ro-RO", "en-US"):
             try:
                 res = winocr.recognize_pil_sync(img, lang=lang)
-                cand = (res.get("text") or "").strip()
+                lines = [l.get("text", "") for l in res.get("lines", []) if l.get("text")]
+                cand = "\n".join(lines).strip() if lines else (res.get("text") or "").strip()
                 if len(cand) > len(best_text):
                     best_text = cand
                 if len(best_text) > 40:
@@ -40,15 +41,19 @@ class PdfExtractor:
             except Exception:
                 continue
 
-        # If detected text is sparse (< 30 characters), document might be rotated (90, 180, 270 deg)
-        if len(best_text) < 30:
-            for angle in (90, 180, 270):
+        # If detected text is sparse (< 120 characters), document might be rotated or taken at a diagonal angle
+        if len(best_text) < 120:
+            candidate_angles = [-15, 15, -30, 30, -45, 45, -10, 10, -5, 5, 90, 180, 270]
+            for angle in candidate_angles:
                 try:
-                    rotated = img.rotate(angle, expand=True)
+                    rotated = img.rotate(angle, expand=True, resample=Image.Resampling.BICUBIC)
                     res = winocr.recognize_pil_sync(rotated, lang="ro-RO")
-                    cand = (res.get("text") or "").strip()
+                    lines = [l.get("text", "") for l in res.get("lines", []) if l.get("text")]
+                    cand = "\n".join(lines).strip() if lines else (res.get("text") or "").strip()
                     if len(cand) > len(best_text):
                         best_text = cand
+                    if len(best_text) > 300:
+                        break
                 except Exception:
                     continue
 
@@ -80,17 +85,7 @@ class PdfExtractor:
 
             combined_text = "\n\n".join(extracted_pages).strip()
 
-            # 2. If vector text is empty, check embedded OCR transcript layer (/Subject or /Description)
-            if not combined_text and reader.metadata:
-                subject = reader.metadata.subject or reader.metadata.get("/Subject")
-                if subject and str(subject).strip():
-                    return str(subject).strip()
-
-                desc = reader.metadata.get("/Description") or reader.metadata.get("/Keywords")
-                if desc and str(desc).strip():
-                    return str(desc).strip()
-
-            # 3. If still empty, run optical character recognition (OCR) on embedded raster images
+            # 2. If vector text is empty, run OCR on embedded page raster images (scanned / photo / diagonal)
             if not combined_text:
                 img_texts = []
                 for page in reader.pages:
@@ -101,6 +96,16 @@ class PdfExtractor:
                                 img_texts.append(img_ocr)
                 if img_texts:
                     combined_text = "\n\n".join(img_texts).strip()
+
+            # 3. If OCR found no text, fallback to embedded metadata transcript layer (/Subject or /Description)
+            if not combined_text and reader.metadata:
+                subject = reader.metadata.subject or reader.metadata.get("/Subject")
+                if subject and str(subject).strip():
+                    return str(subject).strip()
+
+                desc = reader.metadata.get("/Description") or reader.metadata.get("/Keywords")
+                if desc and str(desc).strip():
+                    return str(desc).strip()
 
             return combined_text
         except Exception as exc:

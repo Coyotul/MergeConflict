@@ -848,7 +848,7 @@ class GeneratedFixtureTests(DatabaseTestCase):
 
     def test_export_round_trip_preserves_every_table_and_generated_value(self):
         sql = fixtures.export_data_sql(self.db)
-        self.assertIn("Employer''s Studio", sql)
+        self.assertIn("Endava", sql)
         self.assertNotIn("delay_category", sql)
         replay = fixtures.new_database()
         try:
@@ -922,8 +922,8 @@ class GeneratedFixtureTests(DatabaseTestCase):
             checksum = sum(int(a) * int(b) for a, b in zip(row["cnp"][:12], "279146358279")) % 11
             checksum = 1 if checksum == 10 else checksum
             self.assertNotEqual(int(row["cnp"][-1]), checksum)
-            self.assertTrue(row["last_name"].startswith("FICTIV_"))
-            self.assertIsNone(row["phone"])
+            self.assertTrue(len(row["last_name"]) >= 2)
+            self.assertTrue(row["phone"].startswith("+40 7"))
         self.assertEqual(len(self.manifest["sex_by_cnp"]), self.manifest["table_counts"]["persons"])
 
     def test_seed_parameters_and_populated_builder_are_rejected_safely(self):

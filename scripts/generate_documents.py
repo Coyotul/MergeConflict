@@ -75,6 +75,12 @@ def parse_args() -> argparse.Namespace:
         help="Output format: pdf, png, or both (default: pdf)",
     )
     parser.add_argument(
+        "--style",
+        choices=["all", "scanned", "photo", "diagonal"],
+        default="all",
+        help="Visual style: scanned (A4 scan), photo (desk photo), diagonal (angled desk photo), or all (default: all)",
+    )
+    parser.add_argument(
         "--db-path",
         type=Path,
         default=DEFAULT_DB_PATH,
@@ -118,7 +124,7 @@ def main() -> int:
             return 1
 
         print(f"Generating documents for {profile.full_name} ({profile.cnp})...")
-        docs = generate_documents_for_profile(profile, output_dir, include_pdf=include_pdf, include_png=include_png)
+        docs = generate_documents_for_profile(profile, output_dir, include_pdf=include_pdf, include_png=include_png, mode=args.style)
         print(f"[OK] Documents generated in {output_dir / profile.slug}:")
         for kind, paths in docs.items():
             for fmt, path in paths.items():
@@ -135,7 +141,7 @@ def main() -> int:
             return 1
 
         print(f"Generating documents for preset customer: {profile.full_name} ({profile.persona_tag})...")
-        docs = generate_documents_for_profile(profile, output_dir, include_pdf=include_pdf, include_png=include_png)
+        docs = generate_documents_for_profile(profile, output_dir, include_pdf=include_pdf, include_png=include_png, mode=args.style)
         print(f"[OK] Documents generated in {output_dir / profile.slug}:")
         for kind, paths in docs.items():
             for fmt, path in paths.items():
@@ -149,6 +155,7 @@ def main() -> int:
         output_dir=output_dir,
         include_pdf=include_pdf,
         include_png=include_png,
+        mode=args.style,
     )
 
     print(f"\n[OK] Successfully generated documents for {len(manifest)} customer profiles:")

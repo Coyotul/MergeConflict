@@ -1,3 +1,4 @@
+from src.services.document_generation.desk_surface import render_on_desk
 """Romanian Bank Account Statement (Extras de Cont) generator.
 
 Generates professional A4 synthetic account statements in PDF and PNG formats,
@@ -83,12 +84,8 @@ def _build_transactions(profile: CustomerDocumentProfile) -> List[TransactionRow
     return rows
 
 
-def generate_bank_statement(
-    profile: CustomerDocumentProfile,
-    output_pdf: Optional[Path] = None,
-    output_png: Optional[Path] = None,
-) -> Image.Image:
-    """Generate a synthetic Romanian Extras de Cont Curent (A4 portrait)."""
+def _render_statement_sheet(profile: CustomerDocumentProfile) -> tuple[Image.Image, float, float, float]:
+    """Render the physical A4 Extras de Cont sheet."""
     width, height = 1240, 1754  # A4 standard at ~150 DPI
     img = Image.new("RGB", (width, height), color="#FFFFFF")
     draw = ImageDraw.Draw(img)
@@ -99,7 +96,7 @@ def generate_bank_statement(
     font_bold_sm = _load_font("arialbd.ttf", 13)
     font_regular_md = _load_font("arial.ttf", 15)
     font_regular_sm = _load_font("arial.ttf", 12)
-    font_mono_md = _load_font("consola.ttf", 14)
+    font_mono_md = _load_font("arialbd.ttf", 15)
 
     # 1. Top Raiffeisen Brand Stripe (Yellow & Black)
     draw.rectangle([(0, 0), (width, 18)], fill="#FEE600")
@@ -153,7 +150,7 @@ def generate_bank_statement(
 
     card_w = (width - 140 - 3 * 18) // 4
     cards = [
-        ("Sold inițial (01.10)", f"{_format_money(profile.initial_balance)} RON", "#0F172A", "#F8FAFC"),
+        ("Sold inițial", f"{_format_money(profile.initial_balance)} RON", "#0F172A", "#F8FAFC"),
         ("Total încasări (+)", f"+{_format_money(total_credits)} RON", "#16A34A", "#F0FDF4"),
         ("Total plăți (-)", f"-{_format_money(total_debits)} RON", "#DC2626", "#FEF2F2"),
         ("Sold final disponibil", f"{_format_money(final_balance)} RON", "#002B7F", "#EFF6FF"),
@@ -212,30 +209,36 @@ def generate_bank_statement(
     draw.text((70, curr_y), "DOCUMENT EMIS ELECTRONIC · VALABIL FĂRĂ SEMNĂTURĂ SAU ȘTAMPILĂ CONFORM LEGII", fill="#0F172A", font=font_bold_sm)
     draw.text((70, curr_y + 20), "DOCUMENT SINTETIC DE TESTARE PENTRU PROTOTIPUL DE CREDITARE AGENTIC. CONȚINE DATE FICTIVE EXCLUSIV PENTRU DEMO.", fill="#94A3B8", font=_load_font("arial.ttf", 10))
 
+    return img, total_credits, total_debits, final_balance
+
+
+def generate_bank_statement(
+    profile: CustomerDocumentProfile,
+    output_pdf: Optional[Path] = None,
+    output_png: Optional[Path] = None,
+    mode: str = "scanned",
+) -> Image.Image:
+    """Generate a synthetic Romanian Extras de Cont in scanned, photo, or diagonal photo format."""
+    sheet, total_credits, total_debits, final_balance = _render_statement_sheet(profile)
+    mode_str = mode.value.lower() if hasattr(mode, "value") else str(mode or "scanned").lower()
+    if hasattr(mode, "value"):
+        mode_str = mode.value.lower()
+
+    if "diag" in mode_str:
+        final_image = render_on_desk(sheet, angle=10.0, padding=80, is_card=False, wood_tone=False)
+    elif "photo" in mode_str or "poza" in mode_str:
+        final_image = render_on_desk(sheet, angle=0.0, padding=80, is_card=False, wood_tone=False)
+    else:
+        final_image = sheet
+
     if output_png:
         output_png.parent.mkdir(parents=True, exist_ok=True)
-        img.save(output_png, "PNG")
+        final_image.save(output_png, "PNG")
 
     if output_pdf:
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
-        text_transcript = (
-            f"{profile.bank_name}\n"
-            f"EXTRAS DE CONT CURENT\n"
-            f"Perioada: 01.10.2026 - 28.10.2026\n"
-            f"TITULAR CONT: {profile.full_name.upper()}\n"
-            f"CNP: {profile.cnp}\n"
-            f"IBAN: {profile.iban.replace(' ', '')}\n"
-            f"Monedă cont: {profile.account_currency}\n"
-            f"Sold inițial: {_format_money(profile.initial_balance)} RON\n"
-            f"Total încasări: +{_format_money(total_credits)} RON\n"
-            f"Total plăți: -{_format_money(total_debits)} RON\n"
-            f"Sold final disponibil: {_format_money(final_balance)} RON\n"
-            f"Număr total operațiuni: {len(transactions)}\n"
-            f"VIRAMENT SALARIU: +{_format_money(profile.monthly_net_income)} lei"
-        )
-
         buf = io.BytesIO()
-        img.save(buf, "PDF", resolution=150.0)
+        final_image.save(buf, "PDF", resolution=150.0)
         buf.seek(0)
         reader = pypdf.PdfReader(buf)
         writer = pypdf.PdfWriter()
@@ -244,9 +247,8 @@ def generate_bank_statement(
         writer.add_metadata({
             "/Title": "Extras de Cont",
             "/Author": profile.bank_name,
-            "/Subject": text_transcript,
         })
         with open(output_pdf, "wb") as f:
             writer.write(f)
 
-    return img
+    return final_image

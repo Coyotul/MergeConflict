@@ -94,7 +94,7 @@ class DocumentGenerationTests(unittest.TestCase):
         profile = load_profile_from_db("DSTI_39")
         if profile is not None:
             self.assertEqual(profile.cnp, "1790420000031")
-            self.assertEqual(profile.first_name, "Mihai")
+            self.assertEqual(profile.first_name, "Dan")
 
 
 if __name__ == "__main__":

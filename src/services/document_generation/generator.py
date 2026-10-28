@@ -321,30 +321,73 @@ def generate_documents_for_profile(
     output_dir: Path,
     include_pdf: bool = True,
     include_png: bool = False,
+    mode: str = "all",
 ) -> Dict[str, Dict[str, Path]]:
-    """Generate the full triad of documents (ID Card, Income Certificate, Bank Statement) in PDF format for a profile."""
+    """Generate synthetic banking documents (ID Card, Income Certificate, Bank Statement) in scanned, photo, and diagonal modes."""
     cust_dir = output_dir / profile.slug
     cust_dir.mkdir(parents=True, exist_ok=True)
 
     results: Dict[str, Dict[str, Path]] = {}
+    effective_mode = mode.lower() if mode else "all"
 
-    # 1. Identity Document (Buletin scan in PDF)
+    # 1. Standard triad (scanned or chosen primary mode)
+    primary_mode = "scanned" if effective_mode == "all" else effective_mode
     id_pdf = cust_dir / f"buletin_{profile.slug}.pdf" if include_pdf else None
     id_png = cust_dir / f"buletin_{profile.slug}.png" if include_png else None
-    generate_identity_card(profile, output_pdf=id_pdf, output_png=id_png)
+    generate_identity_card(profile, output_pdf=id_pdf, output_png=id_png, mode=primary_mode)
     results["identity"] = {"pdf": id_pdf, "png": id_png}
 
-    # 2. Proof of Income (Adeverință de venit in PDF)
     inc_pdf = cust_dir / f"adeverinta_venit_{profile.slug}.pdf" if include_pdf else None
     inc_png = cust_dir / f"adeverinta_venit_{profile.slug}.png" if include_png else None
-    generate_income_certificate(profile, output_pdf=inc_pdf, output_png=inc_png)
+    generate_income_certificate(profile, output_pdf=inc_pdf, output_png=inc_png, mode=primary_mode)
     results["income"] = {"pdf": inc_pdf, "png": inc_png}
 
-    # 3. Account Statement (Extras de cont in PDF)
     stmt_pdf = cust_dir / f"extras_cont_{profile.slug}.pdf" if include_pdf else None
     stmt_png = cust_dir / f"extras_cont_{profile.slug}.png" if include_png else None
-    generate_bank_statement(profile, output_pdf=stmt_pdf, output_png=stmt_png)
+    generate_bank_statement(profile, output_pdf=stmt_pdf, output_png=stmt_png, mode=primary_mode)
     results["statement"] = {"pdf": stmt_pdf, "png": stmt_png}
+
+    # 2. When mode == "all", also generate dedicated photo and diagonal files for OCR testing
+    if effective_mode == "all":
+        # Straight photos on desk
+        generate_identity_card(
+            profile,
+            output_pdf=cust_dir / "buletin_poza.pdf" if include_pdf else None,
+            output_png=cust_dir / "buletin_poza.png" if include_png else None,
+            mode="photo",
+        )
+        generate_income_certificate(
+            profile,
+            output_pdf=cust_dir / "adeverinta_poza.pdf" if include_pdf else None,
+            output_png=cust_dir / "adeverinta_poza.png" if include_png else None,
+            mode="photo",
+        )
+        generate_bank_statement(
+            profile,
+            output_pdf=cust_dir / "extras_poza.pdf" if include_pdf else None,
+            output_png=cust_dir / "extras_poza.png" if include_png else None,
+            mode="photo",
+        )
+
+        # Diagonal photos on desk (tilted camera angle)
+        generate_identity_card(
+            profile,
+            output_pdf=cust_dir / "buletin_diagonala.pdf" if include_pdf else None,
+            output_png=cust_dir / "buletin_diagonala.png" if include_png else None,
+            mode="photo_diagonal",
+        )
+        generate_income_certificate(
+            profile,
+            output_pdf=cust_dir / "adeverinta_diagonala.pdf" if include_pdf else None,
+            output_png=cust_dir / "adeverinta_diagonala.png" if include_png else None,
+            mode="photo_diagonal",
+        )
+        generate_bank_statement(
+            profile,
+            output_pdf=cust_dir / "extras_diagonala.pdf" if include_pdf else None,
+            output_png=cust_dir / "extras_diagonala.png" if include_png else None,
+            mode="photo_diagonal",
+        )
 
     return results
 
@@ -354,6 +397,7 @@ def generate_document_suite(
     profiles: Optional[List[CustomerDocumentProfile]] = None,
     include_pdf: bool = True,
     include_png: bool = False,
+    mode: str = "all",
 ) -> List[Dict[str, any]]:
     """Generate the complete suite of synthetic documents (all in PDF) and create a manifest INDEX.md."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -365,7 +409,7 @@ def generate_document_suite(
 
     for profile in profiles:
         doc_paths = generate_documents_for_profile(
-            profile, output_dir, include_pdf=include_pdf, include_png=include_png
+            profile, output_dir, include_pdf=include_pdf, include_png=include_png, mode=mode
         )
         manifest_entries.append({"profile": profile, "documents": doc_paths})
 

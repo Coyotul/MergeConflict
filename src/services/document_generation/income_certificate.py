@@ -1,3 +1,4 @@
+from src.services.document_generation.desk_surface import render_on_desk
 """Romanian Salary & Income Certificate (Adeverință de Venit) generator.
 
 Generates professional A4 synthetic income certificates in PDF and PNG formats,
@@ -54,12 +55,8 @@ def _build_salary_months(net_amount: float) -> List[SalaryMonth]:
     return result
 
 
-def generate_income_certificate(
-    profile: CustomerDocumentProfile,
-    output_pdf: Optional[Path] = None,
-    output_png: Optional[Path] = None,
-) -> Image.Image:
-    """Generate a synthetic Romanian Adeverință de Venit (A4 portrait)."""
+def _render_certificate_sheet(profile: CustomerDocumentProfile) -> tuple[Image.Image, float]:
+    """Render the physical A4 Adeverință de Venit sheet."""
     width, height = 1240, 1754  # A4 standard at ~150 DPI
     img = Image.new("RGB", (width, height), color="#FFFFFF")
     draw = ImageDraw.Draw(img)
@@ -88,7 +85,7 @@ def generate_income_certificate(
     # Reg Number Box (Top right)
     draw.rounded_rectangle([(width - 380, 60), (width - 70, 140)], radius=8, fill="#F8FAFC", outline="#CBD5E1", width=1)
     draw.text((width - 360, 72), "Nr. Înregistrare:  418 / HR", fill="#0F172A", font=font_bold_md)
-    draw.text((width - 360, 102), "Data emiterii:       28.10.2026", fill="#475569", font=font_regular_sm)
+    draw.text((width - 360, 102), "Data emiterii: 28.10.2026", fill="#475569", font=font_regular_sm)
 
     # Separator line
     curr_y += 35
@@ -202,29 +199,36 @@ def generate_income_certificate(
     draw.text((70, curr_y), "DOCUMENT SINTETIC DE TESTARE · DATE FICTIVE PENTRU SIMULAREA PROCESULUI DE CREDITARE AGENTIC", fill="#94A3B8", font=_load_font("arialbd.ttf", 10))
     draw.text((70, curr_y + 16), "Nu reprezintă o adeverință fiscală reală și nu angajează răspunderea niciunei entități juridice existente.", fill="#94A3B8", font=_load_font("arial.ttf", 10))
 
+    return img, avg_net
+
+
+def generate_income_certificate(
+    profile: CustomerDocumentProfile,
+    output_pdf: Optional[Path] = None,
+    output_png: Optional[Path] = None,
+    mode: str = "scanned",
+) -> Image.Image:
+    """Generate a synthetic Romanian Adeverință de Venit in scanned, photo, or diagonal photo format."""
+    sheet, avg_net = _render_certificate_sheet(profile)
+    mode_str = mode.value.lower() if hasattr(mode, "value") else str(mode or "scanned").lower()
+    if hasattr(mode, "value"):
+        mode_str = mode.value.lower()
+
+    if "diag" in mode_str:
+        final_image = render_on_desk(sheet, angle=10.0, padding=80, is_card=False, wood_tone=False)
+    elif "photo" in mode_str or "poza" in mode_str:
+        final_image = render_on_desk(sheet, angle=0.0, padding=80, is_card=False, wood_tone=False)
+    else:
+        final_image = sheet
+
     if output_png:
         output_png.parent.mkdir(parents=True, exist_ok=True)
-        img.save(output_png, "PNG")
+        final_image.save(output_png, "PNG")
 
     if output_pdf:
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
-        text_transcript = (
-            f"{profile.employer_name.upper()}\n"
-            f"C.U.I. / C.I.F.: {profile.employer_cui}\n"
-            f"Nr. Reg. Com.: {profile.employer_reg_com}\n"
-            f"Sediu social: {profile.employer_address}\n"
-            f"Nr. Înregistrare: 418 / HR\n"
-            f"Data emiterii: 28.10.2026\n"
-            f"ADEVERINȚĂ DE VENIT\n"
-            f"Prin prezenta se adeverește că dl./dna. {profile.full_name.upper()}, având CNP {profile.cnp}, "
-            f"este angajat în baza Contractului Individual de Muncă nr. 1042 / {profile.employment_start_date}, "
-            f"încheiat pe perioadă NEDETERMINATĂ, ocupând în prezent funcția de {profile.job_title}.\n"
-            f"MEDIA VENITULUI NET LUNAR: {_format_money(avg_net)} RON / lună\n"
-            f"Venit net lunar: {profile.monthly_net_income:,.2f} RON"
-        )
-
         buf = io.BytesIO()
-        img.save(buf, "PDF", resolution=150.0)
+        final_image.save(buf, "PDF", resolution=150.0)
         buf.seek(0)
         reader = pypdf.PdfReader(buf)
         writer = pypdf.PdfWriter()
@@ -233,9 +237,8 @@ def generate_income_certificate(
         writer.add_metadata({
             "/Title": "Adeverință de Venit",
             "/Author": profile.employer_name,
-            "/Subject": text_transcript,
         })
         with open(output_pdf, "wb") as f:
             writer.write(f)
 
-    return img
+    return final_image

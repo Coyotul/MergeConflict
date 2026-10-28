@@ -2,7 +2,14 @@
 
 from dataclasses import dataclass, field
 from datetime import date
+from enum import Enum
 from typing import List, Optional
+
+
+class DocumentVisualMode(str, Enum):
+    SCANNED = "scanned"
+    PHOTO = "photo"
+    PHOTO_DIAGONAL = "photo_diagonal"
 
 
 @dataclass
@@ -48,6 +55,7 @@ class CustomerDocumentProfile:
     phone: str = "+40 721 000 000"
     email: str = "client.demo@example.test"
     persona_tag: Optional[str] = None
+    visual_mode: DocumentVisualMode = DocumentVisualMode.SCANNED
 
     # Identity card details
     id_series: str = "RX"

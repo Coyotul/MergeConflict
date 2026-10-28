@@ -49,6 +49,11 @@ class FieldValueError(ValueError):
     pass
 
 
+def _field_type_to_kind(field_type: FieldType) -> str:
+    """Map FieldType to FieldValue kind."""
+    return field_type.value  # They have matching names
+
+
 def parse_money(raw: str | int | float | Decimal) -> Decimal:
     """Parse a monetary amount from various formats.
 
@@ -76,20 +81,25 @@ def parse_money(raw: str | int | float | Decimal) -> Decimal:
     # Lowercase and strip
     s = raw.lower().strip()
 
-    # Remove currency markers
+    # Remove currency markers first
     s = s.replace("lei", "").replace("ron", "").replace("eur", "")
-
-    # Check for 'k' suffix (thousands)
-    multiplier = Decimal("1")
-    if s.endswith("k"):
-        multiplier = Decimal("1000")
-        s = s[:-1]
 
     # Remove all spaces
     s = s.replace(" ", "").strip()
 
+    # Check for 'k' suffix (thousands) after removing spaces
+    multiplier = Decimal("1")
+    if s.endswith("k"):
+        multiplier = Decimal("1000")
+        s = s[:-1].strip()
+
     if not s:
         raise FieldValueError("Empty value after removing currency markers")
+
+    # Reject special float values and scientific notation
+    s_lower = s.lower()
+    if "nan" in s_lower or "inf" in s_lower or "e" in s_lower:
+        raise FieldValueError(f"Invalid money value: '{raw}'")
 
     # Determine decimal separator
     # If both . and , appear, the last one is the decimal separator
@@ -151,6 +161,9 @@ def parse_money(raw: str | int | float | Decimal) -> Decimal:
     # Try to parse
     try:
         value = Decimal(s) * multiplier
+        # Check if value is finite
+        if not value.is_finite():
+            raise FieldValueError(f"Invalid money value (non-finite): '{raw}'")
         return value
     except (InvalidOperation, ValueError) as e:
         raise FieldValueError(f"Cannot parse '{raw}' as money: {e}")
@@ -416,6 +429,7 @@ def apply_field_updates(
 
         # Accept the update
         app.fields[update.field] = FieldValue(
+            kind=_field_type_to_kind(spec.type),
             value=parsed_value,
             source=FieldSource.customer,
             confirmed=True,
@@ -474,18 +488,29 @@ def merge_document_extraction(
             continue
 
         # Check for conflict with existing customer value
-        conflict_detected = False
-        if field_name in app.fields:
+        # First check if there's an open conflict for this field
+        existing_conflict = next((c for c in app.conflicts if c.field == field_name), None)
+
+        if existing_conflict:
+            # Field already has a conflict - compare against customer value from conflict
+            try:
+                customer_value_parsed = parse_field_value(spec, existing_conflict.customer_value)
+                if _values_equal(customer_value_parsed, parsed_value, spec.type):
+                    # New extraction matches customer value - clear conflict
+                    app.conflicts = [c for c in app.conflicts if c.field != field_name]
+                else:
+                    # New extraction differs - update conflict with new document
+                    existing_conflict.document_value = extracted.value
+                    existing_conflict.document_id = doc.document_id
+            except FieldValueError:
+                # Customer value in conflict can't be parsed anymore - keep conflict as is
+                pass
+        elif field_name in app.fields:
             existing = app.fields[field_name]
             if existing.source == FieldSource.customer:
                 # Compare values
                 if not _values_equal(existing.value, parsed_value, spec.type):
                     # Conflict detected
-                    conflict_detected = True
-
-                    # Remove any existing conflict for this field
-                    app.conflicts = [c for c in app.conflicts if c.field != field_name]
-
                     # Add new conflict
                     app.conflicts.append(FieldConflict(
                         field=field_name,
@@ -494,11 +519,12 @@ def merge_document_extraction(
                         document_id=doc.document_id
                     ))
                 else:
-                    # Re-upload matches customer value - clear conflict
-                    app.conflicts = [c for c in app.conflicts if c.field != field_name]
+                    # Extraction matches customer value - no conflict
+                    pass
 
         # Set field to document value
         app.fields[field_name] = FieldValue(
+            kind=_field_type_to_kind(spec.type),
             value=parsed_value,
             source=FieldSource.document,
             document_id=doc.document_id,
@@ -507,13 +533,21 @@ def merge_document_extraction(
             updated_at=now
         )
 
-    # Remove stale conflicts from previous documents of this type
-    # (Keep only conflicts whose document_id is the current one or in app.documents)
+    # Remove stale conflicts from previous documents of this type only
+    # (Keep conflicts from other doc types unchanged)
     valid_doc_ids = {d.document_id for d in app.documents if d.doc_type == doc.doc_type}
     valid_doc_ids.add(doc.document_id)  # Include the current document
+
+    # Get fields that are verified by this doc_type
+    fields_for_this_doc_type = {
+        name for name, spec in specs.items()
+        if spec.verified_by == doc.doc_type
+    }
+
     app.conflicts = [
         c for c in app.conflicts
-        if c.document_id in valid_doc_ids
+        # Keep if not for this doc type, or if for this doc type and document is valid
+        if c.field not in fields_for_this_doc_type or c.document_id in valid_doc_ids
     ]
 
 

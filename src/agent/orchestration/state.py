@@ -27,12 +27,39 @@ class FieldSource(StrEnum):
 
 class FieldValue(BaseModel):
     """A field value with metadata."""
+    kind: Literal["money", "integer", "text", "boolean"]
     value: Decimal | int | str | bool
     source: FieldSource
     document_id: str | None = None
     confidence: float | None = None
     confirmed: bool = False
     updated_at: datetime
+
+    @classmethod
+    def _coerce_value(cls, value: Decimal | int | str | bool, kind: str) -> Decimal | int | str | bool:
+        """Coerce value to match kind, handling JSON round-trip."""
+        if kind == "money":
+            if isinstance(value, Decimal):
+                return value
+            return Decimal(str(value))
+        elif kind == "integer":
+            if isinstance(value, int) and not isinstance(value, bool):
+                return value
+            return int(value)
+        elif kind == "text":
+            if isinstance(value, str):
+                return value
+            return str(value)
+        elif kind == "boolean":
+            if isinstance(value, bool):
+                return value
+            return bool(value)
+        return value
+
+    def model_post_init(self, __context):
+        """Coerce value after initialization to ensure type matches kind."""
+        # Use object.__setattr__ to bypass frozen/immutable restrictions if any
+        object.__setattr__(self, 'value', self._coerce_value(self.value, self.kind))
 
 
 class DocumentStatus(StrEnum):

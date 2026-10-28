@@ -65,6 +65,8 @@ class FeatherlessChatModel:
             )
         else:
             self.client = client
+        # Token usage of the last completed request (None if the provider sent none).
+        self.last_usage: dict[str, int] | None = None
 
     def complete(self, messages: list[ChatMessage]) -> str:
         """Generate a completion using Featherless API.
@@ -99,10 +101,12 @@ class FeatherlessChatModel:
         if self.settings.json_mode:
             kwargs["response_format"] = {"type": "json_object"}
 
+        self.last_usage = None
         # Try with one retry for transient errors
         for attempt in range(2):
             try:
                 response = self.client.chat.completions.create(**kwargs)
+                self.last_usage = _usage_dict(getattr(response, "usage", None))
                 return response.choices[0].message.content or ""
 
             except (openai.APITimeoutError, openai.APIConnectionError) as e:
@@ -132,6 +136,17 @@ class FeatherlessChatModel:
 
         # Should not reach here
         raise ModelUnavailable("Model request failed")
+
+
+def _usage_dict(usage) -> dict[str, int] | None:
+    """Token counts from an OpenAI-style usage object (None when absent)."""
+    if usage is None:
+        return None
+    return {
+        "prompt_tokens": getattr(usage, "prompt_tokens", None),
+        "completion_tokens": getattr(usage, "completion_tokens", None),
+        "total_tokens": getattr(usage, "total_tokens", None),
+    }
 
 
 class FakeChatModel:

@@ -118,4 +118,6 @@ def build_orchestrator(
         max_steps=settings.max_steps,
         history_window=settings.history_window,
         tracer=tracer,
+        # Allow-list for the trace's session_started event (never the settings object).
+        model_info={"model": settings.model, "temperature": settings.temperature, "json_mode": settings.json_mode},
     )

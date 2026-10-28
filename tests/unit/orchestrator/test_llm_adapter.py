@@ -199,6 +199,28 @@ def test_featherless_handles_empty_content():
     assert result == ""
 
 
+def test_featherless_sets_last_usage():
+    """complete() keeps the last response's token usage; None when absent."""
+    settings = OrchestratorSettings(featherless_api_key="test-key")
+    with_usage = Mock()
+    with_usage.choices = [Mock()]
+    with_usage.choices[0].message.content = "a"
+    with_usage.usage = Mock(prompt_tokens=120, completion_tokens=30, total_tokens=150)
+    without_usage = Mock()
+    without_usage.choices = [Mock()]
+    without_usage.choices[0].message.content = "b"
+    without_usage.usage = None
+    mock_client = Mock()
+    mock_client.chat.completions.create.side_effect = [with_usage, without_usage]
+
+    model = FeatherlessChatModel(settings, client=mock_client)
+    assert model.last_usage is None
+    model.complete([ChatMessage(role="user", content="hello")])
+    assert model.last_usage == {"prompt_tokens": 120, "completion_tokens": 30, "total_tokens": 150}
+    model.complete([ChatMessage(role="user", content="again")])
+    assert model.last_usage is None
+
+
 def test_fake_model_list_responses():
     """FakeChatModel returns responses from list in order."""
     fake = FakeChatModel(responses=["first", "second", "third"])

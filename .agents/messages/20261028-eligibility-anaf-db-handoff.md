@@ -1,11 +1,13 @@
 # Handoff: Eligibility Check ANAF SQLite adapter
 
 Branch: `feature/eligibility-anaf-db`, based on `main` `411ad6d`.
-Task: `ELIGIBILITY-ANAF-02`. No main push or merge is authorized for this task.
+Task: `ELIGIBILITY-ANAF-02`. Initially feature-only; the owner subsequently
+authorized integration/push to `main` after conflict resolution and validation.
 
 The owner's supplied SQL, sample SQL, manifest, catalogue and source tools/tests
 remain unchanged. Only the previous eligibility implementation and its own
 tests/contracts/runbook are adapted; frontend and `backend-routes` are untouched.
+The latest main document-generation work is preserved during integration.
 
 ## Implemented boundary
 
@@ -49,6 +51,10 @@ Same retry key returns its saved historical result; use a new key for fresh data
 
 - All 210 Python tests pass with benchmark enabled (zero skips/failures/errors).
   Includes 27 new adapter tests and queries covering all 323 fixture people.
+- During the subsequent owner-authorized main integration, both coordination-file
+  conflicts were resolved without dropping entries. The concurrent document
+  generator/PDFs are preserved; the combined suite passes all 216 tests including
+  benchmark, in addition to the existing contract/HTTP/Node checks.
 - Generated public OpenAPI/assessment/tool artifacts are unchanged and match the
   executable models. The new internal provider schema is
   `contracts/schemas/anaf-income-verification.schema.json`.

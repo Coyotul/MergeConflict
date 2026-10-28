@@ -201,6 +201,7 @@ support all four assessment statuses and retain citations/assumptions. Its
 metadata-only document checklist is not verified evidence, and its temporary
 tokens are not accepted by this Python demo gateway.
 
-ANAF integration work remains on `feature/eligibility-anaf-db`. Push only the
-explicit feature ref if requested; never push directly to `main`. The previous
-eligibility branch was integrated through PR #1; this follow-up is separate.
+ANAF integration was developed on `feature/eligibility-anaf-db`. The owner
+subsequently authorized integration/push to `main` after conflict checks and
+combined regression validation. Future changes should still start on separate
+branches; never force-push or publish unvalidated changes to `main`.

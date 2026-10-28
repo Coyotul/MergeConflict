@@ -107,18 +107,23 @@ def add_document(app: ApplicationState, doc_type: str,
 
 
 def test_empty_application_needs_discovery():
-    """Empty application needs discovery fields."""
+    """Empty application needs discovery fields plus choose_product."""
     app = make_app()
     state = make_session(app)
 
     needs = next_needs(state)
-    targets = [n.target for n in needs]
 
-    # First three needs are discovery fields
-    assert targets[:3] == ["purpose", "amount", "term_months"]
-    assert all(n.kind == NeedKind.missing_field for n in needs[:3])
+    # Full list: discovery fields + choose_product
+    assert len(needs) == 4
+    assert needs[0].kind == NeedKind.missing_field
+    assert needs[0].target == "purpose"
+    assert needs[1].kind == NeedKind.missing_field
+    assert needs[1].target == "amount"
+    assert needs[2].kind == NeedKind.missing_field
+    assert needs[2].target == "term_months"
+    assert needs[3].kind == NeedKind.choose_product
 
-    # Stage is discovery
+    # Stage is discovery (from first need)
     assert derive_stage(state) == Stage.discovery
 
 
@@ -713,3 +718,214 @@ def test_choose_product_need_when_discovery_complete():
 
     # Stage is still discovery
     assert derive_stage(state) == Stage.discovery
+
+
+def test_multi_group_needs_missing_discovery_and_choose_product():
+    """Missing discovery field lists both missing_field and choose_product."""
+    app = make_app()
+    add_field(app, "purpose", "debt consolidation")
+    # Missing amount and term_months
+
+    state = make_session(app)
+    needs = next_needs(state)
+
+    # Should have all discovery missing fields + choose_product
+    assert len(needs) == 3
+    assert needs[0].kind == NeedKind.missing_field
+    assert needs[0].target == "amount"
+    assert needs[1].kind == NeedKind.missing_field
+    assert needs[1].target == "term_months"
+    assert needs[2].kind == NeedKind.choose_product
+
+
+def test_multi_group_needs_required_fields_and_documents():
+    """Lists both missing required fields and missing documents together."""
+    specs = make_specs()
+    app = make_app(
+        product_code=Product.personal_loan,
+        requirements=ProductRequirements(
+            product_code=Product.personal_loan,
+            fields=[specs["monthly_net_income"], specs["employer_name"]],
+            documents=[DocumentRequirement(doc_type="payslip", label="Payslip")]
+        )
+    )
+
+    # Fill discovery fields but not requirement fields
+    add_field(app, "purpose", "debt consolidation")
+    add_field(app, "amount", Decimal("50000"))
+    add_field(app, "term_months", 48)
+    # Missing monthly_net_income, employer_name, and payslip document
+
+    state = make_session(app)
+    needs = next_needs(state)
+
+    # Should list missing fields, run_eligibility, and document needs together
+    missing_field_needs = [n for n in needs if n.kind == NeedKind.missing_field]
+    run_elig_needs = [n for n in needs if n.kind == NeedKind.run_eligibility]
+    doc_needs = [n for n in needs if n.kind == NeedKind.document]
+
+    assert len(missing_field_needs) == 2
+    assert {n.target for n in missing_field_needs} == {"monthly_net_income", "employer_name"}
+    assert len(run_elig_needs) == 1
+    assert len(doc_needs) == 1
+    assert doc_needs[0].target == "payslip"
+
+
+def test_is_verified_profile_identity_field():
+    """Profile-sourced identity field counts as verified."""
+    from src.models.credit import FieldSpec, FieldType
+
+    specs = make_specs()
+    app = make_app(
+        product_code=Product.personal_loan,
+        requirements=ProductRequirements(
+            product_code=Product.personal_loan,
+            fields=[
+                FieldSpec(
+                    name="ssn",
+                    label="SSN",
+                    type=FieldType.text,
+                    required=True,
+                    verified_by="id_card",
+                    identity=True
+                )
+            ],
+            documents=[]
+        )
+    )
+
+    # Add identity field from profile
+    add_field(app, "ssn", "123-45-6789", source=FieldSource.profile)
+
+    spec = app.requirements.fields[0]
+    assert is_verified(app, spec) is True
+
+
+def test_is_verified_profile_non_identity_must_verify():
+    """Profile-sourced non-identity must_verify field does not count as verified."""
+    from src.models.credit import FieldSpec, FieldType
+
+    specs = make_specs()
+    app = make_app(
+        product_code=Product.personal_loan,
+        requirements=ProductRequirements(
+            product_code=Product.personal_loan,
+            fields=[
+                FieldSpec(
+                    name="income",
+                    label="Income",
+                    type=FieldType.money,
+                    required=True,
+                    verified_by="payslip",
+                    identity=False
+                )
+            ],
+            documents=[]
+        )
+    )
+
+    # Add non-identity field from profile
+    add_field(app, "income", Decimal("5000"), source=FieldSource.profile)
+
+    spec = app.requirements.fields[0]
+    assert is_verified(app, spec) is False
+
+
+def test_is_verified_document_field_document_not_accepted():
+    """Confirmed document-sourced field whose document is not accepted → not verified."""
+    specs = make_specs()
+    app = make_app(
+        product_code=Product.personal_loan,
+        requirements=ProductRequirements(
+            product_code=Product.personal_loan,
+            fields=[specs["monthly_net_income"]],
+            documents=[DocumentRequirement(doc_type="payslip", label="Payslip")]
+        )
+    )
+
+    # Add document in processing state
+    doc = add_document(app, "payslip", status=DocumentStatus.processing)
+
+    # Add field from this document
+    add_field(app, "monthly_net_income", Decimal("5000"),
+              source=FieldSource.document, confirmed=True, document_id=doc.document_id)
+
+    spec = specs["monthly_net_income"]
+    assert is_verified(app, spec) is False
+
+
+def test_is_verified_must_verify_false():
+    """Field with must_verify=False is verified when present."""
+    from src.models.credit import FieldSpec, FieldType
+
+    specs = make_specs()
+    app = make_app(
+        product_code=Product.personal_loan,
+        requirements=ProductRequirements(
+            product_code=Product.personal_loan,
+            fields=[
+                FieldSpec(
+                    name="purpose",
+                    label="Purpose",
+                    type=FieldType.text,
+                    required=True,
+                    verified_by=None  # No verification required
+                )
+            ],
+            documents=[]
+        )
+    )
+
+    # Add customer-sourced field
+    add_field(app, "purpose", "debt consolidation", source=FieldSource.customer)
+
+    spec = app.requirements.fields[0]
+    assert spec.must_verify is False
+    assert is_verified(app, spec) is True
+
+
+def test_offers_current_false_after_amount_change():
+    """offers_current returns False after amount changes."""
+    specs = make_specs()
+    app = make_app(
+        product_code=Product.personal_loan,
+        requirements=ProductRequirements(
+            product_code=Product.personal_loan,
+            fields=[specs["monthly_net_income"]],
+            documents=[]
+        )
+    )
+
+    add_field(app, "purpose", "debt consolidation")
+    add_field(app, "amount", Decimal("50000"))
+    add_field(app, "term_months", 48)
+    add_field(app, "monthly_net_income", Decimal("5000"))
+
+    # Create offers
+    fp = fingerprint(app, ["amount", "term_months", "monthly_net_income"])
+    app.offers = OffersRecord(
+        offers=[
+            LoanOffer(
+                offer_id="offer_1",
+                product_code=Product.personal_loan,
+                amount=Money(amount=Decimal("50000")),
+                term_months=48,
+                annual_interest_rate_percent=Decimal("10.5"),
+                monthly_installment=Money(amount=Decimal("1280")),
+                total_repayment=Money(amount=Decimal("61440")),
+                total_cost=Money(amount=Decimal("11440")),
+                fees=Money(amount=Decimal("0")),
+                assumptions=[]
+            )
+        ],
+        input_fingerprint=fp
+    )
+
+    # Offers are current
+    assert offers_current(app) is True
+
+    # Change amount
+    add_field(app, "amount", Decimal("60000"))
+
+    # Now stale
+    assert offers_current(app) is False

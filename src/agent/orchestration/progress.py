@@ -12,7 +12,7 @@ from src.agent.orchestration.state import (
     DocumentStatus,
     FieldSource,
 )
-from src.models.credit import EligibilityStatus
+from src.models.credit import EligibilityStatus, FieldSpec
 
 
 class Stage(StrEnum):
@@ -122,7 +122,7 @@ def offer_input_names(app: ApplicationState) -> list[str]:
     return names
 
 
-def is_verified(app: ApplicationState, field_name: str) -> bool:
+def is_verified(app: ApplicationState, spec: FieldSpec) -> bool:
     """Check if a field is verified according to its spec.
 
     A field is verified if:
@@ -132,24 +132,16 @@ def is_verified(app: ApplicationState, field_name: str) -> bool:
 
     Args:
         app: Application state
-        field_name: Name of field to check
+        spec: Field specification
 
     Returns:
         True if field is verified
     """
-    if app.requirements is None:
-        return False
-
-    # Find spec
-    spec = next((s for s in app.requirements.fields if s.name == field_name), None)
-    if spec is None:
-        return False
-
     # Field must exist
-    if field_name not in app.fields:
+    if spec.name not in app.fields:
         return False
 
-    field = app.fields[field_name]
+    field = app.fields[spec.name]
 
     # If doesn't require verification, just needs to exist
     if not spec.must_verify:
@@ -187,7 +179,7 @@ def all_verified(app: ApplicationState) -> bool:
         return False
 
     for spec in app.requirements.fields:
-        if spec.required and not is_verified(app, spec.name):
+        if spec.required and not is_verified(app, spec):
             return False
 
     return True
@@ -254,16 +246,11 @@ def next_needs(state: SessionState) -> list[Need]:
         if spec.name not in app.fields:
             needs.append(Need(kind=NeedKind.missing_field, target=spec.name))
 
-    # If any discovery fields missing, stop here
-    if needs:
-        return needs
-
     # Group 3: No product_code
     if app.product_code is None:
         needs.append(Need(kind=NeedKind.choose_product))
-        return needs
 
-    # If no requirements, can't determine what fields are needed
+    # If no requirements, return what we have (discovery + choose_product)
     if app.requirements is None:
         return needs
 
@@ -272,14 +259,9 @@ def next_needs(state: SessionState) -> list[Need]:
         if spec.required and spec.name not in app.fields:
             needs.append(Need(kind=NeedKind.missing_field, target=spec.name))
 
-    # If any required fields missing, stop here
-    if needs:
-        return needs
-
     # Group 5: Eligibility not current
     if not eligibility_current(app):
         needs.append(Need(kind=NeedKind.run_eligibility))
-        return needs
 
     # Group 6: Eligibility results
     if app.eligibility is not None:
@@ -287,17 +269,16 @@ def next_needs(state: SessionState) -> list[Need]:
 
         if status == EligibilityStatus.not_satisfied:
             needs.append(Need(kind=NeedKind.not_eligible))
-            return needs
+            return needs  # Stop after not_eligible
 
         if status == EligibilityStatus.manual_review:
             needs.append(Need(kind=NeedKind.manual_review))
-            return needs
+            return needs  # Stop after manual_review
 
         if status == EligibilityStatus.more_information_required:
             # Add missing_field for each missing field
             for field_name in app.eligibility.result.missing_fields:
                 needs.append(Need(kind=NeedKind.missing_field, target=field_name))
-            return needs
 
     # Group 7: Required documents not accepted
     if app.requirements.documents:
@@ -333,10 +314,11 @@ def next_needs(state: SessionState) -> list[Need]:
     for conflict in app.conflicts:
         needs.append(Need(kind=NeedKind.resolve_conflict, target=conflict.field))
 
-    # If any document/confirm/conflict needs, stop here
-    if any(n.kind in (NeedKind.document, NeedKind.confirm_extracted, NeedKind.resolve_conflict)
-           for n in needs):
+    # If any needs from groups 2-9 exist, return them (don't add groups 10-13)
+    if needs:
         return needs
+
+    # Groups 10-13: Only when no group 2-9 needs exist
 
     # Group 10: Eligibility current but not verified
     if app.eligibility is not None and not app.eligibility.verified_inputs:

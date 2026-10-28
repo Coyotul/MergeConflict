@@ -5,6 +5,7 @@ from datetime import date
 from src.services.document_ingestion.chunking import (
     pack_lines,
     build_header,
+    estimate_tokens,
 )
 from src.services.document_ingestion.parsers.html_page import parse_html_page
 from src.services.document_ingestion.sources import load_source_config
@@ -19,6 +20,14 @@ def test_pack_lines_respects_limit_and_repeats_header():
     lines = ["x" * 800] * 5  # 200 tokens each
     parts = pack_lines(lines, max_tokens=500, repeat_header="H")
     assert len(parts) == 3 and parts[1].startswith("H\n")
+
+
+def test_pack_lines_estimates_the_joined_piece_including_repeat_header():
+    # 125 tokens per line: four lines sum to 500, but the joined text (with
+    # newlines, and the repeated header on later pieces) is over the limit.
+    lines = ["x" * 501] * 8
+    parts = pack_lines(lines, max_tokens=500, repeat_header="H" * 40)
+    assert len(parts) == 3 and all(estimate_tokens(p) <= 500 for p in parts)
 
 
 def test_build_header():

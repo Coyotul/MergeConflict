@@ -57,20 +57,16 @@ def pack_lines(lines: list[str], max_tokens: int = MAX_TOKENS, repeat_header: st
 
     pieces = []
     current = []
-    current_tokens = 0
 
     for line in lines:
-        line_tokens = estimate_tokens(line)
-
-        # If adding this line would exceed limit and current is not empty, flush
-        if current and current_tokens + line_tokens > max_tokens:
+        # Estimate the joined candidate piece, including the header that will
+        # be prepended to it if it is not the first piece.
+        prefix = [repeat_header] if repeat_header and pieces else []
+        if current and estimate_tokens("\n".join(prefix + current + [line])) > max_tokens:
             pieces.append("\n".join(current))
             current = []
-            current_tokens = 0
 
-        # Add line to current piece
         current.append(line)
-        current_tokens += line_tokens
 
     # Flush remaining
     if current:

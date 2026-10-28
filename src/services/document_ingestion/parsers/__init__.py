@@ -10,7 +10,7 @@ def parse_document(doc_kind: DocKind, data: bytes, url: str, cfg: SourceConfig) 
     Dispatches to the appropriate parser:
     - category_hub → parse_category_hub
     - other HTML kinds → parse_html_page
-    - PDF kinds → parsers from Tasks 5-6 (NotImplementedError for now)
+    - fee_list, general_terms, cost_sheet, pdf_generic → their PDF parsers
     """
     from src.services.document_ingestion.parsers.html_page import parse_html_page
     from src.services.document_ingestion.parsers.category_hub import parse_category_hub
@@ -38,12 +38,12 @@ def parse_document(doc_kind: DocKind, data: bytes, url: str, cfg: SourceConfig) 
         from src.services.document_ingestion.parsers.general_terms import parse_general_terms
         return parse_general_terms(data)
 
-    # PDF kinds not yet implemented
-    pdf_kinds = {
-        DocKind.cost_sheet,
-        DocKind.pdf_generic,
-    }
-    if doc_kind in pdf_kinds:
-        raise NotImplementedError(f"PDF parsing for {doc_kind} comes in Task 6")
+    if doc_kind == DocKind.cost_sheet:
+        from src.services.document_ingestion.parsers.cost_sheet import parse_cost_sheet
+        return parse_cost_sheet(data)
+
+    if doc_kind == DocKind.pdf_generic:
+        from src.services.document_ingestion.parsers.pdf_generic import parse_pdf_generic
+        return parse_pdf_generic(data)
 
     raise ValueError(f"Unknown doc_kind: {doc_kind}")

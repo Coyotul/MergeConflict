@@ -42,3 +42,7 @@ ENV/
 
 # Logs & temp
 *.log
+
+# Local runtime data (databases, uploads, document text and vector indexes)
+data/local/*
+!data/local/.gitkeep

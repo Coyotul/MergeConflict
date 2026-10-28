@@ -11,6 +11,7 @@ from src.agent.orchestration.orchestrator import ConfirmationDecision, CustomerM
 from src.agent.orchestration.prompting import PROMPT_VERSION, load_system_prompt
 from src.agent.orchestration.trace import FileTracer, InMemoryTracer, NullTracer
 from src.core.errors import ModelUnavailable
+from src.integrations.llm.chat import FakeChatModel
 from src.models.knowledge import Product
 from tests.unit.orchestrator.factories import call, make_verified_app, respond, seed_application
 
@@ -246,6 +247,7 @@ def test_code_event_traced_when_model_then_fails(at_confirmation):
     finished = events[-1]
     assert finished["outcome"] == "model_unavailable"
     assert finished["reply"] == resp.messages[-1].text
+    assert finished["error"]["type"] == "ModelUnavailable"  # handled: fixed text replied
 
 
 def test_model_unavailable_traced(orchestrator_factory):
@@ -262,6 +264,60 @@ def test_model_unavailable_traced(orchestrator_factory):
     assert events[1]["raw_output"] is None
     assert events[-1]["outcome"] == "model_unavailable"
     assert events[-1]["saved"] is False and events[-1]["reply"] is None
+    assert events[-1]["error"] == {"type": "ModelUnavailable", "message": "Fake model unavailable"}
+
+
+def test_turn_finished_error_field(orchestrator_factory):
+    tracer = InMemoryTracer()
+
+    def responder(messages):
+        if len(responder.calls) == 0:
+            responder.calls.append(1)
+            return GREET
+        raise RuntimeError("boom " + "x" * 2000)
+    responder.calls = []
+
+    orch, _, _ = orchestrator_factory(responder, tracer=tracer)
+    sid = orch.start_session(CUSTOMER).session_id
+    assert of_type(tracer.events, "turn_finished")[0]["error"] is None  # replied
+    with pytest.raises(RuntimeError):
+        orch.handle(sid, CUSTOMER, CustomerMessage("salut"))
+
+    finished = last_turn(tracer)[-1]
+    assert finished["outcome"] == "error"
+    assert finished["error"]["type"] == "RuntimeError"
+    assert finished["error"]["message"].startswith("boom ") and len(finished["error"]["message"]) == 500
+
+
+def test_first_parse_failure_on_last_step_does_not_retry(orchestrator_factory):
+    tracer = InMemoryTracer()
+    orch, _, _ = orchestrator_factory(
+        [GREET, call("get_credit_products", intent="product_info"), "garbage"], tracer=tracer, max_steps=2
+    )
+    sid = orch.start_session(CUSTOMER).session_id
+    orch.handle(sid, CUSTOMER, CustomerMessage("salut"))
+
+    events = last_turn(tracer)
+    [invalid] = of_type(events, "action_invalid")
+    assert (invalid["step"], invalid["will_retry"]) == (2, False)
+    assert events[-1]["outcome"] == "step_cap"
+
+
+class BrokenUsageModel(FakeChatModel):
+    @property
+    def last_usage(self):
+        raise RuntimeError("usage unavailable")
+
+
+def test_broken_last_usage_does_not_break_turn(orchestrator_factory):
+    tracer = InMemoryTracer()
+    orch, _, _ = orchestrator_factory([], tracer=tracer)
+    orch._model = BrokenUsageModel([GREET, respond("Bine")])
+    sid = orch.start_session(CUSTOMER).session_id
+    resp = orch.handle(sid, CUSTOMER, CustomerMessage("salut"))
+
+    assert resp.messages[0].text == "Bine"
+    assert [e["usage"] for e in of_type(tracer.events, "model_call")] == [None, None]
 
 
 class ExplodingTracer:

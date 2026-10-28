@@ -183,6 +183,17 @@ def test_system_prompt_once_across_instances(test_tmp_dir, valid_session_id):
     assert tracer2.needs_system_prompt(valid_session_id, "v2.0") is False
 
 
+def test_last_prompt_version_wins_across_instances(test_tmp_dir, valid_session_id):
+    """A restarted tracer uses the LAST prompt version in the file, not the first."""
+    writer = FileTracer(test_tmp_dir)
+    writer.record(valid_session_id, None, None, "session_started", prompt_version="v1", system_prompt="one")
+    writer.record(valid_session_id, "t1", 1, "system_prompt_changed", prompt_version="v2", system_prompt="two")
+
+    restarted = FileTracer(test_tmp_dir)
+    assert restarted.needs_system_prompt(valid_session_id, "v2") is False
+    assert restarted.needs_system_prompt(valid_session_id, "v1") is True
+
+
 def test_truncation_marker():
     """truncate_payload truncates long values and adds a marker."""
     # Short value - no truncation

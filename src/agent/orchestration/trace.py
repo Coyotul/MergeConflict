@@ -211,6 +211,7 @@ class FileTracer:
         if not trace_path.exists():
             return None
 
+        latest: str | None = None
         try:
             with open(trace_path, "r", encoding="utf-8") as f:
                 for line in f:
@@ -218,15 +219,15 @@ class FileTracer:
                         event = json.loads(line)
                         if event.get("type") in ("session_started", "system_prompt_changed"):
                             if "prompt_version" in event:
-                                return event["prompt_version"]
-                    except json.JSONDecodeError:
+                                latest = event["prompt_version"]  # the last one recorded wins
+                    except (json.JSONDecodeError, AttributeError):
                         # Skip malformed lines
                         continue
         except (OSError, IOError):
             # Can't read file, assume no version
             return None
 
-        return None
+        return latest
 
     def record(
         self,

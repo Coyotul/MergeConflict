@@ -359,7 +359,7 @@ class Orchestrator(CodeEventsMixin):
                 raise
             pending = []
             try:
-                action = self._parse(turn, raw, will_retry=not parse_failed)
+                action = self._parse(turn, raw, will_retry=not parse_failed and step < self._max_steps)
             except ActionParseError as e:
                 self._log_step(turn, step, started, None, None, "parse_error")
                 if parse_failed:
@@ -413,8 +413,15 @@ class Orchestrator(CodeEventsMixin):
         except ModelUnavailable as e:
             turn.trace.model_call(context, messages, notices, started, None, error=e)
             raise
-        turn.trace.model_call(context, messages, notices, started, getattr(self._model, "last_usage", None), raw=raw)
+        turn.trace.model_call(context, messages, notices, started, self._last_usage(), raw=raw)
         return raw
+
+    def _last_usage(self) -> dict | None:
+        """The model's last token usage, if it exposes one; never raises."""
+        try:
+            return getattr(self._model, "last_usage", None)
+        except Exception:
+            return None
 
     def _parse(self, turn: _Turn, raw: str, *, will_retry: bool) -> ModelAction:
         try:

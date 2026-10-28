@@ -33,6 +33,7 @@ from src.integrations.llm.chat import ChatMessage
 logger = logging.getLogger("src.agent.trace")
 
 PAYLOAD_LIMIT = 20000
+ERROR_MESSAGE_LIMIT = 500
 
 
 def _guarded(method: Callable) -> Callable:
@@ -61,8 +62,17 @@ def _bounded(value: Any) -> tuple[Any, bool]:
     return (text if truncated else value), truncated
 
 
+def _error_info(error: BaseException) -> dict[str, str]:
+    """Exception class name and its message (bounded); nothing else from the exception."""
+    return {"type": type(error).__name__, "message": str(error)[:ERROR_MESSAGE_LIMIT]}
+
+
 def describe_event(event: object) -> dict[str, Any]:
-    """Event kind plus its safe fields (never document bytes or ids of stored files)."""
+    """Event kind plus its safe fields for turn_started.
+
+    Uploads carry doc_type, filename and size only. Document bytes are never
+    traced; document ids may still appear in tool_call arguments (process_document).
+    """
     if isinstance(event, CustomerMessage):
         return {"kind": "customer_message", "text": event.text}
     if isinstance(event, DocumentUploaded):
@@ -106,9 +116,12 @@ class TurnTrace:
         self._tracer = tracer
         self.session_id = session_id
         self.turn_id = turn_id
+        # Current model step. Events recorded inside a model step (including code
+        # tool calls it triggers) inherit it; before the first step it is None.
         self.step: int | None = None
         self.outcome: str | None = None
         self.saved = False
+        self._model_error: ModelUnavailable | None = None
         self._steps_used = 0
         self._stage_before: str | None = None
         self._started = time.perf_counter()
@@ -137,12 +150,16 @@ class TurnTrace:
 
     @_guarded
     def finish(self, state: SessionState, new_messages: list[StoredMessage], error: BaseException | None) -> None:
+        error_info = None
         if error is None:
             outcome = self.outcome or "replied"
             reply = next((m for m in reversed(new_messages) if m.role == "assistant"), None)
         else:
             outcome = "model_unavailable" if isinstance(error, ModelUnavailable) else "error"
             reply = None
+            error_info = _error_info(error)
+        if outcome == "model_unavailable" and error_info is None and self._model_error is not None:
+            error_info = _error_info(self._model_error)  # handled fallback (e.g. _explain)
         try:
             awaiting = build_awaiting(state).kind.value
         except Exception:
@@ -159,6 +176,7 @@ class TurnTrace:
             awaiting_kind=awaiting,
             duration_ms=_ms(self._started),
             saved=self.saved,
+            error=error_info,
         )
 
     # ---- model steps ------------------------------------------------------
@@ -183,6 +201,8 @@ class TurnTrace:
         raw: str | None = None,
         error: ModelUnavailable | None = None,
     ) -> None:
+        if error is not None:
+            self._model_error = error
         raw_output, truncated = _bounded(raw) if raw is not None else (None, False)
         payload: dict[str, Any] = dict(
             context=context,
@@ -191,7 +211,8 @@ class TurnTrace:
             latency_ms=_ms(started),
             usage=usage,
             raw_output=raw_output,
-            error={"code": "model_unavailable", "message": str(error)} if error is not None else None,
+            error={"code": "model_unavailable", "message": str(error)[:ERROR_MESSAGE_LIMIT]}
+            if error is not None else None,
         )
         if truncated:
             payload["truncated"] = True
@@ -223,7 +244,11 @@ class TurnTrace:
     def execute(
         self, registry: ToolRegistry, name: str, arguments: dict, ctx: ToolContext, *, caller: str
     ) -> tuple[ToolCallOutcome, BaseModel | None]:
-        """registry.execute, timed and traced as tool_call."""
+        """registry.execute, timed and traced as tool_call.
+
+        The event's step is the current model step (code tools synced during a
+        step inherit it); code tools run before any model step get step null.
+        """
         started = time.perf_counter()
         outcome, output = registry.execute(name, arguments, ctx, caller=caller)
         self._tool_call(name, caller, arguments, outcome, started)

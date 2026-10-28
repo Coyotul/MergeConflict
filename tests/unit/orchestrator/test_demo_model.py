@@ -74,3 +74,25 @@ def test_tool_need_is_called_once_per_turn():
                 ChatMessage(role="user", content="TOOL_REJECTED run_eligibility_check: precondition_failed: x"),
                 context(stage="eligibility", needs=[need("run_eligibility")]))
     assert isinstance(again.action, Respond)
+
+
+def test_pricing_disclosures_and_invalid_results_are_not_hidden():
+    assumptions = ["DAE/APR: 9.58%", "Net amount paid out: 29800.00 RON", "Not an approval."]
+    action = run(
+        ChatMessage(role="user", content="offers"),
+        ChatMessage(role="assistant", content="{}"),
+        ChatMessage(role="user", content='TOOL_RESULT calculate_loan_offer: {"status":"ok","offers":[{}]}'),
+        context(stage="offer_selection", needs=[need("choose_offer")], offers=[{
+            "offer_id": "priced", "term_months": 60, "monthly_installment": "621.22", "total_cost": "7473.16",
+            "assumptions": assumptions,
+        }]),
+    )
+    assert all(text in action.action.message for text in assumptions)
+    invalid = run(
+        ChatMessage(role="user", content="offers"),
+        ChatMessage(role="assistant", content="{}"),
+        ChatMessage(role="user", content='TOOL_RESULT calculate_loan_offer: {"status":"invalid","offers":[],"errors":[{"code":"TERM_OUT_OF_RANGE","message":"Term must be 18-60 months"}]}'),
+        context(stage="offer_selection", needs=[need("run_offers")]),
+    )
+    assert isinstance(invalid.action, Respond)
+    assert "TERM_OUT_OF_RANGE" in invalid.action.message

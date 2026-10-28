@@ -13,6 +13,7 @@ import json
 import re
 import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -164,13 +165,16 @@ def export_contract(app: FastAPI, out_dir: Path) -> None:
         shutil.rmtree(examples_dir)
     examples_dir.mkdir(parents=True)
 
-    with TestClient(app) as client:
-        responses = run_happy_path(client)
-    for name, data in stage_examples(responses).items():
-        _write_json(examples_dir / name, data)
-
     scratch = _scratch_dir()
     try:
+        # Quote provenance/date affects amounts and IDs; freeze before execution,
+        # not just after-the-fact timestamp normalization. Use isolated demo state.
+        settings = mock_settings(scratch)
+        orchestrator = build_orchestrator(settings, clock=lambda: datetime.fromisoformat(FIXED_TIME))
+        with TestClient(create_app(settings, orchestrator=orchestrator)) as client:
+            responses = run_happy_path(client)
+        for name, data in stage_examples(responses).items():
+            _write_json(examples_dir / name, data)
         for name, data in error_examples(mock_settings(scratch)).items():
             _write_json(examples_dir / name, data)
     finally:

@@ -47,11 +47,9 @@ def test_annuity_known_values():
 
 
 def test_offer_totals():
-    """Test that offer calculations produce correct totals."""
-    # 30000 RON / 60 months at 9.5% should produce:
-    # - monthly installment: 630.06
-    # - total repayment: 37803.60
-    # - total cost: 7803.60
+    """The registry uses engine totals, financed fees and rounded schedule rows."""
+    # Minimum 8.55% base, no inferred discounts/insurance, 200 financed fee,
+    # 5 RON monthly charges; net cash is 29,800, not the gross 30,000.
 
     config_dir = Path("config/orchestrator")
     data = StubData.load(config_dir)
@@ -115,9 +113,11 @@ def test_offer_totals():
     # Find the 60-month offer
     offer_60m = next((o for o in output.offers if o.term_months == 60), None)
     assert offer_60m is not None
-    assert offer_60m.monthly_installment.amount == Decimal("630.06")
-    assert offer_60m.total_repayment.amount == Decimal("37803.60")
-    assert offer_60m.total_cost.amount == Decimal("7803.60")
+    assert offer_60m.monthly_installment.amount == Decimal("621.22")
+    assert offer_60m.total_repayment.amount == Decimal("37273.16")
+    assert offer_60m.total_cost.amount == Decimal("7473.16")
+    assert offer_60m.fees.amount == Decimal("500.00")
+    assert any("DAE/APR: 9.58%" in text for text in offer_60m.assumptions)
 
 
 def test_eligibility_outcomes_per_customer():
@@ -560,8 +560,8 @@ def test_non_stub_policy_search_not_simulated():
     assert state.used_stubs is False
 
 
-def test_offer_term_ordering_and_clamping():
-    """Test offer term ordering: customer term first, then options in order, clamped and deduped."""
+def test_offer_term_ordering_and_explicit_limit_rejections():
+    """Valid requested term first; no silent clamping to different loan terms."""
     config_dir = Path("config/orchestrator")
     data = StubData.load(config_dir)
     policy_search = StubPolicySearch(config_dir)
@@ -621,30 +621,17 @@ def test_offer_term_ordering_and_clamping():
         assert outcome.ok
         actual_terms = [o.term_months for o in output.offers]
         assert actual_terms == expected_terms, f"Expected {expected_terms}, got {actual_terms}"
+        if not expected_terms:
+            assert output.status == "invalid"
+            assert output.errors[0].code == "TERM_OUT_OF_RANGE"
+        assert app.fields["term_months"].value == term_months
 
-    # Test 1: options [12, 24] with term 60 → terms [60, 12, 24]
-    check_offers(60, [12, 24], [60, 12, 24])
-
-    # Test 2: term_months beyond max (personal_loan max is 84) → clamped to max
-    # term 100 should be clamped to 84
-    check_offers(100, None, [84])
-
-    # Test 3: options duplicating term → deduped
-    # term 60 with options [60, 72] → [60, 72] (60 deduped)
-    check_offers(60, [60, 72], [60, 72])
-
-    # Test 4: term below min (personal_loan min is 6) → clamped to min
-    check_offers(3, None, [6])
-
-    # Test 5: options that would exceed product limits are clamped
-    # term 60 with options [10, 80] → [60, 10, 80] but 80 is clamped to 84 (product max)
-    # Actually 80 is within range (6-84 for personal_loan), so let's test edge case
-    # term 60 with options [12, 84] where 84 is at the product max → [60, 12, 84]
-    check_offers(60, [12, 84], [60, 12, 84])
-
-    # Test 6: customer term outside product range is clamped
-    # term 200 (way beyond personal_loan max 84) with options [36, 60] → [84, 36, 60]
-    check_offers(200, [36, 60], [84, 36, 60])
+    check_offers(60, [12, 24], [60, 24])
+    check_offers(100, None, [])
+    check_offers(60, [60, 48], [60, 48])
+    check_offers(3, None, [])
+    check_offers(60, [18, 84], [60, 18])
+    check_offers(200, [36, 60], [])
 
 
 def test_stub_search_matches_word_forms():

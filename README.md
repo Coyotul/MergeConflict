@@ -332,3 +332,23 @@ The migration command prints the newly applied files (`[]` when up to date).
 ### Frontend integration
 
 See [contracts/http/README.md](contracts/http/README.md) for the chat API contract, endpoints, request/response formats, and rendering guidance.
+
+### Deterministic loan-pricing tool
+
+The orchestrator's registered `calculate_loan_offer` now delegates to the pricing
+engine introduced in commit `13b4cf2` (already merged into main by `53c95c2`). It
+prices personal loans, unsecured refinancing loans and Casa Ta mortgages from
+session-owned inputs with an explicit simulation date; it no longer generates
+zero-fee offers from a single illustrative annuity rate.
+
+DAE/APR, net cash payout, financed/separate fees, recurring charges, future mortgage
+payments, engine warnings and the indicative disclaimer remain visible in the
+offer's existing assumptions details and in model context. Invalid requests are
+not silently clamped; stale selections are cleared after failed recalculation.
+The HTTP offer schema and explicit submission/human-review controls are preserved.
+
+See `C:\Users\msi\Downloads\mergeconflict-integration\docs\runbooks\orchestrator-pricing.md`
+for mapping, known results, tests and limitations. Existing-loan early repayment
+and portfolio refinancing comparisons remain separate service functions until
+their trusted input/servicing flows are implemented; no balances or consent are
+invented by this connection.

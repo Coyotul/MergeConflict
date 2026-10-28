@@ -142,106 +142,139 @@
       "type": "offers",
       "offers": [
         {
-          "offer_id": "personal_loan-60m-4bab7e",
+          "offer_id": "personal_loan-60m-024716537320d7c4",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
             "currency": "RON"
           },
           "term_months": 60,
-          "annual_interest_rate_percent": "9.5",
+          "annual_interest_rate_percent": "8.55",
           "monthly_installment": {
-            "amount": "630.06",
+            "amount": "621.22",
             "currency": "RON"
           },
           "total_repayment": {
-            "amount": "37803.60",
+            "amount": "37273.16",
             "currency": "RON"
           },
           "total_cost": {
-            "amount": "7803.60",
+            "amount": "7473.16",
             "currency": "RON"
           },
           "fees": {
-            "amount": "0.00",
+            "amount": "500.00",
             "currency": "RON"
           },
           "assumptions": [
-            "Illustrative annual interest rate: 9.5%",
-            "Fees: 0 RON",
-            "Simulated, based on public conditions; not an offer from Raiffeisen Bank"
+            "Product personal_loan_fixed version 2026-10-15 (synthetic parameters).",
+            "Simulation date 2026-10-28; the credit is paid out in full on that date.",
+            "Instalments are monthly; DAE uses equal months of 1/12 year (OUG 50/2010, Annex 1).",
+            "Amounts are rounded to 0.01 per instalment; the last instalment absorbs rounding.",
+            "Base rate 8.55% (product minimum (no risk-based rate provided)); fixed for the whole term.",
+            "Affordability uses the declared net monthly income and existing payments, unverified.",
+            "Net amount paid out: 29800.00 RON; requested amount is total credit including financed costs.",
+            "DAE/APR: 9.58%; nominal interest is not the total cost of credit.",
+            "No salary-account discount or optional insurance is assumed; annuity repayment, no first-home uplift.",
+            "Total upfront fees/premiums: 200.00 RON; total recurring charges: 300.00 RON.",
+            "Fees include upfront and recurring charges over the full term. Do not add them again to total repayment or total cost.",
+            "ANALYSIS_FEE: 200.00 RON (financed and deducted from payout).",
+            "Simulation debt-service ratio: 0.1647; limit: 0.40; within limit: true. Indicative check against BNR Regulation 17/2012; not an eligibility decision.",
+            "Indicative simulation based on synthetic product parameters and the stated assumptions. It is not an offer, an approval or an authoritative settlement amount."
           ],
           "indicative": true,
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-36m-4bab7e",
+          "offer_id": "personal_loan-36m-ac22325792d3336c",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
             "currency": "RON"
           },
           "term_months": 36,
-          "annual_interest_rate_percent": "9.5",
+          "annual_interest_rate_percent": "8.55",
           "monthly_installment": {
-            "amount": "960.99",
+            "amount": "952.72",
             "currency": "RON"
           },
           "total_repayment": {
-            "amount": "34595.64",
+            "amount": "34297.99",
             "currency": "RON"
           },
           "total_cost": {
-            "amount": "4595.64",
+            "amount": "4497.99",
             "currency": "RON"
           },
           "fees": {
-            "amount": "0.00",
+            "amount": "380.00",
             "currency": "RON"
           },
           "assumptions": [
-            "Illustrative annual interest rate: 9.5%",
-            "Fees: 0 RON",
-            "Simulated, based on public conditions; not an offer from Raiffeisen Bank"
+            "Product personal_loan_fixed version 2026-10-15 (synthetic parameters).",
+            "Simulation date 2026-10-28; the credit is paid out in full on that date.",
+            "Instalments are monthly; DAE uses equal months of 1/12 year (OUG 50/2010, Annex 1).",
+            "Amounts are rounded to 0.01 per instalment; the last instalment absorbs rounding.",
+            "Base rate 8.55% (product minimum (no risk-based rate provided)); fixed for the whole term.",
+            "Affordability uses the declared net monthly income and existing payments, unverified.",
+            "Net amount paid out: 29800.00 RON; requested amount is total credit including financed costs.",
+            "DAE/APR: 9.78%; nominal interest is not the total cost of credit.",
+            "No salary-account discount or optional insurance is assumed; annuity repayment, no first-home uplift.",
+            "Total upfront fees/premiums: 200.00 RON; total recurring charges: 180.00 RON.",
+            "Fees include upfront and recurring charges over the full term. Do not add them again to total repayment or total cost.",
+            "ANALYSIS_FEE: 200.00 RON (financed and deducted from payout).",
+            "Simulation debt-service ratio: 0.2182; limit: 0.40; within limit: true. Indicative check against BNR Regulation 17/2012; not an eligibility decision.",
+            "Indicative simulation based on synthetic product parameters and the stated assumptions. It is not an offer, an approval or an authoritative settlement amount."
           ],
           "indicative": true,
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-48m-4bab7e",
+          "offer_id": "personal_loan-48m-1ba78cecf69a1dc5",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
             "currency": "RON"
           },
           "term_months": 48,
-          "annual_interest_rate_percent": "9.5",
+          "annual_interest_rate_percent": "8.55",
           "monthly_installment": {
-            "amount": "753.69",
+            "amount": "745.16",
             "currency": "RON"
           },
           "total_repayment": {
-            "amount": "36177.12",
+            "amount": "35767.56",
             "currency": "RON"
           },
           "total_cost": {
-            "amount": "6177.12",
+            "amount": "5967.56",
             "currency": "RON"
           },
           "fees": {
-            "amount": "0.00",
+            "amount": "440.00",
             "currency": "RON"
           },
           "assumptions": [
-            "Illustrative annual interest rate: 9.5%",
-            "Fees: 0 RON",
-            "Simulated, based on public conditions; not an offer from Raiffeisen Bank"
+            "Product personal_loan_fixed version 2026-10-15 (synthetic parameters).",
+            "Simulation date 2026-10-28; the credit is paid out in full on that date.",
+            "Instalments are monthly; DAE uses equal months of 1/12 year (OUG 50/2010, Annex 1).",
+            "Amounts are rounded to 0.01 per instalment; the last instalment absorbs rounding.",
+            "Base rate 8.55% (product minimum (no risk-based rate provided)); fixed for the whole term.",
+            "Affordability uses the declared net monthly income and existing payments, unverified.",
+            "Net amount paid out: 29800.00 RON; requested amount is total credit including financed costs.",
+            "DAE/APR: 9.66%; nominal interest is not the total cost of credit.",
+            "No salary-account discount or optional insurance is assumed; annuity repayment, no first-home uplift.",
+            "Total upfront fees/premiums: 200.00 RON; total recurring charges: 240.00 RON.",
+            "Fees include upfront and recurring charges over the full term. Do not add them again to total repayment or total cost.",
+            "ANALYSIS_FEE: 200.00 RON (financed and deducted from payout).",
+            "Simulation debt-service ratio: 0.1847; limit: 0.40; within limit: true. Indicative check against BNR Regulation 17/2012; not an eligibility decision.",
+            "Indicative simulation based on synthetic product parameters and the stated assumptions. It is not an offer, an approval or an authoritative settlement amount."
           ],
           "indicative": true,
           "simulated": true
         }
       ],
-      "selected_offer_id": "personal_loan-60m-4bab7e"
+      "selected_offer_id": "personal_loan-60m-024716537320d7c4"
     },
     {
       "type": "application_summary",
@@ -256,34 +289,45 @@
         },
         "term_months": 60,
         "offer": {
-          "offer_id": "personal_loan-60m-4bab7e",
+          "offer_id": "personal_loan-60m-024716537320d7c4",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
             "currency": "RON"
           },
           "term_months": 60,
-          "annual_interest_rate_percent": "9.5",
+          "annual_interest_rate_percent": "8.55",
           "monthly_installment": {
-            "amount": "630.06",
+            "amount": "621.22",
             "currency": "RON"
           },
           "total_repayment": {
-            "amount": "37803.60",
+            "amount": "37273.16",
             "currency": "RON"
           },
           "total_cost": {
-            "amount": "7803.60",
+            "amount": "7473.16",
             "currency": "RON"
           },
           "fees": {
-            "amount": "0.00",
+            "amount": "500.00",
             "currency": "RON"
           },
           "assumptions": [
-            "Illustrative annual interest rate: 9.5%",
-            "Fees: 0 RON",
-            "Simulated, based on public conditions; not an offer from Raiffeisen Bank"
+            "Product personal_loan_fixed version 2026-10-15 (synthetic parameters).",
+            "Simulation date 2026-10-28; the credit is paid out in full on that date.",
+            "Instalments are monthly; DAE uses equal months of 1/12 year (OUG 50/2010, Annex 1).",
+            "Amounts are rounded to 0.01 per instalment; the last instalment absorbs rounding.",
+            "Base rate 8.55% (product minimum (no risk-based rate provided)); fixed for the whole term.",
+            "Affordability uses the declared net monthly income and existing payments, unverified.",
+            "Net amount paid out: 29800.00 RON; requested amount is total credit including financed costs.",
+            "DAE/APR: 9.58%; nominal interest is not the total cost of credit.",
+            "No salary-account discount or optional insurance is assumed; annuity repayment, no first-home uplift.",
+            "Total upfront fees/premiums: 200.00 RON; total recurring charges: 300.00 RON.",
+            "Fees include upfront and recurring charges over the full term. Do not add them again to total repayment or total cost.",
+            "ANALYSIS_FEE: 200.00 RON (financed and deducted from payout).",
+            "Simulation debt-service ratio: 0.1647; limit: 0.40; within limit: true. Indicative check against BNR Regulation 17/2012; not an eligibility decision.",
+            "Indicative simulation based on synthetic product parameters and the stated assumptions. It is not an offer, an approval or an authoritative settlement amount."
           ],
           "indicative": true,
           "simulated": true

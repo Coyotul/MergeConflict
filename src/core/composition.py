@@ -1,10 +1,12 @@
 """Factory functions for building orchestrator components."""
 from pathlib import Path
+from datetime import datetime
+from typing import Callable
 
 import psycopg
 
 from src.agent.orchestration.demo_model import DemoChatModel
-from src.agent.orchestration.orchestrator import Orchestrator
+from src.agent.orchestration.orchestrator import Orchestrator, utcnow
 from src.agent.tools.registry import ToolRegistry
 from src.agent.tools.retrieval import PolicySearch, build_policy_search
 from src.agent.tools.stubs import StubData, build_stub_registry
@@ -61,7 +63,8 @@ def build_orchestrator(
     settings: OrchestratorSettings,
     *,
     model: ChatModel | None = None,
-    store: SessionStore | None = None
+    store: SessionStore | None = None,
+    clock: Callable[[], datetime] = utcnow,
 ) -> Orchestrator:
     """Build an orchestrator with all dependencies.
 
@@ -69,6 +72,7 @@ def build_orchestrator(
         settings: Orchestrator settings
         model: Optional pre-built chat model (for testing)
         store: Optional pre-built session store (for testing)
+        clock: Server-owned clock; explicitly injectable for reproducible simulations
 
     Returns:
         Configured Orchestrator instance
@@ -95,4 +99,5 @@ def build_orchestrator(
         catalog_codes=catalog_codes,
         max_steps=settings.max_steps,
         history_window=settings.history_window,
+        clock=clock,
     )

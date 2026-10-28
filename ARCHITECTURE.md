@@ -247,3 +247,26 @@ Financial calculations need known-result unit tests. Authorization, customer dat
 isolation, review permissions, repeated submissions and interrupted/resumed
 workflows must be tested independently of the LLM (specification section 19).
 Record subsequent architecture choices in `docs/decisions/`.
+
+## External credit-source fixture ownership
+
+The credit-source database is an **offline synthetic external-data simulator**,
+not an application-db migration or replacement for assessment/audit storage.
+ADR 006 and the credit-source runbook describe the boundary. Current checkout:
+
+- `C:\Users\msi\Downloads\mergeconflict-integration\data\synthetic\credit_sources`:
+  schema-only SQL, reproducible sample SQL/manifest and scenario catalogue.
+- `C:\Users\msi\Downloads\mergeconflict-integration\scripts\credit_sources`:
+  stdlib setup/generation/verification commands; no runtime bank provider yet.
+- `C:\Users\msi\Downloads\mergeconflict-integration\tests\credit_sources`:
+  73 SQL/fixture/setup tests, including an optional benchmark.
+- `C:\Users\msi\Downloads\mergeconflict-integration\data\local\credit_sources.db`:
+  ignored local reconstruction, separate from eligibility and frontend stores.
+
+Do not bypass existing `VerificationProvider`/Pydantic/application ownership to
+consume SQL rows directly. A future authorized adapter must explicitly handle
+customer-to-CNP mapping, Decimal conversion, RON versus original currencies/CHF,
+canonical liabilities, missing-data completeness, evidence provenance/freshness,
+preliminary inquiry semantics and the application's revolving affordability
+rules. The global SQL reporting date must not be mutated concurrently per request.
+The import makes no frontend, provider, workflow, API-contract or decision change.

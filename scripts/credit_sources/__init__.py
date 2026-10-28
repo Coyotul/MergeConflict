@@ -1,0 +1,1 @@
+"""Offline synthetic external-source fixture tooling, not application providers."""

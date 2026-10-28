@@ -30,6 +30,16 @@ ENV/
 .env
 .env.local
 *.secret
+# Local agent credentials and SQLite files/sidecars are never versioned.
+/settings.json
+*.db
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
 
 # IDEs
 .vscode/*

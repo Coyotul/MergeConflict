@@ -1,0 +1,1 @@
+"""Synthetic external-source database tests; writable fixtures are disposable."""

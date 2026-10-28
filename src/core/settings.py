@@ -101,9 +101,13 @@ def load_orchestrator_settings(env: Mapping[str, str] | None = None) -> Orchestr
     if "FEATHERLESS_API_KEY" in env:
         kwargs["featherless_api_key"] = env["FEATHERLESS_API_KEY"]
 
+    # Featherless base URL
+    if "FEATHERLESS_BASE_URL" in env:
+        kwargs["featherless_base_url"] = env["FEATHERLESS_BASE_URL"]
+
     # Simple string fields
-    for field in ["featherless_base_url", "model", "session_store", "retrieval", "database_url"]:
-        key = f"FEATHERLESS_{field.upper()}" if field == "featherless_base_url" else f"ORCHESTRATOR_{field.upper()}"
+    for field in ["model", "session_store", "retrieval", "database_url"]:
+        key = f"ORCHESTRATOR_{field.upper()}"
         if key in env:
             kwargs[field] = env[key]
 

@@ -19,3 +19,7 @@ def test_env_overrides():
 
 def test_api_key_not_in_repr():
     assert "secret" not in repr(load_orchestrator_settings({"FEATHERLESS_API_KEY": "secret"}))
+
+
+def test_featherless_base_url_override():
+    assert load_orchestrator_settings({"FEATHERLESS_BASE_URL": "https://custom.example.com"}).featherless_base_url == "https://custom.example.com"

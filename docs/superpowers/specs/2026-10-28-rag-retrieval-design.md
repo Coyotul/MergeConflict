@@ -28,6 +28,9 @@ belongs to the orchestrator, which will call this service through the
   identified, never silently mixed with current material.
 - Return an explicit "insufficient evidence" result instead of loosely
   related passages.
+- Treat credit category hub pages (e.g. `credite-de-nevoi-personale.html`) as
+  evidence: their product cards, FAQs and "learn more" links. Every passage
+  carries "read more" pointers to the related pages it links to (§9a).
 - Provide a committed evaluation question set and a script that measures
   retrieval quality, so changes to chunking or models can be judged.
 
@@ -98,6 +101,12 @@ Scope, from the 2026-10-28 survey. Estimated 60–90 HTML pages and 20–30 PDFs
   projects, overdraft; about 26 guide sub-pages; FAQ pages
   (`intrebari-frecvente-credit-nevoi-personale.html`,
   `intrebari-frecvente-despre-creditele-ipotecare-si-creditele-imobiliare.html`).
+- **Category hub pages:** `credite.html`, `credite-de-nevoi-personale.html`,
+  `credite-imobiliare.html`, `credite-de-refinantare.html` and similar. Each
+  holds product cards (short teaser + headline figure + link), article teasers
+  ("Citește articolele noastre") and an FAQ block. All pages they link to are
+  already in the sitemap (verified 2026-10-28), so hubs add no new discovery,
+  only card evidence and link structure.
 - **Credit cards:** about 15 pages under `produsele-noastre/carduri/` (lower priority).
 - **Help / difficulty pages:** `/ro/aplica/restructurare-credit.html`,
   `/ro/persoane-fizice/in-sprijinul-tau/tine-ti-ratele-sub-control.html`,
@@ -159,7 +168,12 @@ Data flow: `sources.yaml` → scrape → `data/local/rag/raw/` + `manifest.jsonl
 ## 8. Cleaning and normalization
 
 - Unicode NFC; map cedilla ş/ţ/Ş/Ţ → comma-below ș/ț/Ș/Ț; collapse whitespace.
-- HTML: remove `header`, `footer`, `nav`, scripts, styles, forms, embedded JSON;
+- HTML: remove the **site-wide** header, footer and nav (the page-level
+  elements outside the main content), scripts, styles, forms, embedded JSON.
+  Do **not** remove `<header>`/`<footer>` elements inside content components:
+  AEM teaser cards (`.cmp-teaser`) keep their image link and button link in
+  their own `cmp-teaser__header` / `cmp-teaser__footer`, and stripping them
+  loses the card links;
   deduplicate repeated text blocks (AEM renders some content twice);
   drop marketing-only sections by heading (testimonials, cross-sell, "Articole
   utile", "Motive în plus…", lead-capture forms, calculators). The heading
@@ -190,7 +204,38 @@ Per document kind:
 | `general_terms` (CGB PDF) | Split by the document's numbering: chapter → section (`4.3`) → sub-clause (`4.3.1`). Sub-clauses can appear flattened on one line and must be split there too. A section ≤ 500 tokens is one chunk; otherwise pack sub-clauses; a single over-long clause is windowed by sentences with one-sentence overlap. |
 | `cost_sheet` (PDF, ~8 files, one template) | **Template-specific parser**: generic row rebuilding scrambles multi-line table cells. Output: one chunk with product facts (type, currency, amount range, max period, benefits) and a clean table with one line per variant (client type, rate type, rate range, analysis fee, monthly admin fee, DAE range), plus footnotes and the **early repayment fee**. A second chunk holds the worked examples. If a sheet fails the template's checks, ingestion falls back to generic row text and logs a warning. |
 | `pdf_generic` (IRCC explainer, repayment methods, required-documents list, others) | Split on numbered headings / bold heading lines; tables as rows; short documents (< ~600 tokens) stay one chunk. |
+| `category_hub` (HTML, listed in `sources.yaml`) | Each product teaser card is one chunk: card title, teaser text and headline figure ("Dobândă de la 5,55%"). Its `products` come from applying the URL → product rules to the **card's link target**, so the Overdraft card is `overdraft`, not `personal_loan`. The article-teaser block is one chunk listing the article titles. The FAQ block is chunked as `faq`. The marketing h1/intro is dropped. |
 | `article` (blog, guides) | As `product_page`, but `authority=low`. |
+
+### 9a. "Read more" pointers (all HTML kinds)
+
+Links found in page content are kept as pointers on the chunk they appear
+in. They are **pointers only**: retrieval never pulls text from the linked
+page into the result. The linked page's own chunks compete in search as usual.
+
+- **Extraction:** card links attach to their card chunk, article-teaser links
+  to the teaser-block chunk, and in-text links (e.g. "Mai multe detalii … în
+  articolul despre condiții") to the chunk containing them. Applies to
+  `category_hub`, `product_page`, `faq` and `article`.
+- **Kept:** links whose target is on raiffeisen.ro and matches the allowlist,
+  normalised to the target's `canonical_key`. Each keeps its anchor text and a
+  `link_kind` (`card`, `teaser`, `inline`).
+- **Dropped:** links outside the allowlist, app deep links (`adjust`,
+  `go.link`), branch locator and booking links, self-links, and links
+  repeated identically in every teaser on a page. The last rule catches the AEM
+  chip artifact, which currently adds a credit-card article link to each
+  credit teaser.
+- **Resolution at query time (designer's call):** a pointer is returned only
+  if its target document is indexed, not withdrawn, and has a version in force
+  on `as_of`. The returned title is the target's stored title, falling back to
+  the anchor text. Because resolution happens at query time, pages ingested
+  later in the run, or withdrawn later, are handled without re-ingesting the
+  source.
+
+Approaches considered for links (the project owner chose pointers):
+- **Pointers only (chosen):** simple and explainable, and gives the orchestrator "read more" links for the user.
+- **Expand into linked passages:** pull the best passages from linked pages into the result, even when they would not rank on their own. Rejected because it adds weakly related text, against the anti-goals.
+- **Link-based ranking boost:** rank linked pages higher. Rejected because it adds tuning surface for little gain on a corpus this small.
 
 ## 10. Metadata, versioning and freshness
 
@@ -199,7 +244,7 @@ Per document kind:
 - `doc_kind`
 - `products[]`
 - `topic`
-- `authority` (high: cost_sheet, fee_list, general_terms, product_page; medium: faq; low: article)
+- `authority` (high: cost_sheet, fee_list, general_terms, product_page; medium: faq; low: article, category_hub cards and teaser block)
 - `section_path[]`
 - `page` (PDF) or `anchor` (HTML heading id)
 - `token_count`
@@ -234,6 +279,14 @@ hashes, store one version.
 4. fetch date
 
 Record which one was used (`effective_date_source`).
+
+**Hub figures defer to cost sheets (decided by the project owner):** hub card
+figures are teasers. Besides their low authority, a hub card passage gets the
+`teaser_figure` flag. If the same result also contains an in-force
+`cost_sheet` passage sharing a specific product, the card passage carries
+`defer_to: <cost sheet chunk_id>`, with the note that the cost sheet holds the
+authoritative rates and fees. Hub/cost-sheet pairs never raise a `conflicts`
+entry, because they are different kinds (§12 step 7).
 
 **Campaign windows (decided by the project owner: warn, don't hide):**
 campaign phrases such as "Perioada campaniei: 15.10 - 26.11.2026" are detected
@@ -297,6 +350,10 @@ the `romanian` configuration and fall back to `simple` + unaccent if not.
   `next_chunk_id`, `parent_section_key`, `embedding vector(1024)`,
   `tsv tsvector` (generated from header + text). Indexes: HNSW on embedding
   (cosine), GIN on `tsv`, btree/GIN on `topic`, `products`, `version_id`.
+- `knowledge_chunk_links`: `chunk_id` FK, `target_canonical_key`,
+  `anchor_text`, `link_kind`, `ordinal`. Unique (`chunk_id`,
+  `target_canonical_key`). Resolved against `knowledge_documents` at query
+  time (§9a).
 - An `index_runs` record (designer's call) stores the embedding model name and
   version and chunker version for each ingest run, so results can report
   which index produced them.
@@ -339,7 +396,9 @@ the `romanian` configuration and fall back to `simple` + unaccent if not.
      The requirement is the eval gate in §13, not this exact formula.
 5. Deduplicate near-identical passages (e.g. the same FAQ on a product page and an FAQ page).
 6. Flags per passage: `superseded`, `withdrawn`, `campaign_active` /
-   `campaign_ended` (with date and warning text; never excluded), `low_authority`.
+   `campaign_ended` (with date and warning text; never excluded), `low_authority`,
+   `teaser_figure`, plus `defer_to` when a cost sheet in the result covers
+   the same product (§10).
 7. **Conflict notice (designer's call, narrowed after builder review):** add a
    `conflicts` entry only when the results contain passages from two
    *different* documents that are both in force and share all of the following:
@@ -352,6 +411,8 @@ the `romanian` configuration and fall back to `simple` + unaccent if not.
    passages are kept and the orchestrator decides. Detecting contradictory
    numbers within text is out of scope.
 8. `expand_context`: attach the previous and next chunk texts of each passage.
+9. Attach resolved "read more" pointers to each passage (§9a). These don't
+   affect ranking or the evidence threshold.
 
 **`SearchResult` fields:**
 - `status`: `ok` | `insufficient_evidence`
@@ -362,6 +423,7 @@ the `romanian` configuration and fall back to `simple` + unaccent if not.
   - `scores` (`dense`, `keyword`, `fused`)
   - `flags`
   - `context`
+  - `related_links[]`: `title`, `url`, `canonical_key`, `link_kind`
 - `conflicts[]`
 - `index_info` (model, chunker version, last ingest time)
 - `content_trust: "untrusted_evidence"`
@@ -379,6 +441,7 @@ typed errors from `src/core`. A failure must never come back as an empty "ok" re
   - "Există comision de rambursare anticipată la Flexicredit?"
   - "Ce este IRCC?"
   - "Până la ce vârstă pot lua un credit?"
+  - "Ce tipuri de credite de nevoi personale aveți?" (expects the hub page)
 - `scripts/rag/evaluate.py` reports recall@5, MRR, and accuracy on the
   unanswerable questions.
 - Designer's call: target recall@5 ≥ 0.8 and ≥ 4 of 5 unanswerable questions correctly refused before calling the work done.
@@ -388,7 +451,9 @@ typed errors from `src/core`. A failure must never come back as an empty "ok" re
 - **Unit (synthetic fixtures in `tests/fixtures/rag/`)**:
   - each parser/chunker on small hand-written HTML/PDF imitations of the
     real structures: AEM accordion, heading-only conditions, worked-example
-    paragraphs, fee table with value lines, flattened CGB sub-clauses, cost-sheet template
+    paragraphs, fee table with value lines, flattened CGB sub-clauses, cost-sheet template,
+    category hub with teaser cards (links inside the card header/footer, a repeated chip link)
+  - link extraction and filtering; the card's product taken from its link target
   - diacritic normalization
   - canonical-key and effective-date extraction
   - campaign window parsing
@@ -401,6 +466,8 @@ typed errors from `src/core`. A failure must never come back as an empty "ok" re
   - superseded, future-dated and withdrawn content is excluded by default; ended campaigns are flagged, not excluded
   - conflict notice appears
   - unaccented keyword match ("dobanda" finds "dobândă")
+  - `related_links` resolve only to indexed, in-force, non-withdrawn targets
+  - a hub card returned together with the matching cost sheet carries `defer_to`
 - The eval script runs against the real local index. It is a manual quality
   gate, not a CI test, because the corpus is not committed.
 
@@ -434,6 +501,8 @@ prototype; revisit before any distribution.
   - template parser for cost sheets
   - heading-only content kept
   - campaign window recorded per version; ended campaigns warn, not hide
+- category hub pages as their own kind; hub figures defer to cost sheets
+- in-content links kept as "read more" pointers only, on all HTML kinds
 
 **Designer's calls (flagged for review):**
 - BGE-M3
@@ -446,6 +515,9 @@ prototype; revisit before any distribution.
 - embedding adapter location
 - alias/dated PDF dedup
 - localhost-only DB port
+- per-card hub chunks, with each card's product taken from its link target
+- link filtering rules and query-time pointer resolution
+- the `knowledge_chunk_links` table
 
 **Left to the builder:**
 - migration tool
@@ -456,6 +528,7 @@ prototype; revisit before any distribution.
 - CLI ergonomics
 - internal file split within each module
 - exact allowlist patterns
+- the list of hub URLs in `sources.yaml`
 
 **Process:**
 - Follow GIT_AGENT_PROTOCOL.md: claim the task in `.agents/BOARD.md`, use

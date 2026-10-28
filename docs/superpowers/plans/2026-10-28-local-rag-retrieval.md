@@ -12,10 +12,12 @@
   - derives metadata (canonical key, effective date, campaign window, products, topic)
   - embeds chunks locally with BGE-M3
   - stores everything in a local Docker PostgreSQL with pgvector and an unaccent/Romanian full-text configuration
+  - parses category hub pages into one chunk per product card, keeping in-content links as "read more" pointers in `knowledge_chunk_links`
 - `RetrievalService.search()` combines dense and keyword candidates as follows:
   - fuses them with RRF and weights them by authority
   - applies an evidence threshold
-  - attaches citations, flags and conflict notices
+  - attaches citations, flags, hub-to-cost-sheet deferrals and conflict notices
+  - resolves "read more" pointers at query time
 
 **Tech Stack:** Python 3.11+, Pydantic v2, PostgreSQL 16 + pgvector (Docker), psycopg 3, sentence-transformers (BAAI/bge-m3), BeautifulSoup4, PyMuPDF, httpx, PyYAML, pytest.
 
@@ -47,7 +49,7 @@
 1. **Unusable source file:** a scanned PDF with no text layer, or an HTML page with no main content. Ingestion reports `FAILED` with a reason and writes nothing; an older good version stays in force. Test: Task 8, `test_document_without_chunks_writes_nothing`.
 2. **Hostile or odd query text:** whitespace only, longer than 1000 chars, or containing tsquery operators (`& | ! : * ( ) '`). Validation rejects the first two; the third searches normally with no SQL error. Tests: Task 2 `test_query_text_validation`, Task 9 `test_query_with_tsquery_operators_is_safe`.
 3. **Database down or embedding model missing at search time:** a typed error (`KnowledgeStoreUnavailable` / `EmbeddingModelUnavailable`), never `status="ok"` with no passages. Test: Task 9, `test_search_raises_typed_errors`.
-4. **Same document under two URLs in one run** (`.sv.pdf` alias and dated file, identical bytes): one document, one version. Test: Task 8, `test_alias_and_dated_pdf_share_one_version`.
+4. **Messy hrefs in page content:** `#`, `href=""`, `javascript:void(0)`, `tel:`/`mailto:`, relative paths, query strings or fragments, `http://` vs `https://`, or a missing `www`. Junk is ignored without crashing, and real targets normalize to one `canonical_key`, so the same page is never linked twice. Test: Task 4, `test_absolutize_odd_hrefs`.
 5. **Crash mid-ingestion of a document** (e.g. the embedder raises): the transaction rolls back, no half-written version, and the previous version stays in force. Test: Task 8, `test_failed_ingest_rolls_back`.
 
 ---
@@ -71,7 +73,9 @@
 | `src/services/document_ingestion/metadata.py` | Canonical key, effective date, campaign window |
 | `src/services/document_ingestion/chunking.py` | `ChunkDraft`, `ParsedDocument`, token estimate, packing, header |
 | `src/services/document_ingestion/parsers/__init__.py` | `parse_document()` dispatch |
-| `src/services/document_ingestion/parsers/html_page.py` | Product page / guide / FAQ page / article |
+| `src/services/document_ingestion/parsers/html_page.py` | Product page / guide / FAQ page / article; shared HTML cleanup and accordion helper |
+| `src/services/document_ingestion/parsers/links.py` | In-content link extraction model and filtering (§9a) |
+| `src/services/document_ingestion/parsers/category_hub.py` | Category hub pages: product cards, article-teaser block, FAQ |
 | `src/services/document_ingestion/parsers/pdf_rows.py` | Word-coordinate row rebuilding |
 | `src/services/document_ingestion/parsers/fee_list.py` | Fee list PDF |
 | `src/services/document_ingestion/parsers/general_terms.py` | CGB PDF |
@@ -83,7 +87,7 @@
 | `src/integrations/llm/embeddings.py` | `Embedder` protocol, `BgeM3Embedder` |
 | `src/storage/document_store/raw_store.py` | Content-addressed raw file storage |
 | `src/storage/document_store/repository.py` | Documents and versions |
-| `src/storage/vector_index/repository.py` | Chunks, candidate queries, passage fetch |
+| `src/storage/vector_index/repository.py` | Chunks and chunk links, candidate queries, passage fetch, link resolution |
 | `src/services/retrieval/ranking.py` | Pure fusion/threshold/flags/conflicts/dedupe |
 | `src/services/retrieval/service.py` | `RetrievalService` |
 | `src/services/retrieval/evaluation.py` | Eval models + metrics |
@@ -141,7 +145,7 @@
     - connects to `RAG_TEST_DATABASE_URL` (default `postgresql://rag:rag@127.0.0.1:5433/rag_test`)
     - `pytest.skip` if unreachable
     - once per session: drop and recreate schema `public`, then apply migrations
-    - per test: `TRUNCATE knowledge_chunks, knowledge_document_versions, knowledge_documents, index_runs RESTART IDENTITY CASCADE`
+    - per test: `TRUNCATE knowledge_chunk_links, knowledge_chunks, knowledge_document_versions, knowledge_documents, index_runs RESTART IDENTITY CASCADE`
 
 - [ ] **Step 1: Claim the task and set up the environment**
 
@@ -222,7 +226,7 @@ def test_schema_created(db_conn):
     tables = {r[0] for r in db_conn.execute(
         "select tablename from pg_tables where schemaname='public'")}
     assert {"knowledge_documents", "knowledge_document_versions",
-            "knowledge_chunks", "index_runs", "schema_migrations"} <= tables
+            "knowledge_chunks", "knowledge_chunk_links", "index_runs", "schema_migrations"} <= tables
 
 def test_unaccent_search_config_matches_without_diacritics(db_conn):
     row = db_conn.execute(
@@ -265,6 +269,11 @@ The migration implements spec §11, with these exact decisions:
   - `embedding vector(1024) not null`
   - `tsv tsvector generated always as (to_tsvector('ro_unaccent', header || ' ' || text)) stored`
   - indexes: HNSW `(embedding vector_cosine_ops)`, GIN `(tsv)`, GIN `(products)`, btree `(topic)`, btree `(version_id)`
+- **`knowledge_chunk_links`:**
+  - columns: `chunk_id bigint not null references knowledge_chunks on delete cascade`, `target_canonical_key text not null`, `anchor_text text not null`, `link_kind text not null check (link_kind in ('card','teaser','inline'))`, `ordinal int not null`
+  - constraint: `primary key (chunk_id, target_canonical_key)`
+  - index: btree `(target_canonical_key)`
+  - no FK to documents: targets are resolved at query time (spec §9a)
 - **`index_runs`:**
   - columns: `id bigserial pk`, `started_at timestamptz not null default now()`, `finished_at timestamptz`
   - `embedding_model text not null`, `chunker_version text not null`
@@ -292,19 +301,21 @@ Run `git add requirements.txt pytest.ini .env.example infrastructure/local src/c
 
 **Interfaces:**
 - Produces (all in `src.models.knowledge`):
-  - `DocKind(StrEnum)`: `product_page`, `guide`, `faq_page`, `article`, `fee_list`, `general_terms`, `cost_sheet`, `pdf_generic`
-  - `ChunkKind(StrEnum)`: `section`, `faq`, `worked_example`, `fee_table`, `clause`, `cost_facts`, `cost_examples`, `generic`
+  - `DocKind(StrEnum)`: `product_page`, `category_hub`, `guide`, `faq_page`, `article`, `fee_list`, `general_terms`, `cost_sheet`, `pdf_generic`
+  - `ChunkKind(StrEnum)`: `section`, `faq`, `worked_example`, `hub_card`, `hub_teasers`, `fee_table`, `clause`, `cost_facts`, `cost_examples`, `generic`
   - `Authority(StrEnum)`: `high`, `medium`, `low`
   - `AUTHORITY_BY_DOC_KIND: dict[DocKind, Authority]`:
     - high: product_page, fee_list, general_terms, cost_sheet, pdf_generic
     - medium: guide, faq_page
-    - low: article
+    - low: article, category_hub
+  - `LinkKind(StrEnum)`: `card`, `teaser`, `inline`
+  - `RelatedLink` fields: `title: str`, `url: str`, `canonical_key: str`, `link_kind: LinkKind`
   - `Product(StrEnum)`: `personal_loan`, `refinancing_unsecured`, `refinancing_mortgage`, `mortgage_casa_ta`, `mortgage_casa_ta_verde`, `mortgage_noua_casa`, `mortgage_residential_projects`, `overdraft`, `credit_card`, `general`
   - `Topic(StrEnum)` covers credit topics plus non-credit topics:
     - credit: `eligibility`, `costs_fees`, `worked_example`, `required_documents`, `early_repayment`, `refinancing`, `restructuring_difficulty`, `variable_rate_ircc`, `repayment_methods`, `credit_process`, `general_terms_credit`
     - non-credit: `accounts`, `payments`, `cards`, `data_protection`, `aml`, `other`
   - `CREDIT_TOPICS: frozenset[Topic]`: the 11 credit topics above.
-  - `PassageFlag(StrEnum)`: `superseded`, `withdrawn`, `campaign_active`, `campaign_ended`, `low_authority`
+  - `PassageFlag(StrEnum)`: `superseded`, `withdrawn`, `campaign_active`, `campaign_ended`, `low_authority`, `teaser_figure`
   - `SearchStatus(StrEnum)`: `ok`, `insufficient_evidence`
   - `SearchQuery` fields:
     - `text: str` (stripped, 1–1000 chars)
@@ -319,7 +330,7 @@ Run `git add requirements.txt pytest.ini .env.example infrastructure/local src/c
   - `Citation` fields: `publisher: str`, `title: str`, `url: str`, `page: int | None`, `anchor: str | None`, `section_path: list[str]`, `version_label: str | None`, `effective_date: date`, `fetched_at: datetime`, `campaign_valid_until: date | None`
   - `Scores` fields: `dense: float | None`, `keyword: float | None`, `fused: float`
   - `PassageContext` fields: `previous: str | None`, `next: str | None`
-  - `Passage` fields: `chunk_id: int`, `document_id: int`, `doc_kind: DocKind`, `topic: Topic`, `products: list[Product]`, `authority: Authority`, `header: str`, `text: str`, `citation: Citation`, `scores: Scores`, `flags: list[PassageFlag] = []`, `warnings: list[str] = []`, `context: PassageContext | None = None`
+  - `Passage` fields: `chunk_id: int`, `document_id: int`, `doc_kind: DocKind`, `kind: ChunkKind`, `topic: Topic`, `products: list[Product]`, `authority: Authority`, `header: str`, `text: str`, `citation: Citation`, `scores: Scores`, `flags: list[PassageFlag] = []`, `warnings: list[str] = []`, `defer_to: int | None = None`, `context: PassageContext | None = None`, `related_links: list[RelatedLink] = []`
   - `Conflict` fields: `doc_kind: DocKind`, `topic: Topic`, `product: Product`, `chunk_ids: list[int]`, `effective_dates: list[date]`
   - `IndexInfo` fields: `embedding_model: str`, `chunker_version: str`, `last_ingest_at: datetime`
   - `SearchResult` fields: `status: SearchStatus`, `passages: list[Passage] = []`, `conflicts: list[Conflict] = []`, `index_info: IndexInfo | None = None`, `content_trust: Literal["untrusted_evidence"] = "untrusted_evidence"`
@@ -346,6 +357,7 @@ def test_result_marks_content_untrusted():
 def test_authority_map_complete():
     assert set(AUTHORITY_BY_DOC_KIND) == set(DocKind)
     assert AUTHORITY_BY_DOC_KIND[DocKind.article] is Authority.low
+    assert AUTHORITY_BY_DOC_KIND[DocKind.category_hub] is Authority.low
 ```
 
 - [ ] **Step 2: Run them and confirm they fail.** Run: `.venv/Scripts/python -m pytest tests/unit/rag/test_models.py -v`. Expected: ImportError.
@@ -385,13 +397,22 @@ def test_authority_map_complete():
     - `discovery_seeds: list[str]` (fetched for links, not indexed)
     - `extra_urls: list[str]`
     - `drop_headings: list[str]`
+    - `category_hubs: list[str]` (exact URLs classified as `category_hub`)
+    - `link_drop_patterns: list[str]` (regex; links matching any are never kept)
     - `doc_kind_rules: list[PatternRule[DocKind]]`
     - `product_rules: list[ProductRule]`, where `ProductRule = {pattern: str, products: list[Product]}`
     - `topic_keyword_rules: list[TopicRule]`, where `TopicRule = {pattern: str, topic: Topic}`, regex matched case- and accent-insensitively
     - `general_terms_sections: dict[str, Topic]` (number prefix → topic)
     - `fee_list_sections: dict[str, SectionClass]`, where `SectionClass = {topic: Topic, products: list[Product]}`
     - `default_topic_by_doc_kind: dict[DocKind, Topic]`
-  - `classify_document(url: str, cfg: SourceConfig) -> tuple[DocKind, list[Product]]`: first matching doc_kind rule, else `pdf_generic` for `.pdf` and `product_page` otherwise. Products come from the first matching product rule, else `[Product.general]`.
+  - `products_for_url(url: str, cfg: SourceConfig) -> list[Product]`: first matching product rule, else `[Product.general]`.
+  - `classify_document(url: str, cfg: SourceConfig) -> tuple[DocKind, list[Product]]`:
+    - URLs listed in `category_hubs` (compared after stripping query and fragment) → `category_hub`
+    - else the first matching doc_kind rule
+    - else `pdf_generic` for `.pdf` and `product_page` otherwise
+
+    Products come from `products_for_url`.
+  - `is_allowed_url(url: str, cfg: SourceConfig) -> bool`: true when the URL (query and fragment stripped) matches any `page_allow` or `pdf_allow` pattern and no `link_drop_patterns` pattern.
   - `classify_topic(doc_kind: DocKind, chunk_kind: ChunkKind, section_path: list[str], text: str, cfg: SourceConfig) -> Topic`. It checks, in order:
     1. `chunk_kind == worked_example` → `worked_example`
     2. `cost_facts` → `costs_fees`
@@ -419,6 +440,14 @@ discovery_seeds:
 extra_urls: []
 drop_headings: ["Când și de ce", "Cum obții", "Calculează rata", "Ce spun clienții", "gândit pentru tine",
                 "Articole utile", "Descoperă mai multe", "Motive în plus", "Lasă-ne datele"]
+category_hubs:
+  - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite.html
+  - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-de-nevoi-personale.html
+  - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-imobiliare.html
+  - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-de-refinantare.html
+link_drop_patterns:
+  - "adjust\\.com|\\.adj\\.st|go\\.link"
+  - "/agentii|harta-agentiilor|locator|programare-online|rezerva"
 doc_kind_rules:
   - {pattern: "/costuri/", value: cost_sheet}
   - {pattern: "tarife-comisioane", value: fee_list}
@@ -459,7 +488,7 @@ fee_list_sections:
   "5": {topic: payments, products: [general]}
   "6": {topic: cards, products: [general]}
   "7": {topic: costs_fees, products: [credit_card]}
-default_topic_by_doc_kind: {product_page: credit_process, guide: credit_process, faq_page: credit_process,
+default_topic_by_doc_kind: {product_page: credit_process, category_hub: credit_process, guide: credit_process, faq_page: credit_process,
                             article: credit_process, cost_sheet: costs_fees, pdf_generic: credit_process,
                             fee_list: other, general_terms: other}
 ```
@@ -507,6 +536,16 @@ def test_classify_document_and_topic():
     assert classify_topic(DocKind.general_terms, ChunkKind.clause, ["5. Card", "5.1 Emiterea"], "", cfg) is Topic.cards
     assert classify_topic(DocKind.product_page, ChunkKind.section, ["Flexicredit", "Ce acte îți trebuie"], "act de identitate", cfg) is Topic.required_documents
     assert classify_topic(DocKind.cost_sheet, ChunkKind.cost_facts, [], "", cfg) is Topic.costs_fees
+
+def test_hubs_and_link_allowlist():
+    cfg = load_source_config(Path("config/rag/sources.yaml"))
+    C = "https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/"
+    assert classify_document(C + "credite-de-nevoi-personale.html", cfg)[0] is DocKind.category_hub
+    assert classify_document(C + "credite-de-nevoi-personale/conditii-credit-nevoi-personale.html", cfg)[0] is DocKind.guide
+    assert products_for_url(C + "overdraft.html", cfg) == [Product.overdraft]
+    assert is_allowed_url(C + "overdraft.html#x", cfg)
+    assert not is_allowed_url("https://raiffeisen.go.link/abc", cfg)
+    assert not is_allowed_url("https://www.raiffeisen.ro/ro/contact/agentii.html", cfg)
 ```
 
 - [ ] **Step 3: Run them and confirm they fail.** Run: `.venv/Scripts/python -m pytest tests/unit/rag/test_normalize.py tests/unit/rag/test_metadata.py tests/unit/rag/test_sources.py -v`. Expected: ImportError.
@@ -516,55 +555,111 @@ def test_classify_document_and_topic():
 
 ---
 
-### Task 4: Chunk primitives and HTML parser
+### Task 4: Chunk primitives, HTML parsers and "read more" links
 
 **Files:**
 - Create:
   - `src/services/document_ingestion/chunking.py`
   - `src/services/document_ingestion/parsers/__init__.py`
+  - `src/services/document_ingestion/parsers/links.py`
   - `src/services/document_ingestion/parsers/html_page.py`
-  - `tests/fixtures/rag/product_page.html`, `tests/fixtures/rag/faq_page.html`
-- Test: `tests/unit/rag/test_chunking.py`, `tests/unit/rag/test_html_parser.py`
+  - `src/services/document_ingestion/parsers/category_hub.py`
+  - `tests/fixtures/rag/product_page.html`, `tests/fixtures/rag/faq_page.html`, `tests/fixtures/rag/category_hub.html`
+- Test: `tests/unit/rag/test_chunking.py`, `tests/unit/rag/test_html_parser.py`, `tests/unit/rag/test_links.py`, `tests/unit/rag/test_category_hub_parser.py`
 
 **Interfaces:**
-- Consumes: `ChunkKind`, `DocKind`, `SourceConfig`, `normalize_text`.
+- Consumes: `ChunkKind`, `DocKind`, `LinkKind`, `Product`, `SourceConfig`, `normalize_text`, `canonical_key`, `products_for_url`, `is_allowed_url`.
 - Produces:
   - `CHUNKER_VERSION = "1"`, `MAX_TOKENS = 500`
   - `estimate_tokens(text: str) -> int` (= `max(1, len(text) // 4)`)
-  - `@dataclass ChunkDraft` fields: `kind: ChunkKind`, `section_path: list[str]`, `text: str`, `page: int | None = None`, `anchor: str | None = None`
+  - `@dataclass ExtractedLink` (in `parsers/links.py`) fields: `target_url: str` (absolute, no query or fragment), `anchor_text: str`, `link_kind: LinkKind`
+  - `@dataclass ChunkDraft` fields: `kind: ChunkKind`, `section_path: list[str]`, `text: str`, `page: int | None = None`, `anchor: str | None = None`, `products_override: list[Product] | None = None`, `links: list[ExtractedLink] = field(default_factory=list)`
   - `@dataclass ParsedDocument` fields: `title: str`, `chunks: list[ChunkDraft]`, `metadata_text: str` (cleaned full text for date/campaign detection), `parser_name: str`, `parser_version: str = CHUNKER_VERSION`, `warnings: list[str] = field(default_factory=list)`
   - `pack_lines(lines: list[str], max_tokens: int = MAX_TOKENS, repeat_header: str | None = None) -> list[str]`: greedy packing on line boundaries. A single line over the limit becomes its own piece and is not split. `repeat_header` is prepended to every piece after the first.
   - `build_header(title: str, section_path: list[str], effective_date: date) -> str`, for example `"Raiffeisen Bank › {title} › {p1} › {p2} · {YYYY-MM-DD}"`. Empty path parts are skipped. With no path, the format is `"Raiffeisen Bank › {title} · {date}"`.
-  - `parse_html_page(data: bytes, drop_headings: Sequence[str]) -> ParsedDocument` with `parser_name="html_page"`
-  - `parse_document(doc_kind: DocKind, data: bytes, cfg: SourceConfig) -> ParsedDocument`: dispatches HTML kinds to `parse_html_page` and PDF kinds to the parsers of Tasks 5–6.
-- HTML rules (spec §9, as validated by the spike):
-  - **Removed:** `header, footer, nav, script, style, form, noscript` are removed.
-  - **Root:** `<main>`, else `<body>`.
+  - `links.py`:
+    - `absolutize(href: str, page_url: str) -> str | None`: joins the href with `page_url`, strips query and fragment, and returns `None` for `mailto:`, `tel:`, `javascript:`, empty and fragment-only hrefs. A raiffeisen.ro host with or without `www`, over http or https, normalizes to `https://www.raiffeisen.ro`.
+    - `filter_chunk_links(chunks: list[ChunkDraft], page_url: str, cfg: SourceConfig, chip_targets: frozenset[str] = frozenset()) -> None`. Mutates each chunk's `links`, keeping only links that pass all of these:
+      - `is_allowed_url`
+      - target not a self-link (`canonical_key(target) == canonical_key(page_url)`)
+      - target not in `chip_targets`
+      - first occurrence of that `canonical_key` within the chunk
+  - `html_page.py`:
+    - `clean_html(data: bytes) -> BeautifulSoup`: removes `script, style, form, noscript`, and removes `header, footer, nav` **only when they are not inside a `.cmp-teaser`**. Content-component headers and footers keep their links.
+    - `content_root(soup) -> Tag` (`<main>`, else `<body>`)
+    - `accordion_chunk(item: Tag, path_prefix: list[str], page_url: str) -> ChunkDraft`: shared by both HTML parsers
+    - `parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocument` with `parser_name="html_page"`; it uses `cfg.drop_headings` and calls `filter_chunk_links` before returning
+  - `category_hub.py`: `parse_category_hub(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocument` with `parser_name="category_hub"`
+  - `parse_document(doc_kind: DocKind, data: bytes, url: str, cfg: SourceConfig) -> ParsedDocument` dispatches as follows:
+    - `category_hub` → `parse_category_hub`
+    - other HTML kinds → `parse_html_page`
+    - PDF kinds → the parsers of Tasks 5–6, which ignore `url` and `cfg`
+- HTML page rules (spec §9, as validated by the spike):
+  - **Cleanup:** via `clean_html`. **Root:** `content_root`.
   - **Title:** h1 text, else `<title>` before `|`.
   - **Walk:** walk `h1,h2,h3,p,li,table,div.cmp-accordion__item` in document order.
   - **Accordions:** each `.cmp-accordion__item` produces one `faq` chunk, `"Întrebare: {q}\nRăspuns: {a}"`. `q` comes from `.cmp-accordion__title`; `a` comes from the `p, li` inside `.cmp-accordion__panel`. Its section path is `[h1, h2 or h3 group heading, q]`. Elements inside an accordion item are not walked separately.
   - **Section headings:** a non-accordion h1/h2/h3 flushes the buffer and sets the path. A heading whose text matches a `drop_headings` entry (substring) drops everything until the next heading of the same or higher level.
   - **Heading-only content:** if an h3 is followed by another heading with no body text in between, the h3 text is added to the parent h2 section buffer as a `- {text}` line.
   - **Worked examples:** a `p` whose text starts with `Exemplu de calcul` flushes the buffer and starts a `worked_example` chunk. The chunk ends at the next heading or the next `Exemplu de calcul` paragraph. The next non-example paragraph after the example's body also ends it: an example body is the heading paragraph plus the paragraphs up to the first one that does not begin with `Pentru un credit`.
-  - **Text cleanup:** `p`/`li` nested in `li`/`table` are skipped. `li` text gets a `- ` prefix. Tables become ` | `-joined rows. Exact duplicate text blocks are dropped.
+  - **Text cleanup:** `p`/`li` nested in `li`/`table` are skipped. `li` text gets a `- ` prefix. Tables become ` | `-joined rows. Exact duplicate text blocks are dropped. Whitespace before punctuation is removed (`re.sub(r"\s+([.,;:!?])", r"\1", ...)`).
+  - **Inline links:** every `<a href>` inside a walked `p`, `li`, table cell or accordion panel becomes an `inline` link on the chunk that element's text ends up in. When a section is split by `pack_lines`, each link goes with the piece that contains its line.
   - **Splitting:** section buffers become `section` chunks, split via `pack_lines`.
+- Category hub rules (spec §9 `category_hub`, matching the real markup verified on 2026-10-28):
+  - **Cleanup:** via `clean_html`. The h1 and the paragraphs before the first h2 are dropped (marketing intro).
+  - **Teasers:** each `.cmp-teaser`:
+    - Title: the first `h3` inside it.
+    - Description: its `p` text, punctuation-fixed, so `"Dobândă de la <b>5,55%</b>."` becomes `"Dobândă de la 5,55%."`.
+    - Button link: the `<a>` inside `.cmp-buttonbar`. Image link: the `<a class="cmp-image__link">`.
+    - Primary target: the button link, else the image link.
+  - **Card vs article teaser:** a teaser whose button text starts with `Citește` is an **article teaser**; any other teaser is a **product card**.
+  - **Product cards:** each card becomes one `hub_card` chunk:
+    - text `"{title}\n{description}"`
+    - `section_path=[enclosing h2 text, title]`
+    - `products_override=products_for_url(primary_target, cfg)`
+    - links: the primary target as `card`
+  - **Article teasers:** all article teasers under the same h2 become one `hub_teasers` chunk:
+    - text `"{h2}\n- {title1}\n- {title2}…"`
+    - `section_path=[h2]`
+    - links: each teaser's button target as `teaser`, with the title as anchor text
+  - **Chip rule** (the design's "repeated identically in every teaser" rule, made precise): a target that appears in ≥ 2 teasers on the page and is never any teaser's button target goes into `chip_targets`. The real case is the credit-card article image link on every article teaser. Pass `chip_targets` to `filter_chunk_links`. A card's own image link is never a chip, because it equals that card's button target.
+  - **FAQ:** accordion items become `faq` chunks via `accordion_chunk`, with `section_path=[h2, q]`.
+  - **Title:** the `<title>` text before `|`.
 
-- [ ] **Step 1: Write the synthetic fixtures**
+- [ ] **Step 1: Write the synthetic fixtures** (invented product names; only the link URLs are real raiffeisen.ro paths)
 
 `product_page.html` is a synthetic AEM-like page for an invented product "Credit Demo". It contains:
-- h1
-- h2 `Ce condiții trebuie să îndeplinești?` followed by three h3 conditions with no body (`Vârstă între 20 și 60 de ani`, `Venit minim 2.500 lei`, `Minimum 6 luni la locul de muncă`)
-- h2 `Ce acte îți trebuie` with one `p`
-- h2 `Exemple de calcul` with an intro `p`, two `Exemplu de calcul …` paragraphs each followed by a `Pentru un credit …` paragraph, then a trailing `p` `Ofertele sunt supuse unor termeni.`
-- h2 `Articole utile` with an h3 and a `p` (to be dropped)
+- a site-level `<header>` with a nav link and a `<footer>`, both outside `<main>`
+- an h1
+- an h2 `Ce condiții trebuie să îndeplinești?` followed by three h3 conditions with no body (`Vârstă între 20 și 60 de ani`, `Venit minim 2.500 lei`, `Minimum 6 luni la locul de muncă`)
+- an h2 `Ce acte îți trebuie` with one `p` that contains the inline link `<a href="/ro/persoane-fizice/produsele-noastre/credite/credite-de-nevoi-personale/conditii-credit-nevoi-personale.html">articolul despre condiții</a>`, plus a second link to `https://raiffeisen.go.link/x`
+- an h2 `Exemple de calcul` with:
+  - an intro `p`
+  - two `Exemplu de calcul …` paragraphs, each followed by a `Pentru un credit …` paragraph
+  - a trailing `p` `Ofertele sunt supuse unor termeni.`
+- an h2 `Articole utile` with an h3 and a `p` (to be dropped)
 - one accordion item `Pot rambursa anticipat?`
 - the same `p` text duplicated once
+- a link to the page itself
 
 `faq_page.html` has two h3 group headings, each followed by two accordion items.
+
+`category_hub.html` mirrors the real hub structure:
+- a site `<header>`, an h1 and an intro `p`
+- an h2 `Credite demo în detaliu` with two product cards (`article.cmp-teaser`, each with `header.cmp-teaser__header` > image link and `.cmp-buttonbar` > button `Află mai multe`):
+  - `Credit Demo fără ipotecă`: description `Aplici ușor. Dobândă de la <b>6,10%</b>.`, target `/ro/persoane-fizice/produsele-noastre/credite/credit-de-nevoi-personale-fara-ipoteca.html` on both links
+  - `Overdraft Demo`: button only, target `/ro/persoane-fizice/produsele-noastre/credite/overdraft.html`
+- an h2 `Vrei să știi mai multe?` with three article teasers (button `Citește articolul`). Each has its own button target under `/credite/credite-de-nevoi-personale/…`, and every one has the same image link `/ro/persoane-fizice/produsele-noastre/carduri/carduri-de-cumparaturi/de-ce-sa-folosesti-cardul-de-credit-pentru-cumparaturi-pro-si-contra.html`.
+- an h2 `FAQ Întrebări frecvente` with two accordion items
 
 - [ ] **Step 2: Write failing tests**
 
 ```python
+CFG = load_source_config(Path("config/rag/sources.yaml"))
+BASE = "https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/"
+PAGE_URL = BASE + "credit-de-nevoi-personale-fara-ipoteca.html"
+HUB_URL = BASE + "credite-de-nevoi-personale.html"
+
 def test_pack_lines_respects_limit_and_repeats_header():
     lines = ["x" * 800] * 5                     # 200 tokens each
     parts = pack_lines(lines, max_tokens=500, repeat_header="H")
@@ -574,7 +669,7 @@ def test_build_header():
     assert build_header("Credit Demo", ["Costuri", ""], date(2026, 10, 15)) == "Raiffeisen Bank › Credit Demo › Costuri · 2026-10-15"
 
 def _page():
-    return parse_html_page(Path("tests/fixtures/rag/product_page.html").read_bytes(), drop_headings=["Articole utile"])
+    return parse_html_page(Path("tests/fixtures/rag/product_page.html").read_bytes(), PAGE_URL, CFG)
 
 def test_heading_only_conditions_are_kept():
     elig = [c for c in _page().chunks if "Ce condiții" in " ".join(c.section_path)]
@@ -586,24 +681,70 @@ def test_worked_examples_are_atomic_and_exclude_trailing_text():
     assert all("Ofertele sunt supuse" not in c.text for c in ex)
 
 def test_faq_items_become_qa_chunks():
-    faq = [c for c in parse_html_page(Path("tests/fixtures/rag/faq_page.html").read_bytes(), drop_headings=[]).chunks if c.kind is ChunkKind.faq]
+    faq = [c for c in parse_html_page(Path("tests/fixtures/rag/faq_page.html").read_bytes(), BASE + "x/intrebari-frecvente-demo.html", CFG).chunks if c.kind is ChunkKind.faq]
     assert len(faq) == 4 and faq[0].text.startswith("Întrebare: ") and "\nRăspuns: " in faq[0].text
     assert len(faq[0].section_path) == 3
 
-def test_dropped_sections_and_duplicates():
+def test_dropped_sections_duplicates_and_site_chrome():
     doc = _page()
     assert not any("Articole utile" in " ".join(c.section_path) for c in doc.chunks)
     joined = "\n".join(c.text for c in doc.chunks)
     assert joined.count("<the duplicated paragraph text from the fixture>") == 1
+    assert "<site header nav text from the fixture>" not in joined
     assert doc.title and doc.parser_name == "html_page"
+
+def test_inline_links_kept_filtered_and_attached():          # in test_links.py
+    acte = next(c for c in _page().chunks if "Ce acte" in " ".join(c.section_path))
+    assert [(l.target_url, l.link_kind) for l in acte.links] == [
+        (BASE + "credite-de-nevoi-personale/conditii-credit-nevoi-personale.html", LinkKind.inline)]
+    assert all(l.target_url != PAGE_URL for c in _page().chunks for l in c.links)   # self-link dropped
+
+def test_absolutize_odd_hrefs():                             # in test_links.py
+    page = PAGE_URL
+    for junk in ["", "#", "#top", "javascript:void(0)", "tel:*2000", "mailto:a@b.ro"]:
+        assert absolutize(junk, page) is None
+    assert absolutize("overdraft.html?utm=x#faq", page) == BASE + "overdraft.html"
+    assert canonical_key(absolutize("http://raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/overdraft.html", page)) == canonical_key(BASE + "overdraft.html")
+
+def test_clean_html_keeps_teaser_header_links():             # in test_links.py
+    soup = clean_html(Path("tests/fixtures/rag/category_hub.html").read_bytes())
+    assert soup.select("article.cmp-teaser header.cmp-teaser__header a.cmp-image__link")
+    assert not soup.select("body > header")
+
+def _hub():
+    return parse_category_hub(Path("tests/fixtures/rag/category_hub.html").read_bytes(), HUB_URL, CFG)
+
+def test_hub_cards_one_chunk_each_with_product_from_link_target():
+    cards = [c for c in _hub().chunks if c.kind is ChunkKind.hub_card]
+    assert [c.section_path[-1] for c in cards] == ["Credit Demo fără ipotecă", "Overdraft Demo"]
+    assert cards[0].text == "Credit Demo fără ipotecă\nAplici ușor. Dobândă de la 6,10%."
+    assert cards[0].products_override == [Product.personal_loan] and cards[1].products_override == [Product.overdraft]
+    assert [l.link_kind for l in cards[0].links] == [LinkKind.card]
+
+def test_hub_article_teasers_one_block_without_chip_link():
+    block = [c for c in _hub().chunks if c.kind is ChunkKind.hub_teasers]
+    assert len(block) == 1 and block[0].text.count("\n- ") == 3
+    targets = [l.target_url for l in block[0].links]
+    assert len(targets) == 3 and all("/carduri/" not in t for t in targets)
+    assert all(l.link_kind is LinkKind.teaser for l in block[0].links)
+
+def test_hub_faq_and_intro_dropped():
+    doc = _hub()
+    assert sum(c.kind is ChunkKind.faq for c in doc.chunks) == 2
+    assert not any("<hub h1 text from the fixture>" in c.text for c in doc.chunks)
+    assert doc.parser_name == "category_hub"
 ```
 
-The implementer writes the actual duplicated sentence from the fixture into the last assertion.
+The implementer replaces the `<…>` placeholders with the actual strings from their fixtures.
 
-- [ ] **Step 3: Run them and confirm they fail.** Run: `.venv/Scripts/python -m pytest tests/unit/rag/test_chunking.py tests/unit/rag/test_html_parser.py -v`.
-- [ ] **Step 4: Implement `chunking.py`, `parsers/html_page.py`, and `parsers/__init__.py`.** PDF kinds raise `NotImplementedError` until Tasks 5–6.
+- [ ] **Step 3: Run them and confirm they fail.** Run: `.venv/Scripts/python -m pytest tests/unit/rag/test_chunking.py tests/unit/rag/test_html_parser.py tests/unit/rag/test_links.py tests/unit/rag/test_category_hub_parser.py -v`.
+- [ ] **Step 4: Implement `chunking.py`, `parsers/links.py`, `parsers/html_page.py`, `parsers/category_hub.py` and `parsers/__init__.py`.** PDF kinds raise `NotImplementedError` until Tasks 5–6.
 - [ ] **Step 5: Run them and confirm they pass.**
-- [ ] **Step 6: Commit.** Message: `agent(rag): chunk primitives and structure-aware HTML parser`.
+- [ ] **Step 6: Smoke-check on the real hub** (`~/rag-spike/input/hub-nevoi.html`, not committed). Parse it with `parse_category_hub` against its real URL `https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-de-nevoi-personale.html` and print each chunk's kind, products and links. Expected:
+  - two `hub_card` chunks: the Flexicredit card (`personal_loan`, text containing `Dobândă de la 5,55%`) and the Overdraft card (`overdraft`)
+  - one `hub_teasers` chunk with 5 article links and no `/carduri/` link
+  - 3 `faq` chunks
+- [ ] **Step 7: Commit.** Message: `agent(rag): chunk primitives, HTML and category hub parsers with read-more links`.
 
 ---
 
@@ -847,6 +988,7 @@ Expected: `1024`.
   - `canonical_key`, `extract_effective_date`, `extract_campaign_window`
   - `build_header`, `estimate_tokens`, `CHUNKER_VERSION`
   - `AUTHORITY_BY_DOC_KIND`, `Embedder`, `db_conn`, `HashingEmbedder`
+  - `ChunkDraft.products_override` / `ChunkDraft.links` (Task 4)
 - Produces:
   - `ManifestEntry` (pydantic) fields: `url: str`, `final_url: str`, `fetched_at: datetime`, `status_code: int | None`, `content_type: str | None`, `sitemap_lastmod: date | None`, `sha256: str | None`, `raw_path: str | None`, `error: str | None = None`, `index: bool = True`, `withdrawn: bool = False`
   - `read_manifest(path: Path) -> list[ManifestEntry]` and `write_manifest(path: Path, entries: list[ManifestEntry]) -> None` (JSON lines, whole-file rewrite)
@@ -859,6 +1001,8 @@ Expected: `1024`.
   - `NewVersion` (dataclass) fields: `content_hash`, `version_label: str | None`, `effective_from: date`, `effective_date_source: str`, `fetched_at: datetime`, `sitemap_lastmod: date | None`, `raw_path: str`, `campaign_valid_until: date | None`, `parser_name: str`, `parser_version: str`
   - `ChunkRecord` (dataclass) fields: `ordinal, kind, topic, products, authority, section_path, page, anchor, header, text, token_count, parent_section_key, embedding`
   - `insert_chunks(conn, version_id: int, records: list[ChunkRecord]) -> list[int]`: inserts in ordinal order, then sets `prev_chunk_id`/`next_chunk_id`.
+  - `ChunkLinkRecord` (dataclass) fields: `target_canonical_key: str`, `anchor_text: str`, `link_kind: LinkKind`, `ordinal: int`
+  - `insert_chunk_links(conn, chunk_id: int, links: list[ChunkLinkRecord]) -> None`: uses `ON CONFLICT (chunk_id, target_canonical_key) DO NOTHING`.
   - `IngestOutcome(StrEnum)`: `created`, `unchanged`, `failed`, `withdrawn`, `skipped`
   - `IngestReport` (pydantic) fields: `run_id: int`, `outcomes: dict[str, IngestOutcome]` (by URL), `errors: dict[str, str]`, `warnings: dict[str, list[str]]`
   - `IngestionPipeline(conn, embedder: Embedder, cfg: SourceConfig)` methods:
@@ -871,16 +1015,19 @@ Expected: `1024`.
     - `withdrawn=True` → `mark_withdrawn([canonical_key(url)])` → `withdrawn`
     - `index=False`, or no `raw_path`, or status ≠ 200 → `skipped`
   - `ingest_one` does the following:
-    - classifies and parses
+    - classifies and parses (`parse_document(doc_kind, data, entry.final_url, cfg)`)
     - **no chunks → `failed` with "no extractable content", and nothing is written**
     - derives metadata
     - runs inside `with conn.transaction():`
       - upsert document
       - same hash → `unchanged`
       - else create version
-      - build records: topic via `classify_topic`; fee-list products via `fee_section_products`, else document products; `parent_section_key=" › ".join(section_path[:2])`
+      - build records:
+        - topic via `classify_topic`
+        - products: `chunk.products_override`, else (fee list) `fee_section_products`, else the document's products
+        - `parent_section_key=" › ".join(section_path[:2])`
       - embed `header + "\n" + text` in one `embed_documents` call
-      - insert chunks
+      - insert chunks, then each chunk's links via `insert_chunk_links`, with `target_canonical_key=canonical_key(link.target_url)` and ordinals in extraction order
     - any exception → rollback → `failed` with `str(exc)`
   - `version_label`: the effective date as ISO, plus the source (e.g. `"2026-09-01 (document_text)"`).
 
@@ -928,6 +1075,14 @@ def test_failed_ingest_rolls_back(db_conn):
 
 def test_withdrawn_entry_marks_document(db_conn): ...  # status becomes 'withdrawn'
 
+def test_hub_cards_and_links_stored(db_conn):
+    p.ingest_one(entry(HUB_URL), HUB_HTML)        # category_hub.html fixture from Task 4
+    rows = db_conn.execute("select c.kind, c.products, c.authority from knowledge_chunks c where c.kind = 'hub_card' order by c.ordinal").fetchall()
+    assert [(r[0], r[1], r[2]) for r in rows] == [("hub_card", ["personal_loan"], "low"), ("hub_card", ["overdraft"], "low")]
+    keys = [r[0] for r in db_conn.execute("select target_canonical_key from knowledge_chunk_links order by chunk_id, ordinal")]
+    assert "/ro/persoane-fizice/produsele-noastre/credite/overdraft.html" in keys
+    assert not any("/carduri/" in k for k in keys)
+
 def test_ingest_entries_records_index_run(db_conn, tmp_path):
     rep = p.ingest_entries([...], tmp_path)
     status, model, chunker = db_conn.execute("select status, embedding_model, chunker_version from index_runs where id=%s", (rep.run_id,)).fetchone()
@@ -966,11 +1121,12 @@ def test_campaign_window_stored_on_version(db_conn):
     - `fetch_passage_rows(conn, chunk_ids, as_of: date) -> dict[int, PassageRow]`
     - `fetch_neighbor_texts(conn, chunk_ids) -> dict[int, tuple[str | None, str | None]]`
     - `latest_index_info(conn) -> IndexInfo | None`
+    - `fetch_related_links(conn, chunk_ids: list[int], as_of: date) -> dict[int, list[RelatedLink]]`: joins `knowledge_chunk_links` to `knowledge_documents` on `canonical_key`. Spec §9a: it keeps only targets with `status = 'active'` that have a version with `effective_from <= as_of`. `title` is the document title, falling back to `anchor_text` if the title is empty. `url` is the document's `source_url`. Ordered by link `ordinal`.
   - "In force" SQL. Use this exact semantics as a CTE `in_force`: per document, the version with the greatest `(effective_from, ingested_at)` among versions with `effective_from <= %(as_of)s`. Filters behave as follows:
     - Without `include_superseded`, only `in_force` versions are searched. With it, every version with `effective_from <= as_of` is searched, so future-dated versions stay excluded either way.
     - Without `include_withdrawn`, `d.status = 'active'` is required.
     - `topic = ANY`, `products && %(products)s` when given, and `doc_kind = ANY` when given.
-  - `PassageRow` (dataclass): every `Passage`/`Citation` field source, plus `in_force: bool`, `withdrawn: bool`, `campaign_valid_until`.
+  - `PassageRow` (dataclass): every `Passage`/`Citation` field source (including the chunk `kind`), plus `in_force: bool`, `withdrawn: bool`, `campaign_valid_until`.
   - Pure functions in `ranking.py`:
     - `query_terms(text: str) -> list[str]`: accent-stripped lowercase `\w{2,}` tokens minus `RO_STOPWORDS`, deduplicated, in order. `RO_STOPWORDS` = `și si sau de la în in pe cu un o ce care este sunt pentru din mi îmi imi pot am ai a al ale lui să sa nu da cum cât cat dacă daca mai există exista trebuie fi se eu tu meu mea vreau vrea`.
     - `rrf_fuse(dense: list[Candidate], keyword: list[Candidate], k: int) -> dict[int, float]` (sum of `1/(k + rank)`, rank starting at 1)
@@ -983,8 +1139,10 @@ def test_campaign_window_stored_on_version(db_conn):
       - `superseded` if not `in_force`
       - `withdrawn`
       - `low_authority` if authority is low
+      - `teaser_figure` if the chunk kind is `hub_card`
       - `campaign_active` if `campaign_valid_until >= as_of`, with warning `f"This page advertises a time-limited campaign running until {d:%Y-%m-%d}."`
       - `campaign_ended` if `campaign_valid_until < as_of`, with warning `f"This page advertised a campaign that ended on {d:%Y-%m-%d}; its figures may be out of date until the page is re-fetched."`
+    - `apply_hub_deferral(passages: list[Passage]) -> None`: for each passage flagged `teaser_figure`, find the highest-ranked passage in the same list that has `doc_kind == cost_sheet`, is not `superseded`, and shares a product other than `general`. If found, set `defer_to` to its `chunk_id` and append the warning `f"Teaser figure; the cost sheet passage {chunk_id} holds the authoritative rates and fees."` Hub/cost-sheet pairs never produce conflicts, because `detect_conflicts` groups by `doc_kind`.
     - `detect_conflicts(passages: list[Passage]) -> list[Conflict]`: only considers passages without `superseded`. Groups by `(doc_kind, topic, product)` for each product except `general`. Emits one `Conflict` per group with ≥ 2 distinct `document_id`s, listing chunk ids and each passage's `citation.effective_date`.
   - `RetrievalService(connect: Callable[[], psycopg.Connection], embedder: Embedder, settings: RagSettings)`, with `search(query: SearchQuery) -> SearchResult`. Its steps:
     1. embed the query; any exception becomes `EmbeddingModelUnavailable`
@@ -993,10 +1151,11 @@ def test_campaign_window_stored_on_version(db_conn):
     4. run the threshold check; on failure return `SearchResult(status=insufficient_evidence, index_info=...)`
     5. fuse, apply authority, sort
     6. fetch rows for the top `3 * top_k`, build passages, dedupe, take `top_k`
-    7. set flags and warnings
+    7. set flags and warnings, then `apply_hub_deferral`
     8. detect conflicts
     9. expand context if requested
-    10. return `ok` with `index_info`
+    10. attach `related_links` via `fetch_related_links` (these never affect ranking or the threshold)
+    11. return `ok` with `index_info`
 
 - [ ] **Step 1: Write failing unit tests** in `test_ranking.py`:
 
@@ -1029,13 +1188,31 @@ def test_conflicts_only_same_kind_topic_specific_product():
     cs = detect_conflicts([a, b, c, g])
     assert len(cs) == 1 and cs[0].product is Product.personal_loan and sorted(cs[0].chunk_ids) == [a.chunk_id, b.chunk_id]
 
+def test_teaser_flag_and_hub_deferral():
+    card = passage(1, doc=1, kind=DocKind.category_hub, chunk_kind=ChunkKind.hub_card, products=[Product.personal_loan])
+    card.flags, card.warnings = passage_flags(row(kind=ChunkKind.hub_card, authority=Authority.low), date(2026, 10, 28))
+    sheet = passage(7, doc=2, kind=DocKind.cost_sheet, chunk_kind=ChunkKind.cost_facts, products=[Product.personal_loan])
+    other = passage(8, doc=3, kind=DocKind.cost_sheet, chunk_kind=ChunkKind.cost_facts, products=[Product.overdraft])
+    apply_hub_deferral([card, other, sheet])
+    assert PassageFlag.teaser_figure in card.flags and PassageFlag.low_authority in card.flags
+    assert card.defer_to == 7
+    assert card.warnings[-1] == "Teaser figure; the cost sheet passage 7 holds the authoritative rates and fees."
+    assert detect_conflicts([card, sheet]) == []
+
 def test_dedupe_keeps_first():
     assert [p.chunk_id for p in dedupe_passages([passage(1, text="Dobânda fixă"), passage(2, text="dobanda  fixa")])] == [1]
 ```
 
-The `row()`/`passage()` builders are test helpers with sensible defaults.
+The `row()`/`passage()` builders are test helpers with sensible defaults. The `passage()` signature is `passage(chunk_id: int | None = None, *, doc: int = 1, kind: DocKind = DocKind.product_page, chunk_kind: ChunkKind = ChunkKind.section, topic: Topic = Topic.costs_fees, products: list[Product] = [Product.personal_loan], text: str = "t")`, with auto-incrementing ids when `chunk_id` is `None`. `row()` takes `PassageRow` field overrides.
 
-- [ ] **Step 2: Write failing integration tests** in `test_retrieval.py`. Ingest these synthetic fixtures with `HashingEmbedder`: product page, FAQ page, demo cost sheet, fee list v1 (`1 septembrie 2026`) and v2 (`1 noiembrie 2026`, a different fee value).
+- [ ] **Step 2: Write failing integration tests** in `test_retrieval.py`. Ingest these synthetic fixtures with `HashingEmbedder`:
+- the product page at `PAGE_URL` (Task 4)
+- the FAQ page
+- the category hub at `HUB_URL`
+- the demo cost sheet at a `/costuri/costuri-complete-flexicredit-demo/20261015-x.pdf` URL, so its product is `personal_loan`
+- fee list v1 (`1 septembrie 2026`) and v2 (`1 noiembrie 2026`, a different fee value)
+
+`overdraft.html` is deliberately not ingested.
 
 ```python
 def test_search_returns_cited_passages(service):
@@ -1072,6 +1249,23 @@ def test_campaign_flag_after_end(service):
 
 def test_withdrawn_excluded_by_default(service, db_conn): ...
 
+def test_related_links_resolve_only_to_indexed_active_targets(service, db_conn):
+    r = service.search(SearchQuery(text="Credit Demo fără ipotecă Aplici ușor", doc_kinds=[DocKind.category_hub], as_of=D))
+    cards = {p.text.splitlines()[0]: p for p in r.passages if p.kind is ChunkKind.hub_card}
+    assert [l.url for l in cards["Credit Demo fără ipotecă"].related_links] == [PAGE_URL]
+    assert cards["Credit Demo fără ipotecă"].related_links[0].link_kind is LinkKind.card
+    assert cards.get("Overdraft Demo") is None or cards["Overdraft Demo"].related_links == []   # target not indexed
+    DocumentRepository(db_conn).mark_withdrawn([canonical_key(PAGE_URL)]); db_conn.commit()
+    r2 = service.search(SearchQuery(text="Credit Demo fără ipotecă Aplici ușor", doc_kinds=[DocKind.category_hub], as_of=D))
+    assert all(not p.related_links for p in r2.passages if p.kind is ChunkKind.hub_card)
+
+def test_hub_card_defers_to_cost_sheet(service):
+    r = service.search(SearchQuery(text="Dobândă de la 6,10% Demoflex comision analiză", products=[Product.personal_loan], top_k=10, as_of=D))
+    card = next(p for p in r.passages if p.kind is ChunkKind.hub_card)
+    sheet = next(p for p in r.passages if p.doc_kind is DocKind.cost_sheet)
+    assert PassageFlag.teaser_figure in card.flags and card.defer_to == sheet.chunk_id
+    assert not any(c.doc_kind is DocKind.category_hub for c in r.conflicts)
+
 def test_expand_context(service):
     r = service.search(SearchQuery(text="<phrase in a middle chunk>", as_of=D, expand_context=True))
     assert r.passages[0].context and (r.passages[0].context.previous or r.passages[0].context.next)
@@ -1090,7 +1284,7 @@ The integration `settings` fixture lowers the floors to suit `HashingEmbedder`: 
 - [ ] **Step 3: Run them and confirm they fail.** Run: `.venv/Scripts/python -m pytest tests/unit/rag/test_ranking.py tests/integration/rag/test_retrieval.py -v`.
 - [ ] **Step 4: Implement the repository query functions, `ranking.py` and `service.py`.**
 - [ ] **Step 5: Run the full suite and confirm it passes.** Run: `.venv/Scripts/python -m pytest -v`.
-- [ ] **Step 6: Commit.** Message: `agent(rag): hybrid retrieval service with citations, versions and evidence threshold`.
+- [ ] **Step 6: Commit.** Message: `agent(rag): hybrid retrieval service with citations, versions, hub deferral and read-more links`.
 
 ---
 
@@ -1190,10 +1384,13 @@ def test_evaluate_metrics():
   - files under `data/local/rag/raw/`
   - `git status` shows nothing under `data/local/`
 
-  If credit pages or PDFs listed in spec §5 are missing (8 cost sheets, fee list, CGB, IRCC explainer, repayment methods, documents list, restructuring page), adjust `sources.yaml` and run it again.
+  If credit pages or PDFs listed in spec §5 are missing (8 cost sheets, fee list, CGB, IRCC explainer, repayment methods, documents list, restructuring page, the category hubs), adjust `sources.yaml` and run it again. Add any further hub URLs found in the sitemap (spec §16 leaves the hub list to the builder) to `category_hubs`.
 - [ ] **Step 4: Ingest the real corpus.** Run: `.venv/Scripts/python scripts/rag/ingest.py`. Expected:
   - every PDF and page is either `created` or explains why it isn't
   - all 8 cost sheets use `parser_name = 'cost_sheet'`; check with `select parser_name, count(*) from knowledge_document_versions group by 1`
+  - every hub uses `parser_name = 'category_hub'`
+  - `select count(*) from knowledge_chunk_links l where l.target_canonical_key like '%/carduri/%' and l.link_kind = 'teaser'` returns 0
+  - `search.py "credit de nevoi personale fara ipoteca"` shows `related_links` on hub card passages
   - fix parser issues before continuing
 - [ ] **Step 5: Write `config/rag/eval_questions.yaml`.** It needs 30–40 Romanian questions, as in spec §13: questions plus expected `canonical_key`s and optional section prefixes, no Raiffeisen text. It must include at least:
   - "Ce acte îmi trebuie pentru un credit de nevoi personale?"
@@ -1206,6 +1403,7 @@ def test_evaluate_metrics():
   - "Ce documente trebuie pentru un credit ipotecar?"
   - "Pot refinanța un credit de la altă bancă?"
   - "Ce este darea în plată?"
+  - "Ce tipuri de credite de nevoi personale aveți?" (expects the hub page `/ro/persoane-fizice/produsele-noastre/credite/credite-de-nevoi-personale.html`)
   - 5 unanswerable questions: "Cât costă un leasing auto pentru persoane fizice?", "Care este cursul euro azi?", "Pot deschide un depozit în franci elvețieni?", "Ce dobândă are creditul pentru studenți în Germania?", "Cum îmi schimb parola la Netflix?"
 - [ ] **Step 6: Calibrate and evaluate.** Run: `.venv/Scripts/python scripts/rag/evaluate.py`.
   - Adjust `RAG_DENSE_FLOOR`, `RAG_KEYWORD_FLOOR`, `RAG_SECONDARY_DENSE_FLOOR` and the authority weights. If needed, restructure `passes_evidence_threshold`; spec §12.4 allows this as long as the Task 9 unit tests are updated to match.
@@ -1230,6 +1428,8 @@ def test_evaluate_metrics():
   - Append `[2026-10-28 HH:MM] [Claude] Local RAG retrieval implemented; eval recall@5=<x>, refusals <n>/5.` to `.agents/log.md`.
   - Write the handoff message to the orchestrator role, covering:
     - entry point `RetrievalService.search(SearchQuery)`
+    - `related_links` to offer as "read more"
+    - `defer_to`/`teaser_figure`: quote rates from the cost sheet, not hub cards
     - `src/models/knowledge.py`
     - flags and warnings to surface to users
     - `content_trust`

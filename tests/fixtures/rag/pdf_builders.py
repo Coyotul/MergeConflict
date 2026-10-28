@@ -114,7 +114,7 @@ def make_pdf_from_lines(lines: list[str], fontsize: float = 6) -> bytes:
     return pdf_bytes
 
 
-def build_demo_cost_sheet() -> bytes:
+def build_demo_cost_sheet(variant_name_x: float = 20, footnotes: bool = True) -> bytes:
     """Build a synthetic cost sheet that imitates the real cost sheet layout.
 
     The product, values and wording are invented. The layout mirrors the real
@@ -123,6 +123,10 @@ def build_demo_cost_sheet() -> bytes:
     lines with vertically centred fee cells, footnotes, the early repayment
     label on the left with its value over two lines on the right, and one
     worked example with a small side table.
+
+    variant_name_x moves the first line of each variant label (the product name) right;
+    a real sheet centres it so that it starts just past the end of "Tip produs".
+    footnotes=False drops the footnotes, as on sheets without any.
     """
     font = fitz.Font(fontfile=str(FONT_FILE))
     fontsize = 9
@@ -171,7 +175,7 @@ def build_demo_cost_sheet() -> bytes:
         (290, "premium", ("de la 5.90%", "la 15.00%"), ("de la 9.50% la", "21.10%")),
     ):
         items += [
-            (20, top, "Demoflex"),
+            (variant_name_x, top, "Demoflex"),
             (20, top + 10, "Fara Asigurare, client"),
             (20, top + 20, segment),
             centred(c1, top, "Lei"),
@@ -186,9 +190,12 @@ def build_demo_cost_sheet() -> bytes:
             centred(c6, top + 10, dae[1]),
         ]
 
+    if footnotes:
+        items += [
+            (20, 335, "1Rata dobânzii demo este fixă pe toată perioada creditului."),
+            (20, 345, "*Valorile DAE demo sunt calculate pentru suma maximă."),
+        ]
     items += [
-        (20, 335, "1Rata dobânzii demo este fixă pe toată perioada creditului."),
-        (20, 345, "*Valorile DAE demo sunt calculate pentru suma maximă."),
         # Early repayment: label on the left, value over two lines on the right.
         (20, 370, "Comision de plată anticipată"),
         (300, 366, "0,50 % in ultimul an de contract / 1,00%"),
@@ -204,3 +211,72 @@ def build_demo_cost_sheet() -> bytes:
         (20, 435, "și DAE 9,80%."),
     ]
     return make_pdf([items], fontsize=fontsize)
+
+
+def build_demo_offer_cost_sheet(scale: float = 1.0) -> bytes:
+    """Build a synthetic secured-credit cost sheet: one bordered table, offers as columns.
+
+    Invented product and values. The layout mirrors the real secured sheets: a short
+    title line, a header row naming the table and two offers, attribute rows with a
+    group label in a left column, per-offer values where a vertical divider separates
+    the offers and one shared value where it does not, a fee row whose value starts on
+    a line above its label (nearer the previous row), then footnotes, two worked
+    examples and a risk warning. scale draws the whole sheet as a miniature.
+    """
+    font = fitz.Font(fontfile=str(FONT_FILE))
+    items = [
+        (270, 58, "3Y demo"),
+        (150, 80, "Oferta credit Demo Casa ****"),
+        (300, 80, "Oferta clienti Premium* demo"),
+        (450, 80, "Oferta standard"),
+        # Group A: fixed rate, per-offer values.
+        (150, 94, "Rata dobanda fixa 3 ani"), (330, 94, "4.10%"), (460, 94, "5.20%"),
+        (150, 106, "Formula demo"), (320, 106, "IRCC** + 1.50%"), (450, 106, "IRCC** + 2.50%"),
+        (52, 112, "Dobanda fixa demo"),
+        (150, 118, "DAE***"), (330, 118, "5.00%"), (460, 118, "6.00%"), (52, 118, "3 ani (Lei)"),
+        # Group B: variable rate.
+        (150, 131, "Rata dobanda"), (330, 131, "6.40%"), (460, 131, "7.40%"),
+        (52, 137, "Dobanda variabila"),
+        (150, 143, "DAE***"), (330, 143, "7.00%"), (460, 143, "8.00%"), (52, 145, "demo (Lei)"),
+        # Group C: fees, one value shared by both offers.
+        (150, 156, "Comision analiza"), (400, 156, "700 lei"),
+        (330, 165, "0,10% x valoarea demo a imobilului"),
+        (52, 172, "Taxe si comisioane"),
+        (150, 181, "Asigurare imobil facultativa"), (350, 181, "conform evaluarii demo /an"),
+        (52, 181, "demo"),
+        (150, 193, "Comision rambursare anticipata"), (410, 193, "0"),
+        (52, 215, "* Clienti Premium demo: venit minim 9.000 lei"),
+        (52, 227, "** Indice demo trimestrial: 4.00%"),
+        (52, 239, "*** DAE demo calculata pentru 100.000 lei"),
+        (58, 265, "Exemplu de calcul reprezentativ: credit demo de 100.000 Lei, dobanda fixa 4.10%,"),
+        (58, 277, "rata lunara 600,00 lei, DAE 5.00%."),
+        (58, 300, "Exemplu de calcul reprezentativ: credit demo de 100.000 Lei, dobanda variabila 6.40%,"),
+        (58, 312, "rata lunara 650,00 lei, DAE 7.00%."),
+        (52, 340, "Avertisment! Riscuri demo: dobanda poate creste."),
+        (52, 352, "IRCC demo se actualizeaza de 4 ori pe an."),
+    ]
+    label_rules = [98, 110, 135, 160, 184]  # label and value columns
+    group_rules = [70, 84, 122, 147, 197]  # whole table width
+    value_rules = [172]  # splits the two value lines of the facultative insurance row
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    tw = fitz.TextWriter(page.rect)
+    for x, y, text in items:
+        tw.append((x * scale, y * scale), text, font=font, fontsize=9 * scale)
+    tw.write_text(page)
+
+    def line(x0: float, y0: float, x1: float, y1: float) -> None:
+        page.draw_line((x0 * scale, y0 * scale), (x1 * scale, y1 * scale), width=0.5 * scale)
+
+    for y in label_rules:
+        line(149, y, 570, y)
+    for y in group_rules:
+        line(51, y, 570, y)
+    for y in value_rules:
+        line(291, y, 570, y)
+    for x in (51, 149, 290, 570):
+        line(x, 70, x, 197)
+    line(440, 70, 440, 147)  # offers have separate values only in the rate rows
+    pdf_bytes = doc.tobytes()
+    doc.close()
+    return pdf_bytes

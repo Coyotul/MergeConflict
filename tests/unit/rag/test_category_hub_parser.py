@@ -103,3 +103,55 @@ def test_chip_rule_button_only_card():
     teasers = [c for c in doc.chunks if c.kind == ChunkKind.hub_teasers]
     assert len(teasers) == 1
     assert all("product-demo.html" not in l.target_url for l in teasers[0].links)
+
+
+PACKAGE_HUB = """<html><head><title>Credite Demo | Banca</title></head><body><main>
+<h1>Credite Demo</h1>
+<h2>Descoperă și cardurile demo:</h2>
+<div class="cmp-package__content">
+  <div class="cmp-package__info"><h3 class="cmp-title__text"> Card Demo Standard </h3>
+    <div class="cmp-package__description"></div></div>
+  <div class="cmp-buttonbar-container">
+    <div class="cmp-buttonbar"><a href="/ro/persoane-fizice/produsele-noastre/carduri/card-de-credit-demo.html">Detalii</a></div>
+  </div>
+  <div class="cmp-package__list"><div class="cmp-text"><ul><li>Limita demo: 500 și 9.000 RON</li>
+    <li>Venit minim demo: 300 Eur</li></ul><p> </p></div></div>
+</div>
+<div class="cmp-package__content">
+  <div class="cmp-package__info"><h3 class="cmp-title__text">Card Demo Plus</h3></div>
+  <div class="cmp-package__list"><div class="cmp-text"><ul><li>Limita demo: 1.000 și 20.000 RON</li></ul></div></div>
+</div>
+</main></body></html>""".encode("utf-8")
+
+
+def test_hub_package_tiles_become_cards():
+    """A real hub lists credit cards as package tiles (title and a fact list), not as teasers."""
+    cards = [c for c in parse_category_hub(PACKAGE_HUB, BASE[:-1] + ".html", CFG).chunks if c.kind is ChunkKind.hub_card]
+    assert [c.section_path for c in cards] == [["Descoperă și cardurile demo:", "Card Demo Standard"],
+                                               ["Descoperă și cardurile demo:", "Card Demo Plus"]]
+    assert cards[0].text == "Card Demo Standard\n- Limita demo: 500 și 9.000 RON\n- Venit minim demo: 300 Eur"
+    assert cards[1].text == "Card Demo Plus\n- Limita demo: 1.000 și 20.000 RON"
+    assert cards[0].products_override == [Product.credit_card]
+    assert [(l.link_kind, l.anchor_text) for l in cards[0].links] == [(LinkKind.card, "Card Demo Standard")]
+    assert cards[1].links == [] and cards[1].products_override is None
+
+
+PROSE_HUB = """<html><head><title>Refinantare Demo | Banca</title></head><body><main>
+<h1>Refinantare Demo</h1><p>Intro demo.</p>
+<h2>Mai multe despre refinanțarea demo</h2>
+<h3>Cum funcționează refinanțarea demo?</h3><p>Stingi creditele demo vechi.</p><p>Plătești o singură rată demo.</p>
+<h3>Cine poate beneficia?</h3><ul><li>Orice client demo cu mai multe credite.</li></ul>
+<h3>Calculează rata demo</h3><p>Folosește calculatorul demo.</p>
+<h2>Aplicația demo</h2><p>Descarcă aplicația demo.</p>
+</main></body></html>""".encode("utf-8")
+
+
+def test_hub_prose_subsections_are_kept():
+    """A real hub explains refinancing in h3 subsections of plain prose, with no teasers or accordions."""
+    chunks = parse_category_hub(PROSE_HUB, BASE + "credite-de-refinantare.html", CFG).chunks
+    assert [(c.kind, c.section_path, c.text) for c in chunks] == [
+        (ChunkKind.section, ["Mai multe despre refinanțarea demo", "Cum funcționează refinanțarea demo?"],
+         "Stingi creditele demo vechi.\nPlătești o singură rată demo."),
+        (ChunkKind.section, ["Mai multe despre refinanțarea demo", "Cine poate beneficia?"],
+         "- Orice client demo cu mai multe credite."),
+    ]

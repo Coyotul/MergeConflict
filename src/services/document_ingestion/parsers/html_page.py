@@ -263,8 +263,9 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
             heading_text = extract_text(elem)
             heading_level = get_heading_level(elem.name)
 
-            # Check if we should drop this section
-            if should_drop_heading(heading_text):
+            # Check if we should drop this section (never the page title: an h1 such as
+            # "Cum obții un credit ..." names the whole page, not a promo block)
+            if heading_level >= 2 and should_drop_heading(heading_text):
                 # Flush any pending h3s first
                 if pending_h3s:
                     for h3_text in pending_h3s:

@@ -675,3 +675,39 @@ def test_withdrawn_only_when_run_completed(tmp_path, source_config):
     withdrawn_entry = next(e for e in report.entries if e.url == report.withdrawn[0])
     assert withdrawn_entry.withdrawn is True
     assert report.completed is True
+
+
+def _sitemap_run(tmp_path, source_config, sitemap_xml: bytes):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, content=b"User-agent: *\nDisallow: /admin/")
+        if request.url.path == "/sitemap.xml":
+            return httpx.Response(200, content=sitemap_xml)
+        return httpx.Response(200, content=b"<html><body>Test</body></html>")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), timeout=30)
+    now, sleep, _ = make_fake_time()
+    return Scraper(client, source_config, tmp_path / "raw", min_interval_s=0.01, now=now, sleep=sleep).run([])
+
+
+def test_sitemap_with_invalid_utf8_bytes_is_parsed(tmp_path, source_config):
+    """A real sitemap carried Latin-1 bytes in image captions; the URLs must still be discovered."""
+    sitemap_xml = (
+        b'<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+        b'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">'
+        b"<url><loc>https://www.raiffeisen.ro/persoane-fizice/credite/page1</loc><lastmod>2026-10-15</lastmod>"
+        b"<image:image><image:caption>Familie bucur\xe2ndu-se</image:caption></image:image></url></urlset>"
+    )
+    report = _sitemap_run(tmp_path, source_config, sitemap_xml)
+
+    assert report.completed
+    assert [e.url for e in report.entries] == ["https://www.raiffeisen.ro/persoane-fizice/credite/page1"]
+    assert report.entries[0].sitemap_lastmod == date(2026, 10, 15)
+
+
+def test_malformed_sitemap_fails_run_without_crashing(tmp_path, source_config):
+    report = _sitemap_run(tmp_path, source_config, b"<urlset><url><loc>broken")
+
+    assert not report.completed
+    assert any("sitemap" in url for url in report.failed)
+    assert report.entries == []

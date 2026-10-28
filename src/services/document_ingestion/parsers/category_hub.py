@@ -7,6 +7,7 @@ from src.services.document_ingestion.chunking import (
     ParsedDocument,
     ExtractedLink,
     CHUNKER_VERSION,
+    pack_lines,
 )
 from src.services.document_ingestion.parsers.html_page import clean_html, accordion_chunk
 from src.services.document_ingestion.parsers.links import absolutize, filter_chunk_links
@@ -14,6 +15,54 @@ from src.services.document_ingestion.parsers.text_utils import extract_text
 from src.services.document_ingestion.sources import SourceConfig, products_for_url
 from src.services.document_ingestion.normalize import normalize_text
 from src.models.knowledge import ChunkKind, Product, LinkKind
+
+
+COMPONENT_CLASSES = ("cmp-teaser", "cmp-package__content", "cmp-accordion__item")
+
+
+def _prose_chunks(h2_elem: Tag, h2_text: str, cfg: SourceConfig) -> list[ChunkDraft]:
+    """Plain prose under the h3 subsections of an h2 that holds no cards, teasers or FAQs.
+
+    Text directly under the h2 is dropped like the page intro; so are subsections
+    whose heading matches drop_headings.
+    """
+    chunks: list[ChunkDraft] = []
+    heading: str | None = None
+    lines: list[str] = []
+
+    def flush() -> None:
+        if heading is not None and lines and not any(p in heading for p in cfg.drop_headings):
+            for piece in pack_lines([normalize_text(line) for line in lines]):
+                chunks.append(ChunkDraft(kind=ChunkKind.section, section_path=[h2_text, heading], text=piece))
+
+    for elem in h2_elem.find_all_next(["h2", "h3", "p", "li"]):
+        if elem.name == "h2":
+            break
+        if any(elem.find_parent(class_=c) for c in COMPONENT_CLASSES) or elem.find_parent(["li", "table"]):
+            continue
+        if elem.name == "h3":
+            flush()
+            heading, lines = extract_text(elem), []
+        elif text := extract_text(elem):
+            lines.append(f"- {text}" if elem.name == "li" else text)
+    flush()
+    return chunks
+
+
+def _package_card(package: Tag, h2_text: str, page_url: str, cfg: SourceConfig) -> ChunkDraft:
+    """A package tile as a hub card: its title, then one line per listed fact."""
+    h3 = package.find('h3')
+    card_title = extract_text(h3) if h3 else ""
+    facts = [f"- {text}" for li in package.select('li') if (text := extract_text(li))]
+    button = package.select_one('.cmp-buttonbar a')
+    target = absolutize(button.get('href', ''), page_url) if button else None
+    return ChunkDraft(
+        kind=ChunkKind.hub_card,
+        section_path=[h2_text, card_title],
+        text=normalize_text("\n".join([card_title] + facts)),
+        products_override=products_for_url(target, cfg) if target else None,
+        links=[ExtractedLink(target_url=target, anchor_text=card_title, link_kind=LinkKind.card)] if target else [],
+    )
 
 
 def parse_category_hub(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocument:
@@ -52,6 +101,13 @@ def parse_category_hub(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedD
         if prev_h2:
             h2_text = extract_text(prev_h2)
             teasers_by_h2[h2_text].append(teaser)
+
+    # Package tiles (title plus a fact list, e.g. credit cards) are product cards too
+    packages_by_h2 = defaultdict(list)
+    for package in main.select('div.cmp-package__content'):
+        prev_h2 = package.find_previous('h2')
+        if prev_h2:
+            packages_by_h2[extract_text(prev_h2)].append(package)
 
     accordions_by_h2 = defaultdict(list)
     for accordion in all_accordions:
@@ -166,6 +222,11 @@ def parse_category_hub(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedD
             ))
             all_text_parts.append(text)
 
+        for package in packages_by_h2.get(h2_text, []):
+            chunk = _package_card(package, h2_text, page_url, cfg)
+            chunks.append(chunk)
+            all_text_parts.append(chunk.text)
+
         # Process article teasers (one combined chunk)
         if article_teasers:
             teaser_titles = []
@@ -207,6 +268,11 @@ def parse_category_hub(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedD
             chunk = accordion_chunk(accordion, [h2_text], page_url)
             chunks.append(chunk)
             all_text_parts.append(chunk.text)
+
+        if not (teasers or accordions or packages_by_h2.get(h2_text)):
+            for chunk in _prose_chunks(h2_elem, h2_text, cfg):
+                chunks.append(chunk)
+                all_text_parts.append(chunk.text)
 
     # Filter chunk links with chip_targets
     filter_chunk_links(chunks, page_url, cfg, chip_targets)

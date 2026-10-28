@@ -1,6 +1,6 @@
 sitemap_url: https://www.raiffeisen.ro/ro/sitemap.xml
 page_allow:
-  - ^https://www\.raiffeisen\.ro/ro/persoane-fizice/produsele-noastre/credite/.*\.html$
+  - ^https://www\.raiffeisen\.ro/ro/persoane-fizice/produsele-noastre/credite(/.*)?\.html$
   - ^https://www\.raiffeisen\.ro/ro/persoane-fizice/produsele-noastre/carduri/.*credit.*\.html$
   - ^https://www\.raiffeisen\.ro/ro/aplica/restructurare-credit\.html$
   - ^https://www\.raiffeisen\.ro/ro/persoane-fizice/in-sprijinul-tau/tine-ti-ratele-sub-control\.html$
@@ -9,13 +9,14 @@ page_allow:
 pdf_allow:
   - ^https://www\.raiffeisen\.ro/content/dam/rbi/retail/eu/ro/documents/(costuri|pf/credite|pf/tarife-comisioane-standard-pf|conditii-general-bancare-pf)/.*
   - ^https://www\.raiffeisen\.ro/content/dam/rbi/retail/eu/ro/documents/pf/tarife-comisioane-standard-pf\.sv\.pdf$
+  - ^https://www\.raiffeisen\.ro/content/dam/rbi/retail/eu/ro/documents/.*(credit|ircc|rambursare|ipotec|imobiliar|garantate|nevoi|refinant|dare-in-plata|restructur).*\.pdf
 discovery_seeds:
   - https://www.raiffeisen.ro/ro/persoane-fizice/in-sprijinul-tau/documente.html
 extra_urls: []
 drop_headings: ["Când și de ce", "Cum obții", "Calculează rata", "Ce spun clienții", "gândit pentru tine",
                 "Articole utile", "Descoperă mai multe", "Motive în plus", "Lasă-ne datele"]
 category_hubs:
-  - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite.html
+  - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite.html
   - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-de-nevoi-personale.html
   - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-imobiliare.html
   - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-de-refinantare.html

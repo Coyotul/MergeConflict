@@ -269,6 +269,8 @@ class Scraper:
                 return set(), f"Sitemap fetch failed: {response.status_code}"
         except (httpx.TimeoutException, httpx.TransportError) as e:
             return set(), f"Sitemap network error: {type(e).__name__}"
+        except ET.ParseError as e:
+            return set(), f"Sitemap is not valid XML: {e}"
 
         # Add extra_urls (not filtered by allowlist; robots check in _fetch_url)
         for url in self.cfg.extra_urls:
@@ -285,7 +287,8 @@ class Scraper:
         from src.services.document_ingestion.sources import is_allowed_url
 
         urls = set()
-        root = ET.fromstring(content)
+        # The live sitemap carries stray non-UTF-8 bytes in image captions; replace them rather than fail.
+        root = ET.fromstring(content.decode("utf-8", errors="replace"))
         # Handle namespace
         ns = {'sm': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
         for url_elem in root.findall('.//sm:url', ns):

@@ -1,0 +1,41 @@
+# Synthetic credit products (mirroring Raiffeisen's catalog)
+
+products:
+  - code: personal_loan
+    name: "Flexicredit (personal loan)"
+    purposes:
+      - personal
+      - consolidation
+      - renovation
+    min_amount: 1000
+    max_amount: 75000
+    currency: RON
+    min_term_months: 6
+    max_term_months: 84
+    indicative_annual_rate_percent: 9.5
+    rate_note: "Illustrative rate for simulation, set by hand; check the cited conditions"
+
+  - code: refinancing_unsecured
+    name: "Refinancing without mortgage"
+    purposes:
+      - refinancing
+    min_amount: 5000
+    max_amount: 100000
+    currency: RON
+    min_term_months: 12
+    max_term_months: 120
+    indicative_annual_rate_percent: 8.9
+    rate_note: "Illustrative rate for simulation, set by hand; check the cited conditions"
+
+  - code: mortgage_casa_ta
+    name: "Casa Ta mortgage"
+    purposes:
+      - home_purchase
+      - home_construction
+    min_amount: 20000
+    max_amount: 500000
+    currency: RON
+    min_term_months: 60
+    max_term_months: 360
+    indicative_annual_rate_percent: 6.5
+    rate_note: "Illustrative rate for simulation, set by hand; check the cited conditions"

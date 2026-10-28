@@ -4,6 +4,8 @@ Provides access-controlled, tamper-evident file storage for applicant documents,
 with SHA-256 hashing, path traversal defenses and metadata indexing.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timezone
 import hashlib
 import json

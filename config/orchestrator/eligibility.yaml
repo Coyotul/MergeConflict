@@ -1,0 +1,32 @@
+# Eligibility rules per product
+
+eligibility:
+  personal_loan:
+    min_age: 18
+    max_age_at_maturity: 70
+    min_monthly_income: 2500
+    max_dti: 0.40
+    min_employment_months: 3
+    manual_review_employment_types:
+      - self_employed
+    rule_version: "stub-2026-10-28"
+
+  refinancing_unsecured:
+    min_age: 18
+    max_age_at_maturity: 70
+    min_monthly_income: 2500
+    max_dti: 0.40
+    min_employment_months: 3
+    manual_review_employment_types:
+      - self_employed
+    rule_version: "stub-2026-10-28"
+
+  mortgage_casa_ta:
+    min_age: 18
+    max_age_at_maturity: 70
+    min_monthly_income: 2500
+    max_dti: 0.40
+    min_employment_months: 3
+    manual_review_employment_types:
+      - self_employed
+    rule_version: "stub-2026-10-28"

@@ -1,0 +1,207 @@
+# Product requirements: fields and documents per product
+
+requirements:
+  personal_loan:
+    fields:
+      - name: full_name
+        label: "Full Name"
+        type: text
+        required: true
+        verified_by: id_card
+        identity: true
+
+      - name: age
+        label: "Age"
+        type: integer
+        required: true
+        verified_by: id_card
+        identity: true
+        min: 18
+        max: 100
+
+      - name: employment_type
+        label: "Employment Type"
+        type: enum
+        required: true
+        options:
+          - employed
+          - self_employed
+          - retired
+
+      - name: employment_months
+        label: "Employment Duration (months)"
+        type: integer
+        required: true
+        min: 0
+        max: 600
+
+      - name: monthly_net_income
+        label: "Monthly Net Income"
+        type: money
+        required: true
+        verified_by: payslip
+        min: 1000
+        max: 100000
+
+      - name: employer_name
+        label: "Employer Name"
+        type: text
+        required: true
+        verified_by: payslip
+
+      - name: existing_monthly_obligations
+        label: "Existing Monthly Obligations"
+        type: money
+        required: true
+        verified_by: bank_statement
+        min: 0
+
+    documents:
+      - doc_type: id_card
+        label: "ID Card"
+
+      - doc_type: payslip
+        label: "Payslip (last 3 months)"
+
+      - doc_type: bank_statement
+        label: "Bank Statement (last 6 months)"
+
+  refinancing_unsecured:
+    fields:
+      - name: full_name
+        label: "Full Name"
+        type: text
+        required: true
+        verified_by: id_card
+        identity: true
+
+      - name: age
+        label: "Age"
+        type: integer
+        required: true
+        verified_by: id_card
+        identity: true
+        min: 18
+        max: 100
+
+      - name: employment_type
+        label: "Employment Type"
+        type: enum
+        required: true
+        options:
+          - employed
+          - self_employed
+          - retired
+
+      - name: employment_months
+        label: "Employment Duration (months)"
+        type: integer
+        required: true
+        min: 0
+        max: 600
+
+      - name: monthly_net_income
+        label: "Monthly Net Income"
+        type: money
+        required: true
+        verified_by: payslip
+        min: 1000
+        max: 100000
+
+      - name: employer_name
+        label: "Employer Name"
+        type: text
+        required: true
+        verified_by: payslip
+
+      - name: existing_monthly_obligations
+        label: "Existing Monthly Obligations"
+        type: money
+        required: true
+        verified_by: bank_statement
+        min: 0
+
+    documents:
+      - doc_type: id_card
+        label: "ID Card"
+
+      - doc_type: payslip
+        label: "Payslip (last 3 months)"
+
+      - doc_type: bank_statement
+        label: "Bank Statement (last 6 months)"
+
+  mortgage_casa_ta:
+    fields:
+      - name: full_name
+        label: "Full Name"
+        type: text
+        required: true
+        verified_by: id_card
+        identity: true
+
+      - name: age
+        label: "Age"
+        type: integer
+        required: true
+        verified_by: id_card
+        identity: true
+        min: 18
+        max: 100
+
+      - name: employment_type
+        label: "Employment Type"
+        type: enum
+        required: true
+        options:
+          - employed
+          - self_employed
+          - retired
+
+      - name: employment_months
+        label: "Employment Duration (months)"
+        type: integer
+        required: true
+        min: 0
+        max: 600
+
+      - name: monthly_net_income
+        label: "Monthly Net Income"
+        type: money
+        required: true
+        verified_by: payslip
+        min: 1000
+        max: 100000
+
+      - name: employer_name
+        label: "Employer Name"
+        type: text
+        required: true
+        verified_by: payslip
+
+      - name: existing_monthly_obligations
+        label: "Existing Monthly Obligations"
+        type: money
+        required: true
+        verified_by: bank_statement
+        min: 0
+
+      - name: property_value
+        label: "Property Value"
+        type: money
+        required: true
+        verified_by: property_valuation
+        min: 10000
+
+    documents:
+      - doc_type: id_card
+        label: "ID Card"
+
+      - doc_type: payslip
+        label: "Payslip (last 3 months)"
+
+      - doc_type: bank_statement
+        label: "Bank Statement (last 6 months)"
+
+      - doc_type: property_valuation
+        label: "Property Valuation Report"

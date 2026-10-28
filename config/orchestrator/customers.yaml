@@ -1,0 +1,68 @@
+# Synthetic customer data for testing
+
+customers:
+  cust-001:
+    profile:
+      full_name: "Ana Popescu"
+      age: 34
+
+    stated:
+      employment_type: "employed"
+      employment_months: 48
+
+    documents:
+      id_card:
+        full_name: "Ana Popescu"
+        age: 34
+
+      payslip:
+        employer_name: "TechCorp SRL"
+        monthly_net_income: 6200
+
+      bank_statement:
+        existing_monthly_obligations: 400
+
+  cust-002:
+    profile:
+      full_name: "Mihai Ionescu"
+      age: 41
+
+    stated:
+      employment_type: "employed"
+      employment_months: 24
+
+    documents:
+      id_card:
+        full_name: "Mihai Ionescu"
+        age: 41
+
+      payslip:
+        employer_name: "AutoService SA"
+        monthly_net_income: 2100
+
+      bank_statement:
+        existing_monthly_obligations: 0
+
+  cust-003:
+    profile:
+      full_name: "Elena Dumitru"
+      age: 29
+
+    stated:
+      employment_type: "self_employed"
+      employment_months: 36
+
+    documents:
+      id_card:
+        full_name: "Elena Dumitru"
+        age: 29
+
+      payslip:
+        employer_name: "Dumitru Consulting PFA"
+        monthly_net_income: 8000
+
+      bank_statement:
+        existing_monthly_obligations: 1000
+
+    low_confidence:
+      - monthly_net_income

@@ -6,3 +6,4 @@
 - [2026-10-28] [Codex] Updated project scope to the AI credit application assistant, removed alternative project ideas, and aligned context, README, architecture wording and coordination board.
 - [2026-10-28] [Codex] Preserved the owner's full specification verbatim in SPECIFICATION.md; aligned scope, technology direction, mandatory prototype human review and simulation boundaries. Added customer/staff frontend locations, credit-lifecycle service packages and a migrations location. No application implementation or cloud provisioning performed.
 - [2026-10-28] [Claude] Claimed ORCH-01: AI orchestrator implementation (Featherless LLM, session state, chat API).
+- [2026-10-28] [Claude] Completed ORCH-01: Conversational AI orchestrator with Featherless gpt-oss-120b, session state (memory/file/postgres), chat HTTP API, 293 tests passing. Contract documented at contracts/http/README.md. Handoff message to frontend team.

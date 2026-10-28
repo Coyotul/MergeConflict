@@ -428,3 +428,253 @@ def test_retry_then_succeeds(tmp_path, source_config):
     backoff_sleeps = [s for s in state["sleeps"] if s in (2.0, 4.0)]
     assert 2.0 in backoff_sleeps
     assert 4.0 in backoff_sleeps
+
+
+def test_rate_limit_spacing(tmp_path, source_config):
+    """Scraper respects minimum interval between requests."""
+    robots_txt = b"User-agent: *\nAllow: /"
+    sitemap_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://www.raiffeisen.ro/persoane-fizice/credite/page1</loc></url>
+  <url><loc>https://www.raiffeisen.ro/persoane-fizice/credite/page2</loc></url>
+  <url><loc>https://www.raiffeisen.ro/persoane-fizice/credite/page3</loc></url>
+</urlset>"""
+    page_html = b"<html><body>Test</body></html>"
+    request_times = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Record time at request start using the fake clock
+        request_times.append(state["time"])
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, content=robots_txt)
+        elif request.url.path == "/sitemap.xml":
+            return httpx.Response(200, content=sitemap_xml)
+        else:
+            return httpx.Response(200, content=page_html)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport, timeout=30)
+    now, sleep, state = make_fake_time()
+    scraper = Scraper(client, source_config, tmp_path / "raw", min_interval_s=2.0, now=now, sleep=sleep)
+    report = scraper.run([])
+
+    # Check that consecutive requests are at least 2.0s apart
+    for i in range(1, len(request_times)):
+        interval = request_times[i] - request_times[i-1]
+        assert interval >= 2.0, f"Request {i} started {interval}s after request {i-1}, expected >= 2.0s"
+
+
+def test_unchanged_by_hash(tmp_path, source_config):
+    """Scraper detects unchanged and changed documents by hash."""
+    robots_txt = b"User-agent: *\nAllow: /"
+    sitemap_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://www.raiffeisen.ro/persoane-fizice/credite/page1</loc></url>
+</urlset>"""
+    page_html_v1 = b"<html><body>Version 1</body></html>"
+    page_html_v2 = b"<html><body>Version 2</body></html>"
+
+    content_version = {"current": 1}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, content=robots_txt)
+        elif request.url.path == "/sitemap.xml":
+            return httpx.Response(200, content=sitemap_xml)
+        elif request.url.path == "/persoane-fizice/credite/page1":
+            if content_version["current"] == 1:
+                return httpx.Response(200, content=page_html_v1, headers={"content-type": "text/html"})
+            else:
+                return httpx.Response(200, content=page_html_v2, headers={"content-type": "text/html"})
+        else:
+            return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport, timeout=30)
+
+    # Run 1: First fetch
+    now1, sleep1, _ = make_fake_time()
+    scraper1 = Scraper(client, source_config, tmp_path / "raw", min_interval_s=0.01, now=now1, sleep=sleep1)
+    report1 = scraper1.run([])
+    assert len(report1.new) == 1
+    assert len(report1.unchanged) == 0
+    assert len(report1.changed) == 0
+
+    # Run 2: Same content, should be unchanged
+    now2, sleep2, _ = make_fake_time()
+    scraper2 = Scraper(client, source_config, tmp_path / "raw", min_interval_s=0.01, now=now2, sleep=sleep2)
+    report2 = scraper2.run(report1.entries)
+    assert len(report2.new) == 0
+    assert len(report2.unchanged) == 1
+    assert len(report2.changed) == 0
+
+    # Run 3: Changed content
+    content_version["current"] = 2
+    now3, sleep3, _ = make_fake_time()
+    scraper3 = Scraper(client, source_config, tmp_path / "raw", min_interval_s=0.01, now=now3, sleep=sleep3)
+    report3 = scraper3.run(report2.entries)
+    assert len(report3.new) == 0
+    assert len(report3.unchanged) == 0
+    assert len(report3.changed) == 1
+
+
+def test_404_not_retried(tmp_path, source_config):
+    """Scraper does not retry 404 or 410 responses."""
+    robots_txt = b"User-agent: *\nAllow: /"
+    sitemap_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://www.raiffeisen.ro/persoane-fizice/credite/missing404</loc></url>
+  <url><loc>https://www.raiffeisen.ro/persoane-fizice/credite/gone410</loc></url>
+</urlset>"""
+    attempt_count = {"missing404": 0, "gone410": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, content=robots_txt)
+        elif request.url.path == "/sitemap.xml":
+            return httpx.Response(200, content=sitemap_xml)
+        elif request.url.path == "/persoane-fizice/credite/missing404":
+            attempt_count["missing404"] += 1
+            return httpx.Response(404)
+        elif request.url.path == "/persoane-fizice/credite/gone410":
+            attempt_count["gone410"] += 1
+            return httpx.Response(410)
+        else:
+            return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport, timeout=30)
+    now, sleep, state = make_fake_time()
+    scraper = Scraper(client, source_config, tmp_path / "raw", min_interval_s=0.01, max_retries=3, now=now, sleep=sleep)
+    report = scraper.run([])
+
+    # Each should have been tried exactly once
+    assert attempt_count["missing404"] == 1
+    assert attempt_count["gone410"] == 1
+
+    # No backoff sleeps for 404/410
+    backoff_sleeps = [s for s in state["sleeps"] if s in (2.0, 4.0, 8.0)]
+    assert len(backoff_sleeps) == 0
+
+
+def test_discovers_pages_and_allowlisted_pdfs(tmp_path, source_config):
+    """Scraper discovers sitemap pages and linked PDFs, respects robots and allowlists."""
+    robots_txt = b"""User-agent: *
+Disallow: /admin/
+"""
+    sitemap_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.raiffeisen.ro/persoane-fizice/credite/nevoi-personale</loc>
+    <lastmod>2026-10-15</lastmod>
+  </url>
+  <url>
+    <loc>https://www.raiffeisen.ro/admin/secret</loc>
+    <lastmod>2026-10-16</lastmod>
+  </url>
+  <url>
+    <loc>https://www.raiffeisen.ro/despre-noi</loc>
+    <lastmod>2026-10-17</lastmod>
+  </url>
+</urlset>"""
+    page_html = b"""<!DOCTYPE html>
+<html>
+<body>
+<h1>Credit Nevoi Personale</h1>
+<a href="/documents/cgb.pdf">Conditii Generale</a>
+<a href="/documents/marketing.pdf">Marketing PDF</a>
+</body>
+</html>"""
+    pdf_content = b"%PDF-1.4\nfake pdf content"
+    request_log = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        request_log.append(str(request.url.path))
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, content=robots_txt, headers={"content-type": "text/plain"})
+        elif request.url.path == "/sitemap.xml":
+            return httpx.Response(200, content=sitemap_xml, headers={"content-type": "application/xml"})
+        elif request.url.path == "/persoane-fizice/credite/nevoi-personale":
+            return httpx.Response(200, content=page_html, headers={"content-type": "text/html"})
+        elif request.url.path == "/documents/cgb.pdf":
+            return httpx.Response(200, content=pdf_content, headers={"content-type": "application/pdf"})
+        else:
+            return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport, timeout=30)
+    now, sleep, _ = make_fake_time()
+    scraper = Scraper(client, source_config, tmp_path / "raw", min_interval_s=0.01, now=now, sleep=sleep)
+    report = scraper.run([])
+
+    # Exactly these URLs should be requested
+    assert "/robots.txt" in request_log
+    assert "/sitemap.xml" in request_log
+    assert "/persoane-fizice/credite/nevoi-personale" in request_log
+    assert "/documents/cgb.pdf" in request_log
+
+    # These should NOT be requested
+    assert "/admin/secret" not in request_log
+    assert "/despre-noi" not in request_log
+    assert "/documents/marketing.pdf" not in request_log
+
+    # Should have exactly the page and PDF in entries
+    assert len(report.entries) == 2
+    urls = {e.url for e in report.entries}
+    assert "https://www.raiffeisen.ro/persoane-fizice/credite/nevoi-personale" in urls
+    assert "https://www.raiffeisen.ro/documents/cgb.pdf" in urls
+
+    # Both should be new
+    assert len(report.new) == 2
+
+
+def test_withdrawn_only_when_run_completed(tmp_path, source_config):
+    """Scraper detects withdrawals when run completes successfully."""
+    robots_txt = b"User-agent: *\nAllow: /"
+    sitemap_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://www.raiffeisen.ro/persoane-fizice/credite/new-page</loc></url>
+</urlset>"""
+    page_html = b"<html><body>New page</body></html>"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, content=robots_txt)
+        elif request.url.path == "/sitemap.xml":
+            return httpx.Response(200, content=sitemap_xml)
+        elif request.url.path == "/persoane-fizice/credite/new-page":
+            return httpx.Response(200, content=page_html)
+        elif request.url.path == "/documents/cgb.pdf":
+            return httpx.Response(404)
+        else:
+            return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport, timeout=30)
+    now, sleep, _ = make_fake_time()
+    scraper = Scraper(client, source_config, tmp_path / "raw", min_interval_s=0.01, now=now, sleep=sleep)
+
+    # Create previous entry for old.pdf that will be withdrawn
+    previous = [ManifestEntry(
+        url="https://www.raiffeisen.ro/documents/cgb.pdf",
+        final_url="https://www.raiffeisen.ro/documents/cgb.pdf",
+        fetched_at=datetime(2026, 10, 1),
+        status_code=200,
+        content_type="application/pdf",
+        sitemap_lastmod=None,
+        sha256="abc123",
+        raw_path="raw/abc123.pdf",
+        index=True,
+        withdrawn=False
+    )]
+
+    report = scraper.run(previous)
+
+    # Should have new page + withdrawn old PDF
+    assert len(report.entries) == 2
+    assert len(report.withdrawn) == 1
+    assert report.withdrawn[0] == "https://www.raiffeisen.ro/documents/cgb.pdf"
+
+    withdrawn_entry = next(e for e in report.entries if e.url == report.withdrawn[0])
+    assert withdrawn_entry.withdrawn is True
+    assert report.completed is True

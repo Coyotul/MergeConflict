@@ -1,0 +1,30 @@
+{
+  "scenario_name": "Credit Imobiliar Casa Ta - Rată Fixă 3 Ani apoi Variabilă (IRCC)",
+  "description": "Simulare achiziție locuință 350.900 RON pe 25 de ani (300 luni), dobândă fixă 5.05% în primii 3 ani, ulterior IRCC + 2.30%",
+  "product_id": "mortgage_fixed_then_ircc",
+  "request": {
+    "product_id": "mortgage_fixed_then_ircc",
+    "amount": "350900.00",
+    "term_months": 300,
+    "fixed_period_months": 36,
+    "repayment_method": "annuity",
+    "property_value": "420000.00",
+    "first_home": true,
+    "net_monthly_income": "10000.00",
+    "existing_monthly_debt_payments": "0.00",
+    "simulation_date": "2026-10-28"
+  },
+  "expected_results": {
+    "status": "ok",
+    "fixed_annual_rate": "5.05",
+    "variable_margin": "2.30",
+    "ircc_quarter_t4_2026": "5.57",
+    "variable_annual_rate": "7.87",
+    "first_monthly_payment": "2155.79",
+    "monthly_payment_after_fixed_period": "2713.05",
+    "loan_to_value_percent": "83.55",
+    "affordability_within_limit": true,
+    "affordability_limit": "0.45",
+    "debt_service_ratio": "0.2156"
+  }
+}

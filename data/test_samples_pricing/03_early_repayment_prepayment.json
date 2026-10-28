@@ -1,0 +1,46 @@
+{
+  "scenario_name": "Rambursare Anticipată Parțială (15.000 RON după 12 luni)",
+  "description": "Simulare rambursare anticipată conform OUG 50/2010 pe un credit de consum de 50.000 RON, comparând reducerea perioadei vs reducerea ratei",
+  "loan_request": {
+    "product_id": "personal_loan_fixed",
+    "amount": "50000.00",
+    "term_months": 60,
+    "salary_account": "standard",
+    "with_insurance": true,
+    "simulation_date": "2026-10-28"
+  },
+  "simulation_parameters": {
+    "after_month": 12,
+    "repayment_amount": "15000.00"
+  },
+  "expected_results": {
+    "reduce_term_option": {
+      "option": "reduce_term",
+      "status": "ok",
+      "early_repayment_fee": "150.00",
+      "total_to_pay_now": "15150.00",
+      "previous_monthly_payment": "961.21",
+      "new_monthly_payment": "961.21",
+      "previous_last_month": 60,
+      "new_last_month": 42,
+      "months_saved": 18,
+      "interest_saved": "2911.49",
+      "charges_saved": "90.00",
+      "net_saving": "2851.49"
+    },
+    "reduce_installment_option": {
+      "option": "reduce_instalment",
+      "status": "ok",
+      "early_repayment_fee": "150.00",
+      "total_to_pay_now": "15150.00",
+      "previous_monthly_payment": "961.21",
+      "new_monthly_payment": "612.02",
+      "monthly_relief": "349.19",
+      "previous_last_month": 60,
+      "new_last_month": 60,
+      "interest_saved": "1761.03",
+      "charges_saved": "0.00",
+      "net_saving": "1611.03"
+    }
+  }
+}

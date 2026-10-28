@@ -122,7 +122,7 @@ def test_happy_path_cust_001(client):
     body = chat.upload("bank_statement")
     assert stage(body) == "documents"
     income = next(f for f in block(body, "extracted_fields")["fields"] if f["field"] == "monthly_net_income")
-    assert income["conflict_with"] == "7000"
+    assert income["conflict_with"] == "7000.00"
 
     body = chat.say("da")
     assert stage(body) == "offer_selection"

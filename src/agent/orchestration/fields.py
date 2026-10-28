@@ -1,6 +1,6 @@
 """Field parsing and validation for the orchestrator."""
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 import re
 
 from pydantic import BaseModel
@@ -75,16 +75,19 @@ def parse_money(raw: str | int | float | Decimal) -> Decimal:
         FieldValueError: If the value cannot be parsed
     """
     # If already a number, convert directly
-    if isinstance(raw, (int, Decimal)):
-        return Decimal(str(raw))
-    if isinstance(raw, float):
-        return Decimal(str(raw))
+    if isinstance(raw, bool):
+        raise FieldValueError("Cannot parse money from bool")
+    if isinstance(raw, (int, float, Decimal)):
+        return _quantize_money(Decimal(str(raw)), raw)
 
     if not isinstance(raw, str):
         raise FieldValueError(f"Cannot parse money from {type(raw).__name__}")
 
     # Lowercase and strip
     s = raw.lower().strip()
+
+    # Remove known non-numeric words (e.g. "net") before currency markers
+    s = _MONEY_NOISE_WORDS.sub("", s)
 
     # Remove currency markers first
     s = s.replace("lei", "").replace("ron", "").replace("eur", "")
@@ -134,8 +137,12 @@ def parse_money(raw: str | int | float | Decimal) -> Decimal:
                 # Two digits -> decimal (e.g., "30,50" -> 30.5)
                 s = s.replace(",", ".")
             elif len(decimal_part) == 3:
-                # Three digits - thousands separator (e.g., "1,500" -> 1500)
-                s = s.replace(",", "")
+                # Three digits: thousands only after a 1-3 digit integer part
+                # ("1,500" -> 1500); otherwise decimal ("6200,555" -> 6200.56)
+                if _is_thousands_group(parts[0]):
+                    s = s.replace(",", "")
+                else:
+                    s = s.replace(",", ".")
             else:
                 # Other cases - assume thousands
                 s = s.replace(",", "")
@@ -154,8 +161,10 @@ def parse_money(raw: str | int | float | Decimal) -> Decimal:
                 # Two digits -> decimal
                 pass
             elif len(decimal_part) == 3:
-                # Three digits - thousands separator (e.g., "1.500" -> 1500)
-                s = s.replace(".", "")
+                # Three digits: thousands only after a 1-3 digit integer part
+                # ("1.500" -> 1500); otherwise decimal ("6200.555" -> 6200.56)
+                if _is_thousands_group(parts[0]):
+                    s = s.replace(".", "")
             else:
                 # More than 3 digits - keep as is (might fail parsing, but let it try)
                 pass
@@ -166,12 +175,63 @@ def parse_money(raw: str | int | float | Decimal) -> Decimal:
     # Try to parse
     try:
         value = Decimal(s) * multiplier
-        # Check if value is finite
-        if not value.is_finite():
-            raise FieldValueError(f"Invalid money value (non-finite): '{raw}'")
-        return value
     except (InvalidOperation, ValueError) as e:
         raise FieldValueError(f"Cannot parse '{raw}' as money: {e}")
+    return _quantize_money(value, raw)
+
+
+_MONEY_NOISE_WORDS = re.compile(r"\b(?:net|neti|brut|pe lună|pe luna|per month|monthly|lunar)\b")
+_CENTS = Decimal("0.01")
+
+
+def _is_thousands_group(integer_part: str) -> bool:
+    """True when a lone separator after this integer part reads as thousands."""
+    return integer_part.isdigit() and 1 <= len(integer_part) <= 3 and integer_part != "0"
+
+
+def _quantize_money(value: Decimal, raw: object) -> Decimal:
+    """Reject non-finite values and round to 0.01 ROUND_HALF_UP."""
+    if not value.is_finite():
+        raise FieldValueError(f"Invalid money value (non-finite): '{raw}'")
+    return value.quantize(_CENTS, rounding=ROUND_HALF_UP)
+
+
+_MONTH_UNITS = {"luni", "lună", "luna", "months", "month"}
+_YEAR_UNITS = {"ani", "an", "years", "year"}
+_INTEGER_TEXT = re.compile(r"^(\d+)(?:[.,]0+)?(?:\s+(?:de\s+)?(\w+))?$")
+
+
+def parse_integer(raw: object, *, in_months: bool = True) -> int:
+    """Parse one whole number with an optional month/year unit word.
+
+    For month fields: "60", "60 luni", "60 de luni", "60 months" -> 60;
+    "5 ani"/"5 years" -> 60. For other fields (e.g. age) a year unit keeps
+    the number ("34 ani" -> 34) and a month unit is rejected.
+    Bools and non-whole numbers ("60.7") are rejected.
+    """
+    if isinstance(raw, bool):
+        raise FieldValueError("Cannot parse a boolean as integer")
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, (float, Decimal)):
+        number = Decimal(str(raw))
+        if not number.is_finite() or number != number.to_integral_value():
+            raise FieldValueError(f"Value '{raw}' is not a whole number")
+        return int(number)
+    if not isinstance(raw, str):
+        raise FieldValueError(f"Cannot parse integer from {type(raw).__name__}")
+    match = _INTEGER_TEXT.match(raw.strip().lower())
+    if match is None:
+        raise FieldValueError(f"Cannot parse '{raw}' as integer")
+    value = int(match.group(1))
+    unit = match.group(2)
+    if unit is None:
+        return value
+    if unit in _MONTH_UNITS and in_months:
+        return value
+    if unit in _YEAR_UNITS:
+        return value * 12 if in_months else value
+    raise FieldValueError(f"Cannot parse '{raw}' as integer: unknown unit '{unit}'")
 
 
 def parse_field_value(spec: FieldSpec, raw: object) -> Decimal | int | str | bool:
@@ -196,12 +256,7 @@ def parse_field_value(spec: FieldSpec, raw: object) -> Decimal | int | str | boo
         return value
 
     elif spec.type == FieldType.integer:
-        try:
-            if isinstance(raw, str):
-                raw = raw.strip()
-            value = int(raw)
-        except (ValueError, TypeError) as e:
-            raise FieldValueError(f"Cannot parse '{raw}' as integer: {e}")
+        value = parse_integer(raw, in_months=spec.name.endswith("_months"))
 
         if spec.min is not None and Decimal(value) < spec.min:
             raise FieldValueError(f"Value {value} is below minimum {spec.min}")

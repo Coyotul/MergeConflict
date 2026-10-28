@@ -240,7 +240,7 @@ def test_document_conflict_detected_and_resolved_by_confirm():
     # Should create conflict
     assert len(app.conflicts) == 1
     assert app.conflicts[0].field == "monthly_net_income"
-    assert app.conflicts[0].customer_value == "6000"
+    assert app.conflicts[0].customer_value == "6000.00"
     assert app.conflicts[0].document_value == "5200"
     assert app.conflicts[0].document_id == "doc-1"
 
@@ -322,7 +322,7 @@ def test_reupload_matching_customer_value_clears_conflict():
     app.documents.append(doc1)  # Add to documents list
     merge_document_extraction(app, doc1, specs, now=now)
     assert len(app.conflicts) == 1
-    assert app.conflicts[0].customer_value == "6000"
+    assert app.conflicts[0].customer_value == "6000.00"
     assert app.conflicts[0].document_value == "5200"
 
     # Re-upload with customer's value
@@ -643,3 +643,75 @@ def test_enum_field_update_accepted():
     assert results[0].accepted
     assert app.fields["employment_type"].value == "employed"
     assert app.fields["employment_type"].kind == "text"
+
+
+_TERM_SPEC = FieldSpec(
+    name="term_months", label="Term (months)", type=FieldType.integer,
+    required=True, min=Decimal("6"), max=Decimal("360"),
+)
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("60", 60),
+    (60, 60),
+    (" 60 ", 60),
+    ("60 luni", 60),
+    ("60 de luni", 60),
+    ("60 months", 60),
+    ("12 month", 12),
+    ("12 lună", 12),
+    ("12 luna", 12),
+    ("5 ani", 60),
+    ("1 an", 12),
+    ("5 years", 60),
+    ("1 year", 12),
+    ("60.0", 60),
+    (60.0, 60),
+])
+def test_parse_integer_accepts_numbers_with_unit_words(raw, expected):
+    """Integer fields accept one whole number with an optional month/year unit word."""
+    value = parse_field_value(_TERM_SPEC, raw)
+    assert value == expected
+    assert type(value) is int
+
+
+@pytest.mark.parametrize("raw", [True, False, "60.7", 60.7, "60 si 12", "sixty", "60 zile", ""])
+def test_parse_integer_rejects_bools_fractions_and_garbage(raw):
+    """Integer fields reject bools, non-whole numbers and unparseable text."""
+    with pytest.raises(FieldValueError):
+        parse_field_value(_TERM_SPEC, raw)
+
+
+def test_parse_integer_year_unit_on_non_month_field_keeps_number():
+    """'34 ani' for age is 34 (not 408); a month unit on a non-month field is rejected."""
+    age = FieldSpec(name="age", label="Age", type=FieldType.integer, min=Decimal("18"), max=Decimal("100"))
+    assert parse_field_value(age, "34 ani") == 34
+    assert parse_field_value(age, "34 years") == 34
+    assert parse_field_value(age, "34") == 34
+    with pytest.raises(FieldValueError):
+        parse_field_value(age, "34 luni")
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("6200.555", Decimal("6200.56")),
+    ("6200,555", Decimal("6200.56")),
+    ("1250.505", Decimal("1250.51")),
+    ("30.000", Decimal("30000")),
+    ("1.250", Decimal("1250")),
+    ("1,250", Decimal("1250")),
+    ("10.005", Decimal("10005")),
+    ("6200 lei net", Decimal("6200")),
+    ("6200 RON net", Decimal("6200")),
+])
+def test_parse_money_thousands_vs_decimals_and_rounding(raw, expected):
+    """A lone separator + 3 digits is thousands only after a 1-3 digit integer part; results quantize to 0.01."""
+    value = parse_money(raw)
+    assert value == expected
+    assert value.as_tuple().exponent == -2
+
+
+def test_parse_money_quantizes_half_up():
+    """Money is rounded ROUND_HALF_UP to two decimals for every input type."""
+    assert parse_money(Decimal("10.005")) == Decimal("10.01")
+    assert parse_money("10,005.5") == Decimal("10005.50")
+    assert parse_money(25000).as_tuple().exponent == -2

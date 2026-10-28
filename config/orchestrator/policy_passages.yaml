@@ -34,7 +34,7 @@ passages:
       - personal_loan
     authority: medium
     header: "Early Repayment Options"
-    text: "You can repay your loan early at any time without penalties. Early repayment reduces the total interest paid over the loan term. Contact your bank advisor to arrange early repayment."
+    text: "A loan can usually be repaid early, in full or in part. Early repayment reduces the total interest paid over the remaining term, but it may involve a fee depending on the loan type and the terms of the credit contract. The applicable conditions are set out in the contract."
     url: "https://example.invalid/guides/early-repayment"
     section_path:
       - "Guides"
@@ -58,7 +58,7 @@ passages:
       - mortgage_casa_ta
     authority: high
     header: "Variable Interest Rate (IRCC)"
-    text: "Our loans use a variable interest rate indexed to IRCC (Romanian Interbank Reference Rate). The rate adjusts quarterly based on market conditions. The current IRCC reference rate can be found on the National Bank's website."
+    text: "A variable interest rate for consumer credit in RON can be indexed to IRCC, the reference index for consumer credit published by the National Bank of Romania (BNR). The variable rate is the index plus a fixed margin and can change when the index is updated. Current IRCC values are published on the BNR website."
     url: "https://example.invalid/rates/ircc-info"
     section_path:
       - "Interest Rates"

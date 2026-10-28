@@ -137,6 +137,25 @@ def test_product_code_triggers_requirements_and_profile(orchestrator_factory):
     assert resp.simulated is True
 
 
+def test_product_fields_in_same_batch_as_product_code_accepted(orchestrator_factory):
+    """Product-specific fields listed before product_code in one batch are not unknown_field."""
+    orch, store, model = orchestrator_factory([
+        GREET,
+        respond("Mulțumesc!", intent="credit_application", updates=DISCOVERY_UPDATES + [
+            {"field": "monthly_net_income", "value": "6200 RON"},
+            {"field": "product_code", "value": "personal_loan"},
+        ]),
+    ])
+    sid = orch.start_session(CUSTOMER).session_id
+    orch.handle(sid, CUSTOMER, CustomerMessage("Venitul meu net este 6200 lei"))
+
+    app = store.get(sid).application
+    assert app.product_code == Product.personal_loan
+    assert app.fields["monthly_net_income"].value == Decimal("6200")
+    assert "unknown_field" not in joined(model.calls[-1])
+    assert len(model.calls) == 2  # no re-ask step was needed
+
+
 def test_product_code_outside_catalog_rejected(orchestrator_factory):
     orch, store, model = orchestrator_factory([
         GREET,
@@ -209,7 +228,7 @@ def test_invalid_json_retry_then_fallback(orchestrator_factory):
     version_before = store.get(sid).version
     count_before = len(store.messages(sid))
 
-    resp = orch.handle(sid, CUSTOMER, CustomerMessage("hello"))
+    resp = orch.handle(sid, CUSTOMER, CustomerMessage("salut"))
 
     calls = turn_calls(model, 1)
     assert len(calls) == 2
@@ -428,6 +447,10 @@ def test_model_unavailable_after_tool_saves_nothing(orchestrator_factory):
     ("ok", "en", "en"),
     ("ok", "ro", "ro"),
     ("Danemarca", "en", "en"),
+    ("I want a 30000 lei loan", "ro", "en"),
+    ("Yes, I can pay 2000 lei per month, how?", "ro", "en"),
+    ("Vreau un credit", "en", "ro"),
+    ("Vreau un loan de 30000 lei", "en", "ro"),
 ])
 def test_language_detection(text, previous, expected):
     assert detect_language(text, previous) == expected

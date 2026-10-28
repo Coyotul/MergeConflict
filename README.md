@@ -69,6 +69,7 @@ Copy `.env.example` to `.env` in the repository root and configure:
 - `ORCHESTRATOR_MODEL`: Model identifier (default: `openai/gpt-oss-120b`)
 - `ORCHESTRATOR_SESSION_STORE`: `memory`, `file`, or `postgres` (default: `file`)
 - `ORCHESTRATOR_RETRIEVAL`: `stub` (synthetic) or `rag` (requires RAG service, default: `stub`)
+- `ORCHESTRATOR_REQUEST_TIMEOUT_S`: Model request timeout in seconds (default: `60.0`)
 
 See `.env.example` for all available settings.
 
@@ -94,13 +95,17 @@ Omit `ORCHESTRATOR_MODEL` to use the default (`openai/gpt-oss-120b`).
 
 ### PostgreSQL session store
 
-To persist sessions in PostgreSQL instead of the filesystem:
+To persist sessions in PostgreSQL instead of the filesystem, start the local
+database, apply the SQL migrations (idempotent; uses `ORCHESTRATOR_DATABASE_URL`,
+default `postgresql://rag:rag@127.0.0.1:5433/rag`), then start the API:
 
 ```bash
+docker compose -f infrastructure/local/docker-compose.yml up -d
+python -c "import psycopg; from src.core.settings import load_orchestrator_settings; from src.storage.application_db.migrate import apply_migrations; print(apply_migrations(psycopg.connect(load_orchestrator_settings().database_url)))"
 ORCHESTRATOR_SESSION_STORE=postgres uvicorn src.api.app:create_app --factory --port 8000
 ```
 
-Requires Docker Compose for the database (`docker-compose up -d`) and migrations (`alembic upgrade head`).
+The migration command prints the newly applied files (`[]` when up to date).
 
 ### Testing
 

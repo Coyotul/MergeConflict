@@ -116,12 +116,6 @@ T: dict[str, dict[str, str]] = {
         "ro": "Un consultant va analiza cazul tău și te va contacta.",
         "en": "A human advisor will review your case and contact you.",
     },
-    "submitted": {
-        "ro": "Cererea ta a fost trimisă spre analiză unui consultant. Referința ei este {id}. "
-              "Nu s-a luat încă nicio decizie; vei fi informat separat.",
-        "en": "Your application was sent to a human advisor for review. Its reference is {id}. "
-              "No decision has been made yet; you will be informed separately.",
-    },
     "doc_accepted": {"ro": "Am primit documentul ({doc_type}).", "en": "We received your document ({doc_type})."},
     "doc_rejected": {
         "ro": "Nu am putut folosi documentul ({doc_type}): {reason}",
@@ -238,8 +232,6 @@ class DemoChatModel:
         lang = t.lang
         if t.event == "SESSION_STARTED":
             return "other", [], _respond(_text("greeting", lang))
-        if t.event and t.event.split()[0] in ("APPLICATION_SUBMITTED", "ALREADY_SUBMITTED"):
-            return "application_status", [], _respond(_text("submitted", lang, id=t.event.split()[1]))
 
         intent = "credit_application" if t.has_application else "product_info"
         if "search_banking_policies" in t.tools:

@@ -23,3 +23,19 @@ def test_api_key_not_in_repr():
 
 def test_featherless_base_url_override():
     assert load_orchestrator_settings({"FEATHERLESS_BASE_URL": "https://custom.example.com"}).featherless_base_url == "https://custom.example.com"
+
+
+def test_env_example_orchestrator_keys_are_read_by_loader():
+    """Every ORCHESTRATOR_* key in .env.example names a setting the loader reads."""
+    from src.core.settings import OrchestratorSettings
+
+    example = Path(__file__).resolve().parents[3] / ".env.example"
+    keys = [
+        line.split("=", 1)[0].strip()
+        for line in example.read_text(encoding="utf-8").splitlines()
+        if line.startswith("ORCHESTRATOR_")
+    ]
+    assert "ORCHESTRATOR_REQUEST_TIMEOUT_S" in keys
+    for key in keys:
+        assert key.removeprefix("ORCHESTRATOR_").lower() in OrchestratorSettings.model_fields, key
+    assert load_orchestrator_settings({"ORCHESTRATOR_REQUEST_TIMEOUT_S": "12.5"}).request_timeout_s == 12.5

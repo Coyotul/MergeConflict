@@ -293,6 +293,61 @@ def test_confirmation_with_stale_version(at_confirmation):
     assert resp.awaiting.kind == "confirmation" and resp.awaiting.summary_version == version
 
 
+def test_confirm_after_other_offer_selected_gives_summary_changed(at_confirmation):
+    """Summary shown with version V; a different offer is chosen; confirming V submits nothing."""
+    orch, store, _, sid, version = at_confirmation([respond("Confirmi noua ofertă?"), respond("S-a schimbat.")])
+    submits = spy_tool(orch._registry, "submit_application")
+    other = store.get(sid).application.offers.offers[1]
+
+    changed = orch.handle(sid, CUSTOMER, OfferSelected(other.offer_id))
+    assert changed.awaiting.kind == "confirmation"
+    assert changed.awaiting.summary_version != version
+
+    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
+    assert store.get(sid).application.application_id is None
+    assert submits == []
+    assert events(store, sid)[-1] == "SUMMARY_CHANGED"
+    assert block(resp, "application_submitted") is None
+
+
+def test_confirm_after_amount_update_gives_summary_changed(at_confirmation):
+    """Summary shown with version V; the customer changes the amount; confirming V submits nothing."""
+    orch, store, _, sid, version = at_confirmation([
+        respond("Am actualizat suma.", intent="credit_application",
+                updates=[{"field": "amount", "value": "25000"}]),
+        respond("S-a schimbat."),
+    ])
+    submits = spy_tool(orch._registry, "submit_application")
+
+    orch.handle(sid, CUSTOMER, CustomerMessage("De fapt vreau 25000 lei"))
+    assert store.get(sid).application.fields["amount"].value == Decimal("25000")
+
+    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
+    assert store.get(sid).application.application_id is None
+    assert submits == []
+    assert events(store, sid)[-1] == "SUMMARY_CHANGED"
+    assert block(resp, "application_submitted") is None
+
+
+def test_submitted_reply_is_fixed_text_never_model(at_confirmation):
+    """After submission the reply is the fixed submitted text; the model is never asked."""
+    orch, store, model, sid, version = at_confirmation()
+    model.responses = lambda messages: respond("Your loan is approved!")
+    calls_before = len(model.calls)
+
+    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
+    app_id = store.get(sid).application.application_id
+    assert app_id is not None
+    assert [m.text for m in resp.messages] == [EVENT_TEXTS["submitted"]["ro"].format(id=app_id)]
+
+    set_language(store, sid, "en")
+    again = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
+    assert [m.text for m in again.messages] == [EVENT_TEXTS["submitted"]["en"].format(id=app_id)]
+
+    assert len(model.calls) == calls_before
+    assert all("approved" not in m.content for m in store.messages(sid))
+
+
 def test_confirmation_before_summary_is_rejected(at_offers):
     orch, store, _, sid = at_offers([respond("Alege o ofertă.")])
     submits = spy_tool(orch._registry, "submit_application")
@@ -331,20 +386,19 @@ def test_confirmation_persists_when_model_unavailable(at_confirmation):
     assert store.messages(sid)[-1].content == expected
 
 
-def test_confirmation_saved_before_model_call(at_confirmation):
-    """The submission is in the store by the time the model is asked to explain."""
-    seen = {}
-
+def test_confirmation_saved_without_model_call(at_confirmation):
+    """The submission is persisted and answered without asking the model at all."""
     orch, store, model, sid, version = at_confirmation()
 
     def explain(messages):
-        seen["application_id"] = store.get(sid).application.application_id
-        return "!unavailable"
+        raise AssertionError("the model must not be called for a submission")
 
     model.responses = explain
-    orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-    assert seen["application_id"] is not None
-    assert seen["application_id"] == store.get(sid).application.application_id
+    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
+    app_id = store.get(sid).application.application_id
+    assert app_id is not None
+    assert resp.session_version == store.get(sid).version
+    assert store.messages(sid)[-1].content == EVENT_TEXTS["submitted"]["ro"].format(id=app_id)
 
 
 def test_submit_failure_does_not_submit(at_confirmation):

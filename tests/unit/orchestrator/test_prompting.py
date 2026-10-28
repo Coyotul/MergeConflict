@@ -100,6 +100,20 @@ def test_system_prompt_rules_present():
     assert "simulated, based on public conditions" in p
 
 
+def test_system_prompt_product_choice_and_value_formats():
+    """The model picks the product itself, re-proposes earlier values, and uses bare integers."""
+    p = load_system_prompt()
+    assert "call `get_credit_products` **without** a `purpose` argument" in p
+    assert "`purposes`" in p
+    assert '{ "field": "product_code", "value": "personal_loan" }' in p
+    assert "they can change it" in p
+    assert "only if two products fit equally well" in p
+    assert "Re-propose in `field_updates` the values the customer already stated earlier" in p
+    assert "integer fields are bare numbers" in p
+    assert '"value": 60' in p
+    assert '"30000 RON"' in p
+
+
 def test_last_message_is_context_json():
     """build_messages returns list with final system message containing CONTEXT_JSON."""
     now = datetime.now(UTC)

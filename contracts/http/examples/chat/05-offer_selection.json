@@ -97,7 +97,7 @@
         {
           "field": "monthly_net_income",
           "label": "Monthly Net Income",
-          "value": "6200",
+          "value": "6200.00",
           "source": "document",
           "confidence": 0.95,
           "needs_confirmation": false,
@@ -115,7 +115,7 @@
         {
           "field": "existing_monthly_obligations",
           "label": "Existing Monthly Obligations",
-          "value": "400",
+          "value": "400.00",
           "source": "document",
           "confidence": 0.95,
           "needs_confirmation": false,
@@ -142,7 +142,7 @@
       "type": "offers",
       "offers": [
         {
-          "offer_id": "personal_loan-60m-a5d824",
+          "offer_id": "personal_loan-60m-4bab7e",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -175,7 +175,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-36m-a5d824",
+          "offer_id": "personal_loan-36m-4bab7e",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -208,7 +208,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-48m-a5d824",
+          "offer_id": "personal_loan-48m-4bab7e",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",

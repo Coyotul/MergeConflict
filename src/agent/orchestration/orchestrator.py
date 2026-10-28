@@ -94,15 +94,25 @@ SESSION_STARTED_EVENT = "SESSION_STARTED"
 # ---- language detection ---------------------------------------------------
 
 _RO_DIACRITICS = re.compile(r"[ăâîșțşţ]", re.IGNORECASE)
-_RO_WORDS = re.compile(r"\b(?:vreau|credit de|pot|cât|cat|lei|luni|da|nu|bună|buna)\b", re.IGNORECASE)
-_EN_WORDS = re.compile(r"\b(?:i want|loan|how|what|can i|months)\b", re.IGNORECASE)
+_RO_WORDS = re.compile(
+    r"\b(?:vreau|credit de|pot|cât|cat|lei|luni|ani|da|nu|bună|buna|sunt|am|un|o|de|pentru|"
+    r"este|și|si|meu|mea|venitul|venit|aveți|aveti|cum|ce|mulțumesc|multumesc)\b",
+    re.IGNORECASE,
+)
+_EN_WORDS = re.compile(
+    r"\b(?:i want|i|loan|loans|how|what|can|months|month|years|yes|the|my|is|per|pay|want|need|"
+    r"please|thanks|hello|hi|income|salary|for|and|of)\b",
+    re.IGNORECASE,
+)
 
 
 def detect_language(text: str, previous: Literal["ro", "en"]) -> Literal["ro", "en"]:
-    """ro on diacritics or a Romanian keyword, en on an English keyword, else previous."""
-    if _RO_DIACRITICS.search(text) or _RO_WORDS.search(text):
+    """Count Romanian (keywords + diacritics) vs English keyword matches; higher wins, tie keeps previous."""
+    ro = len(_RO_DIACRITICS.findall(text)) + len(_RO_WORDS.findall(text))
+    en = len(_EN_WORDS.findall(text))
+    if ro > en:
         return "ro"
-    if _EN_WORDS.search(text):
+    if en > ro:
         return "en"
     return previous
 
@@ -369,13 +379,20 @@ class Orchestrator(CodeEventsMixin):
         app = turn.state.application
         if app is None:
             return [UpdateResult(field=u.field, accepted=False, reason="no_active_application") for u in updates]
-        specs = all_specs(app)
-        specs["product_code"] = FieldSpec(
-            name="product_code", label="Product", type=FieldType.enum, options=self._catalog_codes
-        )
-        offer_ids = {o.offer_id for o in app.offers.offers} if app.offers and offers_current(app) else set()
-        results = apply_field_updates(app, updates, specs, offer_ids=offer_ids, now=turn.ctx.now)
-        self._sync_application(turn)
+        # product_code first: its requirements define the specs the other updates need.
+        product_updates = [u for u in updates if u.field == "product_code"]
+        other_updates = [u for u in updates if u.field != "product_code"]
+        results: list[UpdateResult] = []
+        for batch in (product_updates, other_updates):
+            if not batch:
+                continue
+            specs = all_specs(app)
+            specs["product_code"] = FieldSpec(
+                name="product_code", label="Product", type=FieldType.enum, options=self._catalog_codes
+            )
+            offer_ids = {o.offer_id for o in app.offers.offers} if app.offers and offers_current(app) else set()
+            results += apply_field_updates(app, batch, specs, offer_ids=offer_ids, now=turn.ctx.now)
+            self._sync_application(turn)
         return [r for r in results if not r.accepted]
 
     def _execute_model_tool(self, turn: _Turn, action: ModelAction) -> ToolCallOutcome:

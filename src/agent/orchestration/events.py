@@ -4,7 +4,8 @@ Each event's tool runs before any model call; the model then only explains
 the result. If the model is unavailable, or gives no usable reply within the
 step cap, the state is still saved and the customer gets a fixed text for the
 event in the session language. A submission is saved the moment
-submit_application succeeds, before the model is asked anything.
+submit_application succeeds, and its reply (also for a repeated confirmation)
+is always the fixed "submitted" text: the model is never asked to describe it.
 """
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Union
@@ -199,7 +200,7 @@ class CodeEventsMixin:
 
         if app is not None and app.application_id is not None:
             self._add_message(turn, "event", f"ALREADY_SUBMITTED {app.application_id}")
-            return self._explain(turn, loaded, event_text("submitted", language, id=app.application_id))
+            return self._fixed_reply(turn, loaded, event_text("submitted", language, id=app.application_id))
 
         self._sync_application(turn)  # make sure the summary reflects the current state
         needs = [n.kind for n in next_needs(state)]
@@ -237,7 +238,12 @@ class CodeEventsMixin:
 
         self._add_message(turn, "tool", outcome.as_message())
         self._add_message(turn, "event", f"APPLICATION_SUBMITTED {app.application_id} {output.status}")
-        return self._explain(turn, loaded, event_text("submitted", language, id=app.application_id))
+        return self._fixed_reply(turn, loaded, event_text("submitted", language, id=app.application_id))
+
+    def _fixed_reply(self, turn: "_Turn", loaded: SessionState, text: str) -> TurnResponse:
+        """Reply with a fixed text, no model call (submission must never be paraphrased)."""
+        self._add_message(turn, "assistant", text)
+        return self._commit(turn, loaded)
 
     def _explain(self, turn: "_Turn", loaded: SessionState, text: str) -> TurnResponse:
         """Let the model explain the event; fall back to `text` if it can't. Then save."""

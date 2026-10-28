@@ -675,7 +675,7 @@ def build_stub_registry(data: StubData, policy_search: PolicySearch) -> ToolRegi
         ctx.state.used_stubs = True
         return RequestHumanReviewOutput(
             ticket_id=ticket_id,
-            message="A human advisor will review your case and contact you within 2 business days.",
+            message="A human advisor will review your case and a representative will follow up with you.",
             simulated=True
         )
 

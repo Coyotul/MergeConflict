@@ -499,6 +499,24 @@ def test_request_human_review_sets_escalation():
     assert state.escalation.ticket_id == output.ticket_id
     assert state.escalation.reason == "Customer needs assistance with complex case"
     assert state.escalation.created_at == now
+    # No timeline promise: a representative follows up.
+    assert "business day" not in output.message
+    assert "follow up" in output.message
+
+
+def test_synthetic_passages_are_neutral():
+    """Stub passages carry no bank voice and no incorrect facts."""
+    import yaml
+
+    passages = yaml.safe_load(Path("config/orchestrator/policy_passages.yaml").read_text(encoding="utf-8"))["passages"]
+    texts = {p["topic"]: p["text"] for p in passages}
+    assert all(p["publisher"] == "Synthetic stub" for p in passages)
+    assert not any(t.startswith("Our ") or " our " in t.lower() for t in texts.values())
+    assert "without penalties" not in texts["early_repayment"]
+    assert "fee" in texts["early_repayment"]
+    assert "Interbank" not in texts["variable_rate_ircc"]
+    assert "consumer credit" in texts["variable_rate_ircc"]
+    assert "BNR" in texts["variable_rate_ircc"]
 
 
 def test_non_stub_policy_search_not_simulated():

@@ -5,7 +5,7 @@
   "messages": [
     {
       "role": "assistant",
-      "text": "Cererea ta a fost trimisă spre analiză unui consultant. Referința ei este APP-00000001. Nu s-a luat încă nicio decizie; vei fi informat separat.",
+      "text": "Cererea ta a fost trimisă spre analiză unui consultant. Referința ei este APP-00000001. Nu s-a luat încă nicio decizie.",
       "citations": [],
       "created_at": "2026-10-28T09:00:00Z"
     }
@@ -97,7 +97,7 @@
         {
           "field": "monthly_net_income",
           "label": "Monthly Net Income",
-          "value": "6200",
+          "value": "6200.00",
           "source": "document",
           "confidence": 0.95,
           "needs_confirmation": false,
@@ -115,7 +115,7 @@
         {
           "field": "existing_monthly_obligations",
           "label": "Existing Monthly Obligations",
-          "value": "400",
+          "value": "400.00",
           "source": "document",
           "confidence": 0.95,
           "needs_confirmation": false,
@@ -142,7 +142,7 @@
       "type": "offers",
       "offers": [
         {
-          "offer_id": "personal_loan-60m-a5d824",
+          "offer_id": "personal_loan-60m-4bab7e",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -175,7 +175,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-36m-a5d824",
+          "offer_id": "personal_loan-36m-4bab7e",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -208,7 +208,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-48m-a5d824",
+          "offer_id": "personal_loan-48m-4bab7e",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -241,7 +241,7 @@
           "simulated": true
         }
       ],
-      "selected_offer_id": "personal_loan-60m-a5d824"
+      "selected_offer_id": "personal_loan-60m-4bab7e"
     },
     {
       "type": "application_submitted",

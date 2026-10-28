@@ -1,0 +1,367 @@
+{
+  "session_id": "example-session-1",
+  "turn_id": "example-turn-15",
+  "session_version": 14,
+  "messages": [
+    {
+      "role": "assistant",
+      "text": "Ai ales varianta pe 60 luni. Verifică rezumatul cererii și confirmă-l când ești gata. Nu trimit nimic fără confirmarea ta.",
+      "citations": [],
+      "created_at": "2026-10-28T09:00:00Z"
+    }
+  ],
+  "awaiting": {
+    "kind": "confirmation",
+    "document_types": [],
+    "summary_version": "example-summary-v1"
+  },
+  "progress": {
+    "flow": "credit_application",
+    "stage": "awaiting_confirmation",
+    "steps": [
+      {
+        "stage": "discovery",
+        "status": "done"
+      },
+      {
+        "stage": "collecting_information",
+        "status": "done"
+      },
+      {
+        "stage": "eligibility",
+        "status": "done"
+      },
+      {
+        "stage": "documents",
+        "status": "done"
+      },
+      {
+        "stage": "offer_selection",
+        "status": "done"
+      },
+      {
+        "stage": "awaiting_confirmation",
+        "status": "current"
+      },
+      {
+        "stage": "submitted",
+        "status": "todo"
+      }
+    ]
+  },
+  "blocks": [
+    {
+      "type": "document_checklist",
+      "items": [
+        {
+          "doc_type": "id_card",
+          "label": "ID Card",
+          "status": "accepted",
+          "rejection_reason": null
+        },
+        {
+          "doc_type": "payslip",
+          "label": "Payslip (last 3 months)",
+          "status": "accepted",
+          "rejection_reason": null
+        },
+        {
+          "doc_type": "bank_statement",
+          "label": "Bank Statement (last 6 months)",
+          "status": "accepted",
+          "rejection_reason": null
+        }
+      ]
+    },
+    {
+      "type": "extracted_fields",
+      "fields": [
+        {
+          "field": "full_name",
+          "label": "Full Name",
+          "value": "Ana Popescu",
+          "source": "document",
+          "confidence": 0.95,
+          "needs_confirmation": false,
+          "conflict_with": null
+        },
+        {
+          "field": "age",
+          "label": "Age",
+          "value": "34",
+          "source": "document",
+          "confidence": 0.95,
+          "needs_confirmation": false,
+          "conflict_with": null
+        },
+        {
+          "field": "monthly_net_income",
+          "label": "Monthly Net Income",
+          "value": "6200.00",
+          "source": "document",
+          "confidence": 0.95,
+          "needs_confirmation": false,
+          "conflict_with": null
+        },
+        {
+          "field": "employer_name",
+          "label": "Employer Name",
+          "value": "TechCorp SRL",
+          "source": "document",
+          "confidence": 0.95,
+          "needs_confirmation": false,
+          "conflict_with": null
+        },
+        {
+          "field": "existing_monthly_obligations",
+          "label": "Existing Monthly Obligations",
+          "value": "400.00",
+          "source": "document",
+          "confidence": 0.95,
+          "needs_confirmation": false,
+          "conflict_with": null
+        }
+      ]
+    },
+    {
+      "type": "eligibility_result",
+      "result": {
+        "status": "satisfied",
+        "reasons": [
+          {
+            "code": "all_preliminary_rules_passed",
+            "message": "All preliminary rules passed"
+          }
+        ],
+        "rule_version": "stub-2026-10-28",
+        "missing_fields": [],
+        "simulated": true
+      }
+    },
+    {
+      "type": "offers",
+      "offers": [
+        {
+          "offer_id": "personal_loan-60m-4bab7e",
+          "product_code": "personal_loan",
+          "amount": {
+            "amount": "30000.00",
+            "currency": "RON"
+          },
+          "term_months": 60,
+          "annual_interest_rate_percent": "9.5",
+          "monthly_installment": {
+            "amount": "630.06",
+            "currency": "RON"
+          },
+          "total_repayment": {
+            "amount": "37803.60",
+            "currency": "RON"
+          },
+          "total_cost": {
+            "amount": "7803.60",
+            "currency": "RON"
+          },
+          "fees": {
+            "amount": "0.00",
+            "currency": "RON"
+          },
+          "assumptions": [
+            "Illustrative annual interest rate: 9.5%",
+            "Fees: 0 RON",
+            "Simulated, based on public conditions; not an offer from Raiffeisen Bank"
+          ],
+          "indicative": true,
+          "simulated": true
+        },
+        {
+          "offer_id": "personal_loan-36m-4bab7e",
+          "product_code": "personal_loan",
+          "amount": {
+            "amount": "30000.00",
+            "currency": "RON"
+          },
+          "term_months": 36,
+          "annual_interest_rate_percent": "9.5",
+          "monthly_installment": {
+            "amount": "960.99",
+            "currency": "RON"
+          },
+          "total_repayment": {
+            "amount": "34595.64",
+            "currency": "RON"
+          },
+          "total_cost": {
+            "amount": "4595.64",
+            "currency": "RON"
+          },
+          "fees": {
+            "amount": "0.00",
+            "currency": "RON"
+          },
+          "assumptions": [
+            "Illustrative annual interest rate: 9.5%",
+            "Fees: 0 RON",
+            "Simulated, based on public conditions; not an offer from Raiffeisen Bank"
+          ],
+          "indicative": true,
+          "simulated": true
+        },
+        {
+          "offer_id": "personal_loan-48m-4bab7e",
+          "product_code": "personal_loan",
+          "amount": {
+            "amount": "30000.00",
+            "currency": "RON"
+          },
+          "term_months": 48,
+          "annual_interest_rate_percent": "9.5",
+          "monthly_installment": {
+            "amount": "753.69",
+            "currency": "RON"
+          },
+          "total_repayment": {
+            "amount": "36177.12",
+            "currency": "RON"
+          },
+          "total_cost": {
+            "amount": "6177.12",
+            "currency": "RON"
+          },
+          "fees": {
+            "amount": "0.00",
+            "currency": "RON"
+          },
+          "assumptions": [
+            "Illustrative annual interest rate: 9.5%",
+            "Fees: 0 RON",
+            "Simulated, based on public conditions; not an offer from Raiffeisen Bank"
+          ],
+          "indicative": true,
+          "simulated": true
+        }
+      ],
+      "selected_offer_id": "personal_loan-60m-4bab7e"
+    },
+    {
+      "type": "application_summary",
+      "summary": {
+        "summary_version": "example-summary-v1",
+        "application_id": "DRAFT-00000001",
+        "product_code": "personal_loan",
+        "product_name": "Flexicredit (personal loan)",
+        "amount": {
+          "amount": "30000.00",
+          "currency": "RON"
+        },
+        "term_months": 60,
+        "offer": {
+          "offer_id": "personal_loan-60m-4bab7e",
+          "product_code": "personal_loan",
+          "amount": {
+            "amount": "30000.00",
+            "currency": "RON"
+          },
+          "term_months": 60,
+          "annual_interest_rate_percent": "9.5",
+          "monthly_installment": {
+            "amount": "630.06",
+            "currency": "RON"
+          },
+          "total_repayment": {
+            "amount": "37803.60",
+            "currency": "RON"
+          },
+          "total_cost": {
+            "amount": "7803.60",
+            "currency": "RON"
+          },
+          "fees": {
+            "amount": "0.00",
+            "currency": "RON"
+          },
+          "assumptions": [
+            "Illustrative annual interest rate: 9.5%",
+            "Fees: 0 RON",
+            "Simulated, based on public conditions; not an offer from Raiffeisen Bank"
+          ],
+          "indicative": true,
+          "simulated": true
+        },
+        "fields": [
+          {
+            "label": "Purpose",
+            "value": "pentru renovare",
+            "source": "customer"
+          },
+          {
+            "label": "Amount",
+            "value": "30000.00",
+            "source": "customer"
+          },
+          {
+            "label": "Term (months)",
+            "value": "60",
+            "source": "customer"
+          },
+          {
+            "label": "Full Name",
+            "value": "Ana Popescu",
+            "source": "document"
+          },
+          {
+            "label": "Age",
+            "value": "34",
+            "source": "document"
+          },
+          {
+            "label": "Employment Type",
+            "value": "employed",
+            "source": "customer"
+          },
+          {
+            "label": "Employment Duration (months)",
+            "value": "48",
+            "source": "customer"
+          },
+          {
+            "label": "Monthly Net Income",
+            "value": "6200.00",
+            "source": "document"
+          },
+          {
+            "label": "Employer Name",
+            "value": "TechCorp SRL",
+            "source": "document"
+          },
+          {
+            "label": "Existing Monthly Obligations",
+            "value": "400.00",
+            "source": "document"
+          }
+        ],
+        "documents": [
+          {
+            "doc_type": "id_card",
+            "label": "ID Card",
+            "status": "accepted",
+            "rejection_reason": null
+          },
+          {
+            "doc_type": "payslip",
+            "label": "Payslip (last 3 months)",
+            "status": "accepted",
+            "rejection_reason": null
+          },
+          {
+            "doc_type": "bank_statement",
+            "label": "Bank Statement (last 6 months)",
+            "status": "accepted",
+            "rejection_reason": null
+          }
+        ]
+      }
+    }
+  ],
+  "simulated": true
+}

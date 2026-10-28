@@ -1,0 +1,54 @@
+{
+  "session_id": "example-session-1",
+  "turn_id": "example-turn-04",
+  "session_version": 3,
+  "messages": [
+    {
+      "role": "assistant",
+      "text": "Mulțumesc. Te rog să-mi spui: Term (months).",
+      "citations": [],
+      "created_at": "2026-10-28T09:00:00Z"
+    }
+  ],
+  "awaiting": {
+    "kind": "text",
+    "document_types": [],
+    "summary_version": null
+  },
+  "progress": {
+    "flow": "credit_application",
+    "stage": "discovery",
+    "steps": [
+      {
+        "stage": "discovery",
+        "status": "current"
+      },
+      {
+        "stage": "collecting_information",
+        "status": "todo"
+      },
+      {
+        "stage": "eligibility",
+        "status": "todo"
+      },
+      {
+        "stage": "documents",
+        "status": "todo"
+      },
+      {
+        "stage": "offer_selection",
+        "status": "todo"
+      },
+      {
+        "stage": "awaiting_confirmation",
+        "status": "todo"
+      },
+      {
+        "stage": "submitted",
+        "status": "todo"
+      }
+    ]
+  },
+  "blocks": [],
+  "simulated": false
+}

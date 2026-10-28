@@ -13,6 +13,7 @@ uvicorn>=0.34,<1
 # Data & Documents (useful for banking documents & tabular records)
 pandas
 openpyxl
+pillow>=12.0.0
 
 # LLM / AI integrations (optional depending on chosen stack, e.g. openai, google-genai, langchain)
 # openai

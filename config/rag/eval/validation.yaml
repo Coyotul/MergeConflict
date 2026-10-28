@@ -2107,7 +2107,8 @@ questions:
   - canonical_key: /content/dam/rbi/retail/eu/ro/documents/pf/credite
     section_hint: 182 | ILFOV | MAGURELE
     must_contain:
-    - ILFOV | MAGURELE
+    - ILFOV
+    - MAGURELE
     grade: 2
     doc_kind: pdf_generic
     topic: credit_process
@@ -2229,7 +2230,7 @@ questions:
   - canonical_key: /content/dam/rbi/retail/eu/ro/documents/pf/in-sprijinul-tau/credite-notificare-conditii-contractuale-raiffeisen-bank-2017
     section_hint: ''
     must_contain:
-    - 7,5% | 3%
+    - 7,5%
     - 30.09.2016
     grade: 2
     doc_kind: pdf_generic
@@ -3294,15 +3295,6 @@ questions:
     topic: credit_process
     products:
     - personal_loan
-  - canonical_key: /ro/persoane-fizice/produsele-noastre/credite/creditul-imobiliar-pentru-proiecte-rezidentiale.html
-    section_hint: Află ce tip de credit ți se potrivește!
-    must_contain:
-    - până la 50.000 euro
-    grade: 2
-    doc_kind: product_page
-    topic: refinancing
-    products:
-    - mortgage_residential_projects
   - canonical_key: /ro/persoane-fizice/produsele-noastre/credite/credit-de-nevoi-personale-fara-ipoteca.html
     section_hint: Informații generale
     must_contain:
@@ -4331,6 +4323,17 @@ questions:
     section_hint: ''
     must_contain:
     - ultimul mandat postal
+    grade: 2
+    doc_kind: pdf_generic
+    topic: required_documents
+    products:
+    - mortgage_casa_ta
+    - mortgage_casa_ta_verde
+    - mortgage_noua_casa
+    - mortgage_residential_projects
+  - canonical_key: /content/dam/rbi/retail/eu/ro/documents/pf/credite/ipotecare/lista-documente-client-credite-garantate
+    section_hint: ''
+    must_contain:
     - concediu de crestere si
     grade: 2
     doc_kind: pdf_generic
@@ -4783,13 +4786,13 @@ questions:
   style: colloquial
   answerable: true
   expected:
-  - canonical_key: /ro/persoane-fizice/produsele-noastre/credite/creditul-imobiliar-pentru-proiecte-rezidentiale.html
+  - canonical_key: /ro/persoane-fizice/produsele-noastre/credite.html
     section_hint: Credite imobiliare
     must_contain:
     - Credit pentru construcție
     - Credit pentru refinanțare
     grade: 2
-    doc_kind: product_page
+    doc_kind: category_hub
     topic: refinancing
     products:
     - mortgage_residential_projects

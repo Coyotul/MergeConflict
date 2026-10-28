@@ -9,8 +9,8 @@ matching: A passage is a hit for an expected entry when canonical_key(citation.u
   occurs in the passage text, or section_hint occurs in its section path (both compared case- and accent-insensitively). Grade 2 = answers directly,
   1 = acceptable partial evidence.
 stats:
-  questions: 260
-  answerable: 243
+  questions: 261
+  answerable: 244
   unanswerable: 17
   documents_covered: 98
   corpus_documents: 116
@@ -672,15 +672,6 @@ questions:
     topic: costs_fees
     products: &id073
     - general
-  - canonical_key: /ro/persoane-fizice/produsele-noastre/credite/creditul-imobiliar-pentru-proiecte-rezidentiale.html
-    section_hint: Visa Credit eMAG
-    must_contain:
-    - 2000 Eur/solicitant
-    grade: 1
-    doc_kind: product_page
-    topic: costs_fees
-    products: &id074
-    - mortgage_residential_projects
   group: cardul-visa-credit-signature-g06
 - id: t-019
   question: Banca îmi evaluează și casa pe care vreau s-o cumpăr? În ce moment se face asta?
@@ -3157,8 +3148,7 @@ questions:
   - canonical_key: /content/dam/rbi/retail/eu/ro/documents/pf/credite/ipotecare/contractul-de-credit-pe-intelesul-tuturor
     section_hint: TOTAL | 25,000 | 6,871 | 31,871 | TOTAL | 25,000 | 6,355 | 31,355
     must_contain:
-    - 6,871
-    - 6,355
+    - 31,871
     grade: 2
     doc_kind: pdf_generic
     topic: variable_rate_ircc
@@ -4618,15 +4608,6 @@ questions:
     doc_kind: category_hub
     topic: eligibility
     products: *id072
-  - canonical_key: /ro/persoane-fizice/produsele-noastre/credite/creditul-imobiliar-pentru-proiecte-rezidentiale.html
-    section_hint: 'Descoperă și cardurile de credit Raiffeisen:'
-    must_contain:
-    - 'Venit minim: 470 Eur/solicitant'
-    grade: 2
-    doc_kind: product_page
-    topic: eligibility
-    products: &id114
-    - mortgage_residential_projects
   group: hcr-g02
 - id: t-142
   question: Ce limită de credit are Visa Credit Signature și ce venit minim îmi trebuie?
@@ -4642,14 +4623,6 @@ questions:
     doc_kind: category_hub
     topic: costs_fees
     products: *id073
-  - canonical_key: /ro/persoane-fizice/produsele-noastre/credite/creditul-imobiliar-pentru-proiecte-rezidentiale.html
-    section_hint: Visa Credit eMAG
-    must_contain:
-    - între 15.000 si 120.000 RON
-    grade: 2
-    doc_kind: product_page
-    topic: costs_fees
-    products: *id074
   - canonical_key: /ro/persoane-fizice/produsele-noastre/carduri/cardul-visa-credit-signature.html
     section_hint: Card credit Raiffeisen Platinum
     must_contain:
@@ -5045,7 +5018,7 @@ questions:
   - canonical_key: /content/dam/rbi/retail/eu/ro/documents/pf/informatii-utile
     section_hint: ''
     must_contain:
-    - ratelor la creditele in valuta
+    - rate credite PF in valuta
     grade: 1
     doc_kind: pdf_generic
     topic: credit_process
@@ -5649,6 +5622,17 @@ questions:
     section_hint: ASIGURĂRI.
     must_contain:
     - 'PREFERENȚIALĂ DACĂ:'
+    grade: 2
+    doc_kind: pdf_generic
+    topic: costs_fees
+    products:
+    - mortgage_casa_ta
+    - mortgage_casa_ta_verde
+    - mortgage_noua_casa
+    - mortgage_residential_projects
+  - canonical_key: /content/dam/rbi/retail/eu/ro/documents/pf/credite/ipotecare/jurnalul-casei-tale
+    section_hint: ASIGURĂRI.
+    must_contain:
     - certificat energetic clasa B emis
     grade: 2
     doc_kind: pdf_generic
@@ -5684,6 +5668,17 @@ questions:
     section_hint: ''
     must_contain:
     - Acord ANAF
+    grade: 2
+    doc_kind: pdf_generic
+    topic: required_documents
+    products:
+    - mortgage_casa_ta
+    - mortgage_casa_ta_verde
+    - mortgage_noua_casa
+    - mortgage_residential_projects
+  - canonical_key: /content/dam/rbi/retail/eu/ro/documents/pf/credite/ipotecare/lista-documente-client-credite-garantate
+    section_hint: ''
+    must_contain:
     - Adeverinta de salariu
     grade: 2
     doc_kind: pdf_generic
@@ -7240,22 +7235,24 @@ questions:
     doc_kind: product_page
     topic: costs_fees
     products: *id005
-  - canonical_key: /ro/persoane-fizice/produsele-noastre/credite/creditul-imobiliar-pentru-proiecte-rezidentiale.html
+  - canonical_key: /ro/persoane-fizice/produsele-noastre/credite.html
     section_hint: 'Descoperă și cardurile de credit Raiffeisen:'
     must_contain:
     - minim 5% lunar
     grade: 1
-    doc_kind: product_page
+    doc_kind: category_hub
     topic: eligibility
-    products: *id114
-  - canonical_key: /ro/persoane-fizice/produsele-noastre/credite/creditul-imobiliar-pentru-proiecte-rezidentiale.html
+    products: &id114
+    - mortgage_residential_projects
+  - canonical_key: /ro/persoane-fizice/produsele-noastre/credite.html
     section_hint: Visa Credit eMAG
     must_contain:
     - minim 5% lunar
     grade: 1
-    doc_kind: product_page
+    doc_kind: category_hub
     topic: costs_fees
-    products: *id074
+    products: &id074
+    - mortgage_residential_projects
   - canonical_key: /ro/persoane-fizice/produsele-noastre/carduri/carduri-de-cumparaturi/cum-obtii-un-credit-online-rapid-pe-card.html
     section_hint: Cardurile de cumpărături Raiffeisen
     must_contain:
@@ -7719,3 +7716,27 @@ questions:
   unanswerable_kind: realtime_personal
   all_topics: true
   group: unanswerable-realtime_personal-g10
+- id: t-261
+  question: Ce este darea în plată?
+  style: formal
+  answerable: true
+  expected:
+  - canonical_key: /ro/persoane-fizice/in-sprijinul-tau/informatii-utile/darea-in-plata.html
+    section_hint: ''
+    must_contain:
+    - transfera dreptul de proprietate
+    grade: 2
+    doc_kind: product_page
+    topic: restructuring_difficulty
+    products:
+    - general
+  - canonical_key: /ro/persoane-fizice/in-sprijinul-tau/informatii-utile/darea-in-plata.html
+    section_hint: ''
+    must_contain:
+    - o ultima optiune
+    grade: 1
+    doc_kind: product_page
+    topic: restructuring_difficulty
+    products:
+    - general
+  group: darea-in-plata-g09

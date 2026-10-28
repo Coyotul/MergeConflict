@@ -1,6 +1,6 @@
 """HTML page parser for product pages, guides, FAQs, and articles."""
-import re
 from bs4 import BeautifulSoup, Tag
+from dataclasses import dataclass, field
 
 from src.services.document_ingestion.chunking import (
     ChunkDraft,
@@ -8,11 +8,21 @@ from src.services.document_ingestion.chunking import (
     ExtractedLink,
     CHUNKER_VERSION,
     pack_lines,
+    estimate_tokens,
+    MAX_TOKENS,
 )
 from src.services.document_ingestion.parsers.links import absolutize, filter_chunk_links
+from src.services.document_ingestion.parsers.text_utils import extract_text
 from src.services.document_ingestion.sources import SourceConfig
 from src.services.document_ingestion.normalize import normalize_text
 from src.models.knowledge import ChunkKind, LinkKind
+
+
+@dataclass
+class BufferedLine:
+    """A line of text with associated links."""
+    text: str
+    links: list[ExtractedLink] = field(default_factory=list)
 
 
 def clean_html(data: bytes) -> BeautifulSoup:
@@ -53,7 +63,7 @@ def accordion_chunk(item: Tag, path_prefix: list[str], page_url: str) -> ChunkDr
     """
     # Extract question
     title_elem = item.select_one('.cmp-accordion__title')
-    question = title_elem.get_text(strip=True) if title_elem else ""
+    question = extract_text(title_elem) if title_elem else ""
 
     # Extract answer from panel
     panel = item.select_one('.cmp-accordion__panel')
@@ -62,7 +72,7 @@ def accordion_chunk(item: Tag, path_prefix: list[str], page_url: str) -> ChunkDr
 
     if panel:
         for elem in panel.select('p, li'):
-            text = elem.get_text(strip=True)
+            text = extract_text(elem)
             if text:
                 # Add prefix for list items
                 if elem.name == 'li':
@@ -74,7 +84,7 @@ def accordion_chunk(item: Tag, path_prefix: list[str], page_url: str) -> ChunkDr
                 href = a.get('href', '')
                 absolute_url = absolutize(href, page_url)
                 if absolute_url:
-                    anchor_text = a.get_text(strip=True)
+                    anchor_text = extract_text(a)
                     links.append(ExtractedLink(
                         target_url=absolute_url,
                         anchor_text=anchor_text,
@@ -106,7 +116,7 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
     # Extract title
     h1 = root.find('h1')
     if h1:
-        title = h1.get_text(strip=True)
+        title = extract_text(h1)
     else:
         title_tag = soup.find('title')
         if title_tag:
@@ -118,50 +128,48 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
 
     # Track section path and current buffer
     section_path = []
-    current_buffer = []
-    current_buffer_links = []
+    current_buffer = []  # list of BufferedLine
     chunks = []
     all_text_parts = []
-    seen_texts = set()
+    seen_block_texts = set()  # For dedupe across whole page
     drop_until_heading = None
 
-    # Track elements for worked example detection
+    # Get all elements for walking
     all_elements = list(root.select('h1, h2, h3, p, li, table, div.cmp-accordion__item'))
-    processed_elements = set()
 
     def flush_buffer():
         """Flush current buffer to chunks."""
-        nonlocal current_buffer, current_buffer_links
+        nonlocal current_buffer
         if not current_buffer:
             return
 
-        # Join and normalize
-        text = "\n".join(current_buffer)
+        # Join lines
+        text = "\n".join(line.text for line in current_buffer)
         text = normalize_text(text)
 
-        # Check for duplicates
-        if text in seen_texts:
-            current_buffer = []
-            current_buffer_links = []
-            return
-        seen_texts.add(text)
+        # Pack lines and split links accordingly
+        line_texts = [line.text for line in current_buffer]
+        packed = pack_lines(line_texts)
 
-        # Pack lines
-        lines = text.split('\n')
-        packed = pack_lines(lines)
-
-        # Create chunks
+        # Attach links to the correct piece
         for piece in packed:
+            piece_lines = piece.split('\n')
+            piece_links = []
+
+            # Find which original lines are in this piece
+            for line in current_buffer:
+                if line.text in piece_lines:
+                    piece_links.extend(line.links)
+
             chunk = ChunkDraft(
                 kind=ChunkKind.section,
                 section_path=section_path.copy(),
                 text=piece,
-                links=current_buffer_links.copy()
+                links=piece_links
             )
             chunks.append(chunk)
 
         current_buffer = []
-        current_buffer_links = []
 
     def extract_inline_links(elem: Tag) -> list[ExtractedLink]:
         """Extract inline links from an element."""
@@ -170,7 +178,7 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
             href = a.get('href', '')
             absolute_url = absolutize(href, page_url)
             if absolute_url:
-                anchor_text = a.get_text(strip=True)
+                anchor_text = extract_text(a)
                 links.append(ExtractedLink(
                     target_url=absolute_url,
                     anchor_text=anchor_text,
@@ -195,91 +203,64 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                 return True
         return False
 
-    # First pass: mark worked examples
+    def find_nearest_group_heading(start_elem: Tag) -> str:
+        """Find nearest preceding h2 or h3 for group heading."""
+        # Look for h2 or h3 in reverse document order
+        prev = start_elem.find_previous(['h2', 'h3'])
+        if prev:
+            return extract_text(prev)
+        # Fall back to h1 if no h2/h3
+        h1 = root.find('h1')
+        if h1:
+            return extract_text(h1)
+        return ""
+
+    # Track pending h3s (heading-only content)
+    pending_h3s = []
+
+    # Main walk
     i = 0
     while i < len(all_elements):
         elem = all_elements[i]
-        if elem.name == 'p':
-            text = elem.get_text(strip=True)
-            if text.startswith("Exemplu de calcul"):
-                # Mark this as start of worked example
-                processed_elements.add(elem)
-
-                # Collect example paragraphs
-                example_parts = [text]
-                example_links = extract_inline_links(elem)
-
-                # Look ahead for "Pentru un credit" paragraphs
-                j = i + 1
-                while j < len(all_elements):
-                    next_elem = all_elements[j]
-                    if next_elem.name == 'p':
-                        next_text = next_elem.get_text(strip=True)
-                        if next_text.startswith("Pentru un credit"):
-                            example_parts.append(next_text)
-                            example_links.extend(extract_inline_links(next_elem))
-                            processed_elements.add(next_elem)
-                            j += 1
-                        else:
-                            # Non-example paragraph, stop
-                            break
-                    elif next_elem.name in ('h1', 'h2', 'h3'):
-                        # Heading, stop
-                        break
-                    elif next_elem.name == 'p' and next_elem.get_text(strip=True).startswith("Exemplu de calcul"):
-                        # Another example, stop
-                        break
-                    else:
-                        j += 1
-
-                # Create worked example chunk
-                example_text = "\n".join(example_parts)
-                example_text = normalize_text(example_text)
-
-                chunks.append(ChunkDraft(
-                    kind=ChunkKind.worked_example,
-                    section_path=section_path.copy(),
-                    text=example_text,
-                    links=example_links
-                ))
-                all_text_parts.append(example_text)
-        i += 1
-
-    # Second pass: process remaining elements
-    pending_h3s = []  # Track h3s with no content
-
-    for i, elem in enumerate(all_elements):
-        # Skip if already processed
-        if elem in processed_elements:
-            continue
 
         # Skip if inside accordion (handled separately)
         if elem.name != 'div' and elem.find_parent('div', class_='cmp-accordion__item'):
+            i += 1
             continue
 
         # Skip nested p/li
         if elem.name in ('p', 'li'):
             if elem.find_parent(['li', 'table']):
+                i += 1
                 continue
 
         # Handle accordion items
         if elem.name == 'div' and 'cmp-accordion__item' in elem.get('class', []):
+            # Skip if in dropped section
+            if drop_until_heading is not None:
+                i += 1
+                continue
+
             # Flush any pending h3s
             if pending_h3s:
                 for h3_text in pending_h3s:
-                    current_buffer.append(f"- {h3_text}")
+                    current_buffer.append(BufferedLine(text=f"- {h3_text}"))
                 pending_h3s = []
 
             flush_buffer()
-            # Get group heading (last h2 or h3 before this accordion)
-            group_heading = section_path[0] if section_path else ""
+            # Get group heading (nearest h2 or h3)
+            group_heading = find_nearest_group_heading(elem)
             chunk = accordion_chunk(elem, [title, group_heading], page_url)
+            # Ensure no empty parts in section_path
+            chunk.section_path = [p for p in chunk.section_path if p]
             chunks.append(chunk)
+            all_text_parts.append(chunk.text)
+            i += 1
             continue
 
         # Handle headings
         if elem.name in ('h1', 'h2', 'h3'):
-            heading_text = elem.get_text(strip=True)
+            heading_text = extract_text(elem)
             heading_level = get_heading_level(elem.name)
 
             # Check if we should drop this section
@@ -287,12 +268,14 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                 # Flush any pending h3s first
                 if pending_h3s:
                     for h3_text in pending_h3s:
-                        current_buffer.append(f"- {h3_text}")
+                        current_buffer.append(BufferedLine(text=f"- {h3_text}"))
                     pending_h3s = []
 
                 flush_buffer()
                 drop_until_heading = heading_level
                 section_path = []
+                all_text_parts.append(heading_text)
+                i += 1
                 continue
 
             # If we were dropping, check if this heading ends it
@@ -300,15 +283,17 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                 if heading_level <= drop_until_heading:
                     drop_until_heading = None
                 else:
+                    i += 1
                     continue  # Still in dropped section
 
             # Check if h3 with no content (next element is heading)
             if heading_level == 3:
-                # Look ahead to see if next non-processed element is a heading
+                # Look ahead to see if next element is a heading
                 has_content = False
                 for j in range(i + 1, len(all_elements)):
                     next_elem = all_elements[j]
-                    if next_elem in processed_elements:
+                    # Skip nested elements
+                    if next_elem.name in ('p', 'li') and next_elem.find_parent(['li', 'table']):
                         continue
                     if next_elem.name in ('h1', 'h2', 'h3'):
                         # Next heading found, no content
@@ -322,12 +307,13 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                     # This h3 has no content, track it
                     pending_h3s.append(heading_text)
                     all_text_parts.append(heading_text)
+                    i += 1
                     continue
 
             # Flush any pending h3s before updating section path
             if pending_h3s:
                 for h3_text in pending_h3s:
-                    current_buffer.append(f"- {h3_text}")
+                    current_buffer.append(BufferedLine(text=f"- {h3_text}"))
                 pending_h3s = []
 
             # Update section path
@@ -342,61 +328,149 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                     section_path = [section_path[0], heading_text]
 
             all_text_parts.append(heading_text)
+            i += 1
             continue
 
         # Skip content in dropped sections
         if drop_until_heading is not None:
+            i += 1
             continue
+
+        # Check for worked example (in main walk, not separate pass)
+        if elem.name == 'p':
+            text = extract_text(elem)
+
+            if text.startswith("Exemplu de calcul"):
+                # Check for duplicate BEFORE processing as worked example
+                if text in seen_block_texts:
+                    i += 1
+                    continue
+                seen_block_texts.add(text)
+                # Flush any pending h3s
+                if pending_h3s:
+                    for h3_text in pending_h3s:
+                        current_buffer.append(BufferedLine(text=f"- {h3_text}"))
+                    pending_h3s = []
+
+                # Flush current buffer
+                flush_buffer()
+
+                # Collect example paragraphs
+                example_parts = [text]
+                example_links = extract_inline_links(elem)
+
+                # Look ahead for "Pentru un credit" paragraphs
+                j = i + 1
+                while j < len(all_elements):
+                    next_elem = all_elements[j]
+                    if next_elem.name == 'p':
+                        next_text = extract_text(next_elem)
+
+                        # Check for duplicate
+                        if next_text in seen_block_texts:
+                            j += 1
+                            continue
+
+                        if next_text.startswith("Pentru un credit"):
+                            example_parts.append(next_text)
+                            example_links.extend(extract_inline_links(next_elem))
+                            seen_block_texts.add(next_text)
+                            j += 1
+                        else:
+                            # Non-example paragraph, stop
+                            break
+                    elif next_elem.name in ('h1', 'h2', 'h3'):
+                        # Heading, stop
+                        break
+                    elif next_elem.name == 'p' and extract_text(next_elem).startswith("Exemplu de calcul"):
+                        # Another example, stop
+                        break
+                    else:
+                        j += 1
+
+                # Create worked example chunk with proper section_path
+                example_text = "\n".join(example_parts)
+                example_text = normalize_text(example_text)
+
+                # Build section path: [title, current h2, first 80 chars of example]
+                example_section_path = [title]
+                if section_path:
+                    example_section_path.extend(section_path)
+                # Add first 80 chars of title as identifier
+                example_title = text[:80] if len(text) > 80 else text
+                example_section_path.append(example_title)
+
+                chunks.append(ChunkDraft(
+                    kind=ChunkKind.worked_example,
+                    section_path=example_section_path,
+                    text=example_text,
+                    links=example_links
+                ))
+                all_text_parts.append(example_text)
+                i += 1
+                continue
 
         # Flush any pending h3s before adding content
         if pending_h3s:
             for h3_text in pending_h3s:
-                current_buffer.append(f"- {h3_text}")
+                current_buffer.append(BufferedLine(text=f"- {h3_text}"))
             pending_h3s = []
 
         # Handle p, li, table
         if elem.name == 'p':
-            text = elem.get_text(strip=True)
+            text = extract_text(elem)
             if text:
-                # Fix whitespace before punctuation (but not inside numbers)
-                # Only remove space before standalone punctuation
-                text = re.sub(r" ([.,;:!?])(?!\d)", r"\1", text)
-                current_buffer.append(text)
-                all_text_parts.append(text)
+                # Check for duplicate
+                if text in seen_block_texts:
+                    i += 1
+                    continue
+                seen_block_texts.add(text)
 
-                # Extract and store links
                 links = extract_inline_links(elem)
-                current_buffer_links.extend(links)
+                current_buffer.append(BufferedLine(text=text, links=links))
+                all_text_parts.append(text)
 
         elif elem.name == 'li':
-            text = elem.get_text(strip=True)
+            text = extract_text(elem)
             if text:
                 text = "- " + text
-                text = re.sub(r" ([.,;:!?])(?!\d)", r"\1", text)
-                current_buffer.append(text)
-                all_text_parts.append(text)
 
-                # Extract and store links
+                # Check for duplicate
+                if text in seen_block_texts:
+                    i += 1
+                    continue
+                seen_block_texts.add(text)
+
                 links = extract_inline_links(elem)
-                current_buffer_links.extend(links)
+                current_buffer.append(BufferedLine(text=text, links=links))
+                all_text_parts.append(text)
 
         elif elem.name == 'table':
             # Convert table to | -joined rows
             rows = []
             for row in elem.select('tr'):
-                cells = [cell.get_text(strip=True) for cell in row.select('td, th')]
+                cells = [extract_text(cell) for cell in row.select('td, th')]
                 if cells:
                     row_text = " | ".join(cells)
                     rows.append(row_text)
             if rows:
                 table_text = "\n".join(rows)
-                current_buffer.append(table_text)
+
+                # Check for duplicate
+                if table_text in seen_block_texts:
+                    i += 1
+                    continue
+                seen_block_texts.add(table_text)
+
+                current_buffer.append(BufferedLine(text=table_text))
                 all_text_parts.append(table_text)
+
+        i += 1
 
     # Flush any remaining pending h3s
     if pending_h3s:
         for h3_text in pending_h3s:
-            current_buffer.append(f"- {h3_text}")
+            current_buffer.append(BufferedLine(text=f"- {h3_text}"))
 
     # Flush remaining buffer
     flush_buffer()

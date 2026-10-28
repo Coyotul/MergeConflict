@@ -38,12 +38,17 @@ def test_worked_examples_are_atomic_and_exclude_trailing_text():
     ex = [c for c in _page().chunks if c.kind is ChunkKind.worked_example]
     assert len(ex) == 2 and all(c.text.startswith("Exemplu de calcul") for c in ex)
     assert all("Ofertele sunt supuse" not in c.text for c in ex)
+    # Examples have proper section_path with h2 context
+    assert all("Exemple de calcul" in " ".join(c.section_path) for c in ex)
 
 
 def test_dropped_sections_duplicates_and_site_chrome():
     doc = _page()
     assert not any("Articole utile" in " ".join(c.section_path) for c in doc.chunks)
     joined = "\n".join(c.text for c in doc.chunks)
+    # Duplicate text appears only once (deduped across page)
     assert joined.count("Ofertele sunt supuse unor termeni și condiții specifice.") == 1
     assert "Mergi acasă" not in joined
     assert doc.title and doc.parser_name == "html_page"
+    # No empty section_path parts
+    assert all(all(p for p in c.section_path) for c in doc.chunks)

@@ -10,25 +10,10 @@ from src.services.document_ingestion.chunking import (
 )
 from src.services.document_ingestion.parsers.html_page import clean_html, accordion_chunk
 from src.services.document_ingestion.parsers.links import absolutize, filter_chunk_links
+from src.services.document_ingestion.parsers.text_utils import extract_text
 from src.services.document_ingestion.sources import SourceConfig, products_for_url
 from src.services.document_ingestion.normalize import normalize_text
-from src.models.knowledge import ChunkKind, LinkKind
-import re
-
-
-def find_preceding_h2(elem: Tag) -> str | None:
-    """Find the text of the closest preceding h2 element."""
-    # Walk up the tree and at each level look for a preceding h2
-    current = elem
-    while current.parent and current.parent.name != 'body':
-        parent = current.parent
-        # Find all h2s in parent
-        h2s_in_parent = parent.find_all('h2')
-        if h2s_in_parent:
-            # Return the last one (closest to our element)
-            return h2s_in_parent[-1].get_text(strip=True)
-        current = parent
-    return None
+from src.models.knowledge import ChunkKind, Product, LinkKind
 
 
 def parse_category_hub(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocument:
@@ -52,28 +37,42 @@ def parse_category_hub(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedD
     # Drop h1 and intro paragraphs (before first h2)
     main = soup.find('main') or soup.find('body')
 
-    # Collect all teasers and accordions and group by their preceding h2
+    # Find all h2s in document order
+    all_h2s = main.select('h2')
+
+    # Collect all teasers and accordions
     all_teasers = main.select('article.cmp-teaser')
     all_accordions = main.select('div.cmp-accordion__item')
 
-    # Group teasers by h2
+    # Group teasers and accordions by their nearest preceding h2
     teasers_by_h2 = defaultdict(list)
     for teaser in all_teasers:
-        h2_text = find_preceding_h2(teaser)
-        if h2_text:
+        # Find nearest preceding h2 in document order
+        prev_h2 = teaser.find_previous('h2')
+        if prev_h2:
+            h2_text = extract_text(prev_h2)
             teasers_by_h2[h2_text].append(teaser)
 
-    # Group accordions by h2
     accordions_by_h2 = defaultdict(list)
     for accordion in all_accordions:
-        h2_text = find_preceding_h2(accordion)
-        if h2_text:
+        # Find nearest preceding h2 in document order
+        prev_h2 = accordion.find_previous('h2')
+        if prev_h2:
+            h2_text = extract_text(prev_h2)
             accordions_by_h2[h2_text].append(accordion)
 
-    # Collect all teaser targets to find chips
-    teaser_targets = defaultdict(lambda: {'count': 0, 'button_targets': set()})
-
+    # Collect all button targets (for chip detection)
+    all_button_targets = set()
     for teaser in all_teasers:
+        button = teaser.select_one('.cmp-buttonbar a')
+        button_href = button.get('href', '') if button else None
+        button_url = absolutize(button_href, page_url) if button_href else None
+        if button_url:
+            all_button_targets.add(button_url)
+
+    # Count distinct teasers per target URL
+    target_teaser_count = defaultdict(set)  # URL -> set of teaser indices
+    for idx, teaser in enumerate(all_teasers):
         # Get button link
         button = teaser.select_one('.cmp-buttonbar a')
         button_href = button.get('href', '') if button else None
@@ -84,20 +83,22 @@ def parse_category_hub(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedD
         image_href = image_link.get('href', '') if image_link else None
         image_url = absolutize(image_href, page_url) if image_href else None
 
-        # Track occurrences
+        # Track this teaser for each of its URLs
+        if button_url:
+            target_teaser_count[button_url].add(idx)
         if image_url:
-            teaser_targets[image_url]['count'] += 1
-            if button_url:
-                teaser_targets[button_url]['button_targets'].add(button_url)
+            target_teaser_count[image_url].add(idx)
 
-    # Find chip targets: appears in >= 2 teasers and never as button target
+    # Chip targets: appears in ≥2 distinct teasers AND not a button target
     chip_targets = frozenset(
-        url for url, data in teaser_targets.items()
-        if data['count'] >= 2 and url not in data['button_targets']
+        url for url, teaser_set in target_teaser_count.items()
+        if len(teaser_set) >= 2 and url not in all_button_targets
     )
 
-    # Process each h2 section
-    for h2_text in teasers_by_h2.keys() | accordions_by_h2.keys():
+    # Process each h2 section in document order
+    for h2_elem in all_h2s:
+        h2_text = extract_text(h2_elem)
+
         teasers = teasers_by_h2.get(h2_text, [])
         accordions = accordions_by_h2.get(h2_text, [])
 
@@ -108,7 +109,7 @@ def parse_category_hub(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedD
         for teaser in teasers:
             # Get button text
             button = teaser.select_one('.cmp-buttonbar a')
-            button_text = button.get_text(strip=True) if button else ""
+            button_text = extract_text(button) if button else ""
 
             if button_text.startswith("Citește"):
                 article_teasers.append(teaser)
@@ -119,15 +120,13 @@ def parse_category_hub(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedD
         for card in product_cards:
             # Extract title
             h3 = card.find('h3')
-            card_title = h3.get_text(strip=True) if h3 else ""
+            card_title = extract_text(h3) if h3 else ""
 
             # Extract description
             desc_elem = card.find('p')
             description = ""
             if desc_elem:
-                # Get text and fix punctuation (but not inside numbers)
-                description = desc_elem.get_text(' ', strip=True)
-                description = re.sub(r" ([.,;:!?])(?!\d)", r"\1", description)
+                description = extract_text(desc_elem)
 
             # Get links
             button = card.select_one('.cmp-buttonbar a')
@@ -175,7 +174,7 @@ def parse_category_hub(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedD
             for teaser in article_teasers:
                 # Extract title
                 h3 = teaser.find('h3')
-                teaser_title = h3.get_text(strip=True) if h3 else ""
+                teaser_title = extract_text(h3) if h3 else ""
                 teaser_titles.append(teaser_title)
 
                 # Get button link

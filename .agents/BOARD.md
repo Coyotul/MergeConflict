@@ -6,7 +6,6 @@
 | STRUCTURE-01 | ARCHITECTURE.md, README.md, scaffold directories, .gitignore | Codex | DONE | 2026-10-28 | All diagram components mapped; scaffold and documentation created locally. |
 | SCOPE-01 | IDEAS.md, CONTEXT.md, README.md, ARCHITECTURE.md | Codex | DONE | 2026-10-28 | Focus documentation exclusively on the AI credit application assistant. |
 | SPEC-01 | SPECIFICATION.md, scope docs, apps/, additional service packages | Codex | DONE | 2026-10-28 | Preserve owner specification and align scaffold with the complete credit lifecycle. |
-| ELIGIBILITY-01 | src/models/eligibility.py; src/services/eligibility/; src/rules/eligibility/; synthetic ANAF, credit_bureau and customer_loans adapters; affordability; eligibility API/tool, core/security/storage/audit seams; config/rules/; eligibility fixtures/tests/docs/scripts; requirements.txt; README.md | Cline | IN_PROGRESS | 2026-10-28 | Implement the diagram's preliminary Eligibility Check branch using public Raiffeisen Romania/BNR references. Synthetic integrations only; no final credit decisions or workflow transitions. |
 
 ---
 

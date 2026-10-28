@@ -5,7 +5,10 @@ AI platform for the full credit lifecycle. The earlier banking diagram remains
 the component baseline, extended below for servicing, refinancing and assistance.
 Use a Python 3.11+/FastAPI modular monolith with separate Next.js customer and staff
 interfaces. Backend folders are logical modules, not individual microservices.
-No service behavior or frontend application is implemented yet.
+The `feature/eligibility-check` branch now implements synthetic preliminary
+eligibility, verification adapters, affordability and a narrow API/tool boundary
+(see `docs/decisions/005-eligibility-reference-service.md`). Other service folders
+remain scaffold locations; this is not a complete banking platform.
 
 ## Repository layout
 
@@ -207,15 +210,17 @@ repayment, restructuring and recovery have specialized workflows owned by
   volumes, applicant files or vector-index snapshots.
 - Add unit tests for deterministic rules, integration tests for adapters, contract
   tests for wire formats and end-to-end tests for workflow/review journeys as
-  capabilities are implemented. Current test folders are placeholders.
+  capabilities are implemented. Eligibility tests now cover rules, providers,
+  API/tool contracts, authorization, persistence and synthetic screening journeys.
 
 ## Technology direction and persistence
 
 The specification selects FastAPI and recommends Next.js/React/TypeScript with
 Tailwind CSS for the interfaces. PostgreSQL is the database direction, preferably
 via Supabase, with pgvector and Supabase Storage as initial candidates. Model
-providers and banking APIs remain behind adapters. No packages or cloud resources
-are provisioned by this scaffold; hosting/free-tier availability is not verified
+providers and banking APIs remain behind adapters. The eligibility branch declares
+FastAPI/Uvicorn/Pydantic dependencies and uses stdlib SQLite for a local-only demo;
+no cloud resources are provisioned. Hosting/free-tier availability is not verified
 here. Verify current provider documentation when selecting or deploying services.
 
 Application records, review decisions, status history, consents, conversations,

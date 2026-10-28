@@ -4,8 +4,11 @@ Bank-agnostic agentic AI banking and credit management platform, covering loan
 applications, refinancing, repayment and ongoing credit assistance. Developed in
 the VibeHack challenge context; it is not affiliated with or endorsed by a bank.
 The repository contains a working local frontend prototype for customers and bank
-agents, plus architecture scaffolding for the future Python banking services.
+agents. On `feature/eligibility-check`, it also includes a working **synthetic
+Python preliminary eligibility service** alongside the broader platform scaffold.
 Authentication, data and decisions in the prototype are synthetic only.
+The Python service is not yet wired into the frontend's temporary Node adapter;
+neither implements live banking or the complete credit lifecycle.
 
 Start with [SPECIFICATION.md](SPECIFICATION.md), the main product reference supplied
 by the project owner. See [ARCHITECTURE.md](ARCHITECTURE.md) for the folder tree, mapping of every
@@ -73,7 +76,7 @@ demo store. See `docs/decisions/001-local-frontend.md`,
 `docs/decisions/003-yellow-black-sign-in.md` and `contracts/http/frontend-demo.md`
 for the demo boundary and integration contract.
 
-### Python architecture scaffold
+### Python eligibility service and architecture scaffold
 
 Use Python 3.11 or newer. From the repository root in PowerShell:
 
@@ -85,8 +88,8 @@ python main.py
 ```
 
 `main.py` reports the interpreter and Python version. It does not start an API or
-UI. No additional framework or infrastructure dependencies are needed to inspect
-or extend the scaffold.
+UI. The eligibility feature has a separate FastAPI entry point documented below;
+its dependencies are declared in `requirements.txt`.
 
 ## Where to start
 
@@ -103,9 +106,10 @@ or extend the scaffold.
 - `infrastructure/`, `scripts/`, `docs/`: environment definitions, maintenance
   commands, architecture decisions and operational notes.
 
-New Python packages contain only `__init__.py` placeholders. Unimplemented folders
-contain `.gitkeep` so Git preserves the layout. Add implementations and tests as
-capabilities are built. Keep databases, uploads and indexes in ignored
+Unimplemented Python packages contain `__init__.py` placeholders. Unimplemented
+non-Python folders contain `.gitkeep` so Git preserves the layout. Add
+implementations and tests as capabilities are built. Keep databases, uploads and
+indexes in ignored
 `data/local/`; never commit credentials or real applicant data.
 
 ## MVP boundary
@@ -119,3 +123,28 @@ history. Include at least one refinancing or early repayment simulation.
 Every new credit application requires authorized human review. Signing and
 disbursement are separate stages and may only be simulated in this MVP. No real
 banking inquiries, financial transactions or loan approvals occur.
+
+## Eligibility Check implementation (feature branch)
+
+`feature/eligibility-check` implements the Python preliminary-screening branch:
+deterministic reference rules, Decimal affordability, synthetic ANAF/credit-bureau/
+internal-loan adapters, authorized API/tool access and local assessment/audit
+persistence. It is independent of the frontend prototype and never records a
+final credit decision or changes workflow state.
+
+See [the eligibility runbook](docs/runbooks/eligibility-demo.md),
+[HTTP/tool contract](contracts/http/eligibility.md), and
+[Raiffeisen/BNR research](docs/research/eligibility-raiffeisen-ro.md) for setup,
+sources and explicit synthetic assumptions. From the repository root:
+
+```powershell
+python -m unittest discover -s tests -v
+python -m scripts.eligibility_demo
+python -m scripts.eligibility_smoke
+python -m uvicorn src.api.gateway.eligibility_demo:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+The API's public demo keys and SQLite storage are **local synthetic demonstration
+only**, not production authentication/infrastructure. The reproducible demo uses
+an explicit historical reference clock; the normal API enforces current evidence
+freshness and policy expiry. No real bank, ANAF or bureau requests are made.

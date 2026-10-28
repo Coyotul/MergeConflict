@@ -1,0 +1,661 @@
+{
+  "components": {
+    "schemas": {
+      "AssessmentStatus": {
+        "enum": [
+          "PRELIMINARY_REQUIREMENTS_SATISFIED",
+          "PRELIMINARY_REQUIREMENTS_NOT_SATISFIED",
+          "ADDITIONAL_INFORMATION_REQUIRED",
+          "MANUAL_REVIEW_REQUIRED"
+        ],
+        "title": "AssessmentStatus",
+        "type": "string"
+      },
+      "EligibilityAssessment": {
+        "additionalProperties": false,
+        "properties": {
+          "application_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Application Id",
+            "type": "string"
+          },
+          "assessed_at": {
+            "format": "date-time",
+            "title": "Assessed At",
+            "type": "string"
+          },
+          "assessment_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "assumptions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/RuleCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "correlation_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "customer_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "disclaimer": {
+            "default": "Synthetic preliminary assessment only; not a bank offer, loan approval or rejection. Every submitted application requires authorized human review.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EvidenceReference"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "final_credit_decision": {
+            "const": false,
+            "default": false,
+            "title": "Final Credit Decision",
+            "type": "boolean"
+          },
+          "financial_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FinancialAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "human_review_required": {
+            "const": true,
+            "default": true,
+            "title": "Human Review Required",
+            "type": "boolean"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/PolicyReference"
+          },
+          "simulated": {
+            "const": true,
+            "default": true,
+            "title": "Simulated",
+            "type": "boolean"
+          },
+          "source_references": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceReference"
+            },
+            "title": "Source References",
+            "type": "array"
+          },
+          "source_urls": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Urls",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssessmentStatus"
+          }
+        },
+        "required": [
+          "assessment_id",
+          "application_id",
+          "customer_id",
+          "status",
+          "assessed_at",
+          "correlation_id",
+          "policy",
+          "checks"
+        ],
+        "title": "EligibilityAssessment",
+        "type": "object"
+      },
+      "EligibilityCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "application_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Application Id",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "pattern": "^[A-Za-z0-9_.:-]{8,128}$",
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "pricing_scenario_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Scenario Id"
+          }
+        },
+        "required": [
+          "application_id",
+          "idempotency_key"
+        ],
+        "title": "EligibilityCheckRequest",
+        "type": "object"
+      },
+      "EvidenceReference": {
+        "additionalProperties": false,
+        "properties": {
+          "document_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "IDENTITY",
+                  "INCOME",
+                  "BANK_STATEMENT"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Kind"
+          },
+          "evidence_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "expires_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires On"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "simulated": {
+            "const": true,
+            "title": "Simulated",
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/EvidenceSource"
+          },
+          "source_version": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Source Version",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EvidenceStatus"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "source",
+          "recorded_at",
+          "status",
+          "source_version",
+          "simulated"
+        ],
+        "title": "EvidenceReference",
+        "type": "object"
+      },
+      "EvidenceSource": {
+        "enum": [
+          "CUSTOMER_PROFILE",
+          "DOCUMENT",
+          "ANAF",
+          "CREDIT_BUREAU",
+          "INTERNAL_LOANS",
+          "PRICING"
+        ],
+        "title": "EvidenceSource",
+        "type": "string"
+      },
+      "EvidenceStatus": {
+        "enum": [
+          "VERIFIED",
+          "UNVERIFIED",
+          "INVALID"
+        ],
+        "title": "EvidenceStatus",
+        "type": "string"
+      },
+      "FinancialAssessment": {
+        "additionalProperties": false,
+        "properties": {
+          "debt_to_income_ratio": {
+            "ge": 0,
+            "title": "Debt To Income Ratio",
+            "type": "string"
+          },
+          "existing_monthly_debt_ron": {
+            "decimal_places": 2,
+            "ge": 0,
+            "max_digits": 14,
+            "title": "Existing Monthly Debt Ron",
+            "type": "string"
+          },
+          "indicative": {
+            "const": true,
+            "default": true,
+            "title": "Indicative",
+            "type": "boolean"
+          },
+          "maximum_debt_to_income_ratio": {
+            "decimal_places": 9,
+            "ge": 0,
+            "le": 1,
+            "max_digits": 12,
+            "title": "Maximum Debt To Income Ratio",
+            "type": "string"
+          },
+          "proposed_monthly_debt_ron": {
+            "decimal_places": 2,
+            "ge": 0,
+            "max_digits": 14,
+            "title": "Proposed Monthly Debt Ron",
+            "type": "string"
+          },
+          "remaining_installment_capacity_ron": {
+            "decimal_places": 2,
+            "ge": 0,
+            "max_digits": 14,
+            "title": "Remaining Installment Capacity Ron",
+            "type": "string"
+          },
+          "total_monthly_debt_ron": {
+            "decimal_places": 2,
+            "ge": 0,
+            "max_digits": 14,
+            "title": "Total Monthly Debt Ron",
+            "type": "string"
+          },
+          "verified_net_income_ron": {
+            "decimal_places": 2,
+            "ge": 0,
+            "max_digits": 14,
+            "title": "Verified Net Income Ron",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verified_net_income_ron",
+          "existing_monthly_debt_ron",
+          "proposed_monthly_debt_ron",
+          "total_monthly_debt_ron",
+          "debt_to_income_ratio",
+          "maximum_debt_to_income_ratio",
+          "remaining_installment_capacity_ron"
+        ],
+        "title": "FinancialAssessment",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "PolicyReference": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_from": {
+            "format": "date",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "effective_to": {
+            "format": "date",
+            "title": "Effective To",
+            "type": "string"
+          },
+          "policy_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "version": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_id",
+          "version",
+          "sha256",
+          "effective_from",
+          "effective_to"
+        ],
+        "title": "PolicyReference",
+        "type": "object"
+      },
+      "RuleCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "message": {
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "reason_code": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "rule_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "source_ids": {
+            "default": [],
+            "items": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+              "type": "string"
+            },
+            "title": "Source Ids",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RuleStatus"
+          }
+        },
+        "required": [
+          "rule_id",
+          "status",
+          "reason_code",
+          "message"
+        ],
+        "title": "RuleCheck",
+        "type": "object"
+      },
+      "RuleStatus": {
+        "enum": [
+          "PASS",
+          "FAIL",
+          "INFORMATION_REQUIRED",
+          "REVIEW_REQUIRED",
+          "NOT_APPLICABLE"
+        ],
+        "title": "RuleStatus",
+        "type": "string"
+      },
+      "SourceReference": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "enum": [
+              "REGULATORY",
+              "PUBLIC_BANK_REFERENCE",
+              "SYNTHETIC_ASSUMPTION"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "retrieved_on": {
+            "format": "date",
+            "title": "Retrieved On",
+            "type": "string"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "source_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "format": "uri",
+                "maxLength": 2083,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "source_id",
+          "classification",
+          "title",
+          "retrieved_on",
+          "section"
+        ],
+        "title": "SourceReference",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Independent local prototype. No Raiffeisen affiliation, real inquiries or final credit decisions.",
+    "title": "Synthetic Eligibility Check",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/eligibility/assessments": {
+      "post": {
+        "operationId": "assess_api_eligibility_assessments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EligibilityCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/EligibilityAssessment"
+                  },
+                  "title": "Response Assess Api Eligibility Assessments Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Assess",
+        "tags": [
+          "synthetic-eligibility"
+        ]
+      }
+    },
+    "/api/eligibility/assessments/{assessment_id}": {
+      "get": {
+        "operationId": "get_assessment_api_eligibility_assessments__assessment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/EligibilityAssessment"
+                  },
+                  "title": "Response Get Assessment Api Eligibility Assessments  Assessment Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Assessment",
+        "tags": [
+          "synthetic-eligibility"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    }
+  }
+}

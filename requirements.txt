@@ -4,7 +4,11 @@
 
 # Core & Environment
 python-dotenv
-pydantic
+pydantic>=2.11,<3
+
+# Selected backend framework (SPECIFICATION.md); eligibility demo uses stdlib unittest/SQLite
+fastapi>=0.115.12,<1
+uvicorn>=0.34,<1
 
 # Data & Documents (useful for banking documents & tabular records)
 pandas

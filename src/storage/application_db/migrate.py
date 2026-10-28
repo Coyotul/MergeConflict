@@ -1,6 +1,8 @@
 from pathlib import Path
 import psycopg
 
+SQLITE_ONLY_MIGRATIONS = frozenset({"0001_eligibility_demo.sql"})
+
 
 def apply_migrations(conn: psycopg.Connection) -> list[str]:
     """Apply all pending migrations from migrations/ directory.
@@ -20,7 +22,10 @@ def apply_migrations(conn: psycopg.Connection) -> list[str]:
 
     # Find all migration files
     migrations_dir = Path(__file__).parent / "migrations"
-    migration_files = sorted(migrations_dir.glob("*.sql"))
+    # The eligibility demo keeps its SQLite schema in this folder and loads it by path.
+    migration_files = sorted(
+        p for p in migrations_dir.glob("*.sql") if p.name not in SQLITE_ONLY_MIGRATIONS
+    )
 
     # Get already applied migrations
     applied = {row[0] for row in conn.execute("SELECT filename FROM schema_migrations")}

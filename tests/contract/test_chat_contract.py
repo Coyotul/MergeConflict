@@ -77,9 +77,11 @@ def test_export_reproduces_committed_files():
     try:
         export_contract(create_app(mock_settings(out / "uploads")), out)
         produced = sorted(p.relative_to(out) for p in out.rglob("*") if p.is_file() and "uploads" not in p.parts)
+        # Only the chat contract is exported here; other contracts share contracts/http/.
         committed = sorted(
             p.relative_to(CONTRACT_DIR) for p in CONTRACT_DIR.rglob("*")
             if p.is_file() and p.suffix in (".json", ".yaml")
+            and (p.name == "chat.openapi.yaml" or "chat" in p.relative_to(CONTRACT_DIR).parts[:-1])
         )
         assert produced == committed
         for rel in produced:

@@ -1,5 +1,8 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { DEMO_ACCOUNTS } from "../../packages/banking/src/demo-accounts";
+import { CUSTOMER_ACTOR } from "../../packages/banking/src/seed";
+
+const ORCHESTRATOR_URL = "http://127.0.0.1:8000";
 
 test.describe.configure({ mode: "serial" });
 async function login(page: Page, role: "customer" | "reviewer") {
@@ -8,6 +11,14 @@ async function login(page: Page, role: "customer" | "reviewer") {
   await expect(page.getByLabel("Email address", { exact: true })).toHaveValue(DEMO_ACCOUNTS[role].email);
   await page.getByRole("button", { name: `Sign in as ${role === "customer" ? "customer" : "bank agent"}` }).click();
   await expect(page.getByRole("complementary", { name: role === "customer" ? "Primary navigation" : "Bank agent navigation", exact: true })).toBeVisible();
+}
+// Next dev compiles a route on its first visit and can force a full page reload ("Fast Refresh had
+// to perform a full reload") that drops an in-flight client navigation; retry until the URL changes.
+async function follow(page: Page, link: Locator, url: RegExp) {
+  await expect(async () => {
+    if (!url.test(page.url())) await link.click({ timeout: 5000 });
+    await expect(page).toHaveURL(url, { timeout: 10000 });
+  }).toPass({ timeout: 60000 });
 }
 async function addDocument(page: Page, card: Locator, kind: string) {
   await card.getByRole("button", { name: "Add file" }).first().click();
@@ -92,57 +103,92 @@ test("invalid or revoked browser sessions return to sign-in instead of exposing 
   expect(await page.evaluate(() => sessionStorage.getItem("luma-demo-session-v2-customer"))).toBeNull();
 });
 
-test("desktop guided assistant, free text, loan changes and existing information", async ({ page }, testInfo) => {
+test("assistant runs on the orchestrator", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await login(page, "customer");
   await expect(page.getByRole("heading", { name: /Hey Alex/ })).toBeVisible();
+  // The chat picks a random synthetic customer per conversation, and the mock (demo) model's
+  // outcomes differ per customer. Pin cust-001 deterministically: create its session through the
+  // orchestrator API and store it under the hook's sessionStorage key, so the reload resumes it.
+  const created = await page.request.post(`${ORCHESTRATOR_URL}/chat/sessions`, { headers: { "X-Customer-Id": "cust-001" }, data: {} });
+  expect(created.status()).toBe(201);
+  const { session_id: sessionId } = (await created.json()) as { session_id: string };
+  await page.evaluate(([key, value]) => sessionStorage.setItem(key, value), [`luma-orchestrator-chat-v1-${CUSTOMER_ACTOR.id}`, JSON.stringify({ sessionId, customerId: "cust-001" })]);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: /Hey Alex/ })).toBeVisible();
   await expect(page.getByLabel("Message the assistant")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("assistant-desktop.png"), fullPage: true });
-  await page.getByRole("button", { name: /^I want a loan/ }).click();
-  await expect(page.getByRole("button", { name: /^Personal loan/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Mortgage/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Car loan/ })).toBeVisible();
-  await page.getByRole("button", { name: /^Mortgage/ }).click();
-  await expect(page.getByRole("heading", { name: "Mortgage simulator" })).toBeVisible();
-  await page.getByLabel("Message the assistant").fill("I want a personal loan of 40,000 RON for 3 years");
-  await page.getByRole("button", { name: "Send message" }).click();
-  await expect(page.getByRole("heading", { name: "Personal loan simulator" })).toBeVisible();
-  await expect(page.getByLabel("How much do you need? · RON").last()).toHaveValue("40000");
-  await expect(page.getByLabel("Repayment period · months").last()).toHaveValue("36");
-  await page.getByRole("button", { name: "Back to options" }).click();
-  await page.getByRole("button", { name: /^Change my current loan/ }).last().click();
-  await expect(page.getByRole("button", { name: /^Early repayment/ })).toBeVisible();
-  await page.getByRole("button", { name: /^Early repayment/ }).click();
-  await expect(page.getByRole("heading", { name: "Early repayment simulator" })).toBeVisible();
-  await page.getByRole("button", { name: "Back to options" }).click();
-  await page.getByRole("button", { name: /^My current loan details/ }).last().click();
-  await expect(page.getByText("Outstanding principal").first()).toBeVisible();
-  await page.getByLabel("Message the assistant").fill("Can you compare refinancing?");
-  await page.getByRole("button", { name: "Send message" }).click();
-  await expect(page.getByRole("heading", { name: "Refinancing comparison" })).toBeVisible();
-  await expect(page.getByText(/Lower installments do not automatically/)).toBeVisible();
+  const assistantBubbles = page.getByText("LUMA · AI ASSISTANT", { exact: true });
+  let replies = 1; // the greeting, kept behind the welcome screen until the first message
+  const say = async (text: string) => {
+    await page.getByLabel("Message the assistant").fill(text);
+    await page.getByRole("button", { name: "Send message" }).click();
+    replies += 1;
+    await expect(assistantBubbles).toHaveCount(replies);
+    await expect(page.getByLabel("Message the assistant")).toHaveValue("");
+  };
+  await say("Vreau un credit de 30000 lei pe 60 de luni pentru renovare");
+  await expect(page.getByRole("heading", { name: /Hey Alex/ })).not.toBeVisible();
+  await expect(page.getByRole("region", { name: "Application progress" })).toBeVisible();
+  // The demo model collects one field per turn: same answers as the cust-001 happy path in
+  // tests/e2e/test_chat_scenarios.py, then "ok" runs the preliminary check and requests documents.
+  for (const text of ["pentru renovare", "30000 lei", "60 luni", "employed", "48", "7000", "TechCorp SRL", "400", "ok"]) await say(text);
+  const uploadId = page.getByRole("button", { name: "Upload ID Card" });
+  await expect(uploadId).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Upload Payslip/ })).toBeVisible();
+  const chooser = page.waitForEvent("filechooser");
+  await uploadId.click();
+  await (await chooser).setFiles({ name: "synthetic-id-card.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\nSYNTHETIC DEMO ONLY\n%%EOF") });
+  replies += 1;
+  await expect(assistantBubbles).toHaveCount(replies);
+  await expect(uploadId).not.toBeVisible();
+  await expect(page.getByText("Accepted", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Synthetic data · simulated, based on public conditions")).toBeVisible();
   await page.getByRole("button", { name: "End chat", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "End chat & start fresh" }).click();
   await expect(page.getByRole("heading", { name: /Hey Alex/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
+test("assistant shows a retryable alert while the orchestrator is down", async ({ page }) => {
+  await page.route(`${ORCHESTRATOR_URL}/**`, (route) => route.abort());
+  await login(page, "customer");
+  await expect(page.getByRole("heading", { name: /Hey Alex/ })).toBeVisible();
+  const alert = page.getByRole("alert").filter({ hasText: "not reachable" });
+  await expect(alert).toContainText("The AI assistant service is not reachable (or blocked by CORS)");
+  const retry = alert.getByRole("button", { name: "Retry" });
+  await expect(retry).toBeVisible();
+  await page.unroute(`${ORCHESTRATOR_URL}/**`);
+  await retry.click();
+  await expect(alert).not.toBeVisible();
+  await expect(page.getByRole("heading", { name: /Hey Alex/ })).toBeVisible();
+  // The session now exists: a message goes through and the assistant replies.
+  await page.getByLabel("Message the assistant").fill("Vreau un credit de 30000 lei pe 60 de luni pentru renovare");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByLabel("Message the assistant")).toHaveValue("");
+  await expect(page.getByText("LUMA · AI ASSISTANT", { exact: true })).toHaveCount(2);
+});
+
 
 test("customer submission, reviewer information request, resumed application and final human outcome", async ({ page, context }, testInfo) => {
+  // Several routes (/products, staff /applications/[id], /audit) are compiled on first visit by the dev servers.
+  test.slow();
   await login(page, "customer");
-  await page.getByRole("button", { name: /^I want a loan/ }).click();
-  await page.getByRole("button", { name: /^Personal loan/ }).click();
+  // The chat now runs on the orchestrator, so the demo application starts from the Products page.
+  // A full navigation (not the sidebar link) waits for the dev server's first compile of /products.
+  await page.goto("/products");
+  await expect(page.getByRole("heading", { name: "Big plans. Clear numbers." })).toBeVisible();
   await page.getByRole("button", { name: "Choose scenario & prepare application" }).click();
   await expect(page.getByText("LM-1002 · Personal loan", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Applications", exact: true }).click();
+  await follow(page, page.getByRole("link", { name: "Applications", exact: true }), /\/applications$/);
   const card = page.getByTestId("application-LM-1002");
   await addDocument(page, card, "identity");
   await addDocument(page, card, "income");
   await submitApplication(page, card);
   const reviewer = await context.newPage();
   await login(reviewer, "reviewer");
-  await reviewer.getByRole("link", { name: "LM-1002", exact: true }).click();
+  await follow(reviewer, reviewer.getByRole("link", { name: "LM-1002", exact: true }), /\/applications\/./);
   await expect(reviewer.getByRole("button", { name: "Approve demo application" })).toBeDisabled();
   await reviewer.getByRole("tab", { name: "Documents & evidence" }).click();
   await reviewer.getByRole("button", { name: "Inspect metadata" }).first().click();
@@ -172,7 +218,7 @@ test("customer submission, reviewer information request, resumed application and
   await expect(card.getByText("Approved · demo", { exact: true }).first()).toBeVisible();
   await expect(card.getByText(/nothing has been signed or funded/)).toBeVisible();
   await reviewer.screenshot({ path: testInfo.outputPath("reviewer-desktop.png"), fullPage: true });
-  await reviewer.getByRole("link", { name: "Audit history", exact: true }).click();
+  await follow(reviewer, reviewer.getByRole("link", { name: "Audit history", exact: true }), /\/audit$/);
   await expect(reviewer.getByText("REVIEW APPROVE", { exact: true })).toBeVisible();
   await reviewer.close();
 });

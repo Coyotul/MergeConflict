@@ -3,6 +3,7 @@ import logging
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -54,6 +55,15 @@ def create_app(
         title="Credit Assistant API",
         version="1.0.0",
         description="AI-powered credit application assistant"
+    )
+
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "X-Customer-Id"],
+        allow_credentials=False,
     )
 
     # Document storage
@@ -235,7 +245,7 @@ def create_app(
     def handle_unexpected_error(request: Request, exc: Exception):
         """Handle all unexpected errors with logging."""
         logger.exception("Unhandled exception in request")
-        return JSONResponse(
+        response = JSONResponse(
             status_code=500,
             content=ErrorBody(
                 code="internal_error",
@@ -243,5 +253,12 @@ def create_app(
                 retryable=False
             ).model_dump()
         )
+        # The catch-all handler runs in ServerErrorMiddleware, outside
+        # CORSMiddleware, so add the CORS headers for allowed origins here.
+        origin = request.headers.get("origin")
+        if origin and origin in settings.cors_origins:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Vary"] = "Origin"
+        return response
 
     return app

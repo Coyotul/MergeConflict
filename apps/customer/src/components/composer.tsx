@@ -1,20 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CornerDownLeft, Paperclip, SendHorizontal } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@banking/ui/dialog";
-import { Button } from "@banking/ui/button";
-import { ApplicationCard } from "./application-card";
-import { useDemo } from "@banking/demo/react";
+import { CornerDownLeft, SendHorizontal } from "lucide-react";
 
 export function Composer({ onSend, disabled }: { onSend: (text: string) => Promise<boolean>; disabled: boolean }) {
   const [text, setText] = useState("");
-  const [documents, setDocuments] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { snapshot } = useDemo();
-  const active = snapshot?.applications.find((a) =>
-    ["AWAITING_DOCUMENTS", "MORE_INFORMATION_REQUIRED", "READY_FOR_SUBMISSION"].includes(a.status)
-  );
 
   const adjustHeight = () => {
     const el = textareaRef.current;
@@ -44,15 +35,6 @@ export function Composer({ onSend, disabled }: { onSend: (text: string) => Promi
         className="flex items-end gap-3"
       >
         <div className="flex min-w-0 flex-1 items-end rounded-[22px] border border-transparent bg-slate-100 px-3 py-1.5 focus-within:border-brand-border/60 focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/20">
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => setDocuments(true)}
-            aria-label="Open document checklist"
-            className="mb-1 rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-brand-ink"
-          >
-            <Paperclip className="size-5" strokeWidth={1.7} />
-          </button>
           <textarea
             ref={textareaRef}
             aria-label="Message the assistant"
@@ -85,37 +67,6 @@ export function Composer({ onSend, disabled }: { onSend: (text: string) => Promi
       <p className="mt-2 text-center text-xs text-slate-500">
         Your own words are always welcome. Enter to send · Shift + Enter for a new line.
       </p>
-      <Dialog open={documents} onOpenChange={setDocuments}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Your document checklist</DialogTitle>
-            <DialogDescription>
-              Only synthetic file metadata is stored. No file contents are uploaded or verified.
-            </DialogDescription>
-          </DialogHeader>
-          {active ? (
-            <ApplicationCard application={active} />
-          ) : (
-            <div className="rounded-2xl bg-slate-50 p-5">
-              <p className="text-sm font-semibold">No draft is waiting for documents.</p>
-              <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                Choose a loan scenario first. Documents belong to a specific application; never attach real banking files to the conversation.
-              </p>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-4"
-                onClick={() => {
-                  setDocuments(false);
-                  void onSend("I want a loan");
-                }}
-              >
-                Explore a loan scenario
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

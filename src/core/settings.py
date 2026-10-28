@@ -83,6 +83,14 @@ class OrchestratorSettings(BaseModel):
     config_dir: Path = Path("config/orchestrator")
     retrieval: Literal["stub", "rag"] = "stub"
     database_url: str = "postgresql://rag:rag@127.0.0.1:5433/rag"
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://localhost:3000",
+            "http://localhost:3001",
+        ]
+    )
 
 
 def load_orchestrator_settings(env: Mapping[str, str] | None = None) -> OrchestratorSettings:
@@ -133,5 +141,14 @@ def load_orchestrator_settings(env: Mapping[str, str] | None = None) -> Orchestr
         key = f"ORCHESTRATOR_{field.upper()}"
         if key in env:
             kwargs[field] = Path(env[key])
+
+    # CORS origins (comma-separated, strip whitespace, drop empty)
+    if "ORCHESTRATOR_CORS_ORIGINS" in env:
+        origins = [
+            origin.strip()
+            for origin in env["ORCHESTRATOR_CORS_ORIGINS"].split(",")
+            if origin.strip()
+        ]
+        kwargs["cors_origins"] = origins
 
     return OrchestratorSettings(**kwargs)

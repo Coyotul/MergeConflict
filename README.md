@@ -34,6 +34,33 @@ This starts three loopback-only services:
 - Bank agent / credit reviewer: http://127.0.0.1:3001
 - Temporary synthetic demo API: http://127.0.0.1:4010/health
 
+### Luma + AI orchestrator integration
+
+The customer chat in Luma connects to the AI orchestrator running on port 8000. Start the orchestrator **before** starting the frontend:
+
+```bash
+# Real mode (requires FEATHERLESS_API_KEY in .env):
+uvicorn src.api.app:create_app --factory --host 127.0.0.1 --port 8000
+
+# Or mock mode (no API key required):
+ORCHESTRATOR_MODEL=fake uvicorn src.api.app:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+Then start the frontend:
+
+```bash
+npm run dev
+```
+
+The customer workspace will connect to the orchestrator automatically. Each new chat session picks a random synthetic customer (`cust-001`, `cust-002`, or `cust-003`) for demonstration purposes.
+
+**Environment variables:**
+
+- `NEXT_PUBLIC_ORCHESTRATOR_URL` (default: `http://127.0.0.1:8000`): Orchestrator API base URL.
+- `ORCHESTRATOR_CORS_ORIGINS` (default: `http://127.0.0.1:3000,http://127.0.0.1:3001,http://localhost:3000,http://localhost:3001`): Comma-separated list of allowed frontend origins for CORS.
+
+If the orchestrator is not running or becomes unavailable, the chat displays an error message with a retry button.
+
 Sign in using the public **demo** accounts below, also displayed on each login
 screen. The “Use demo account” button fills the form; signing in is a separate
 explicit action.

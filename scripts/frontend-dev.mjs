@@ -8,7 +8,7 @@ const processes = [
   ["customer", [resolve(root, "node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", "3000", "--webpack"], resolve(root, "apps/customer")],
   ["reviewer", [resolve(root, "node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", "3001", "--webpack"], resolve(root, "apps/staff")],
 ];
-console.log("\nLuma · synthetic local prototype\nCustomer: http://127.0.0.1:3000\nReviewer: http://127.0.0.1:3001\nDemo API: http://127.0.0.1:4010/health\n");
+console.log("\nLuma · synthetic local prototype\nCustomer: http://127.0.0.1:3000\nReviewer: http://127.0.0.1:3001\nDemo API: http://127.0.0.1:4010/health\nAI orchestrator: http://127.0.0.1:8000/docs (start separately: uvicorn src.api.app:create_app --factory)\n");
 const children = processes.map(([name, args, cwd]) => {
   const child = spawn(process.execPath, args, { cwd, stdio: "inherit", env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" } });
   child.on("error", (error) => { console.error(`${name} failed:`, error.message); shutdown(1); });

@@ -24,6 +24,8 @@ ORCHESTRATOR_MODEL=fake uvicorn src.api.app:create_app --factory --port 8000
 Sessions are saved under `data/local/sessions/` and survive a restart. Set
 `ORCHESTRATOR_SESSION_STORE=memory` if you want a clean slate on every start.
 
+**CORS:** The orchestrator allows cross-origin requests from origins listed in the `ORCHESTRATOR_CORS_ORIGINS` environment variable (default: `http://127.0.0.1:3000,http://127.0.0.1:3001,http://localhost:3000,http://localhost:3001`). Use a comma-separated list to override it. Unhandled `500 internal_error` responses also carry CORS headers for allowed origins.
+
 Everything the backend returns in mock mode is synthetic. Responses carry `simulated: true`, and
 eligibility results and offers are "simulated, based on public conditions". They are not offers or
 decisions from any bank. Never show them as approvals.

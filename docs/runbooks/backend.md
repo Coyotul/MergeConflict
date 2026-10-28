@@ -55,16 +55,27 @@ Invoke-RestMethod -Method Post -Uri "$base/calculations/loan-offer" -Headers $he
 $scenario.idempotencyKey = [guid]::NewGuid().ToString()
 $draft = Invoke-RestMethod -Method Post -Uri "$base/applications" -Headers $headers -ContentType 'application/json' -Body ($scenario | ConvertTo-Json)
 Invoke-RestMethod -Uri "$base/applications/$($draft.data.id)/status" -Headers $headers
+$check = @{ applicationId = $draft.data.id; pricingScenarioId = $draft.data.pricingScenarioId; idempotencyKey = [guid]::NewGuid().ToString() }
+Invoke-RestMethod -Method Post -Uri "$base/eligibility/check" -Headers $headers -ContentType 'application/json' -Body ($check | ConvertTo-Json)
 ```
 
 This saves a draft only. Add synthetic metadata for identity/income using the
 contract's attachment schema, each with a new idempotencyKey. Submission must follow
 an actual user confirmation and include `{confirmed: true, idempotencyKey: UUID}`.
 The API will not approve a customer tool call; assigned review is separate.
+Eligibility uses the merged reference service and ID-only request. Its response
+preserves snake_case fields/all four outcomes. With this metadata-only workflow,
+profile/identity evidence and purpose-scoped provider authorizations are missing;
+an information-required/manual-review outcome is expected, not a satisfied claim.
+No reference-fixture consents or income reports are silently copied to your case.
+`/calculations/affordability-preview` is a different declared-income-only calculator.
 
 For timeout retries, keep the **same operation/body/key**. A replay returns the
 original response snapshot; query status for the latest state. Never retry with a
 new key just because the first response was interrupted.
+Eligibility preserves a separate replay namespace: the application/policy snapshot
+must also be unchanged. After a document or state/revision change, a new check needs
+a new key; a historical assessment can still be fetched separately.
 
 ## Configuration and validation
 
@@ -89,6 +100,8 @@ Run validation:
 & 'C:\Users\George\repos\MergeConflict\.venv\Scripts\python.exe' -m unittest discover -s 'C:\Users\George\repos\MergeConflict\tests' -t 'C:\Users\George\repos\MergeConflict' -v
 & 'C:\Users\George\repos\MergeConflict\.venv\Scripts\python.exe' -m compileall -q 'C:\Users\George\repos\MergeConflict\src' 'C:\Users\George\repos\MergeConflict\tests' 'C:\Users\George\repos\MergeConflict\main.py'
 & 'C:\Users\George\repos\MergeConflict\.venv\Scripts\python.exe' -m pip check
+& 'C:\Users\George\repos\MergeConflict\.venv\Scripts\python.exe' -m scripts.backend_smoke
+& 'C:\Users\George\repos\MergeConflict\.venv\Scripts\python.exe' -m scripts.export_eligibility_contracts --check
 npm run check  # Unchanged frontend regression checks
 ```
 

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
 from src.core.errors import DomainError
+from src.core.eligibility_errors import EligibilityError
 from src.models.common import ErrorDetail, ErrorResponse, ValidationIssue, new_id
 
 
@@ -46,6 +47,11 @@ def error_response(
 
 
 def install_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(EligibilityError)
+    async def eligibility_error(request: Request, error: EligibilityError) -> JSONResponse:
+        status = 400 if error.http_status == 422 else error.http_status
+        return error_response(request, status, error.code, error.message)
+
     @app.exception_handler(DomainError)
     async def domain_error(request: Request, error: DomainError) -> JSONResponse:
         return error_response(request, error.status, error.code, error.message)

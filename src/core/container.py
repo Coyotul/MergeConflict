@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from src.core.catalogue import Catalogue
 from src.core.context import CallContext
 from src.core.settings import Settings
-from src.models.banking import Actor, Assessment, AuditEvent, Role, Snapshot
+from src.models.banking import Actor, AffordabilityPreview, AuditEvent, Role, Snapshot
 from src.models.requests import LoanScenarioInput
 from src.observability.audit import record_audit
 from src.security.permissions import require_role, visible_application
@@ -13,7 +13,8 @@ from src.security.sessions import DemoSessions
 from src.services.conversations.service import ConversationService
 from src.services.customers.service import CustomerService
 from src.services.document_processing.service import DocumentService
-from src.services.financial_calculations.preview import EligibilityService
+from src.services.eligibility.backend import BackendEligibilityService
+from src.services.financial_calculations.preview import AffordabilityPreviewService
 from src.services.human_review.service import HumanReviewService
 from src.services.loan_servicing.service import LoanServicingService
 from src.services.notifications.service import NotificationService
@@ -31,7 +32,8 @@ class Container:
     sessions: DemoSessions
     customers: CustomerService
     pricing: PricingService
-    eligibility: EligibilityService
+    affordability: AffordabilityPreviewService
+    evidence_eligibility: BackendEligibilityService
     documents: DocumentService
     workflow: WorkflowService
     reviews: HumanReviewService
@@ -47,23 +49,24 @@ class Container:
         repository = Repository(settings.database_path)
         repository.initialize(catalogue.fixtures)
         pricing = PricingService(catalogue)
-        eligibility = EligibilityService(catalogue, pricing)
+        affordability = AffordabilityPreviewService(catalogue, pricing)
         documents = DocumentService(catalogue)
         return cls(
             catalogue=catalogue, repository=repository,
             sessions=DemoSessions(catalogue.fixtures.accounts, settings.session_hours),
-            customers=CustomerService(repository), pricing=pricing, eligibility=eligibility, documents=documents,
-            workflow=WorkflowService(repository, catalogue, pricing, eligibility, documents),
+            customers=CustomerService(repository), pricing=pricing, affordability=affordability,
+            evidence_eligibility=BackendEligibilityService(repository, settings.config_root / "config/rules/eligibility_reference_ro.json"), documents=documents,
+            workflow=WorkflowService(repository, catalogue, pricing, affordability, documents),
             reviews=HumanReviewService(repository), servicing=LoanServicingService(repository, catalogue),
             refinancing=RefinancingService(repository, catalogue), retrieval=RetrievalService(catalogue),
             notifications=NotificationService(repository), conversations=ConversationService(repository),
         )
 
-    def assess(self, context: CallContext, input: LoanScenarioInput) -> Assessment:
+    def preview(self, context: CallContext, input: LoanScenarioInput) -> AffordabilityPreview:
         require_role(context.actor, Role.CUSTOMER)
         with self.repository.transaction() as unit:
-            assessment = self.eligibility.assess(unit, context.actor, input)
-            record_audit(unit, context, "PRELIMINARY_ELIGIBILITY_CHECKED", context.actor.id, assessment.status)
+            assessment = self.affordability.assess(unit, context.actor, input)
+            record_audit(unit, context, "AFFORDABILITY_PREVIEW_CALCULATED", context.actor.id, "Synthetic declared-income preview only")
             return assessment
 
     def audit(self, actor: Actor) -> list[AuditEvent]:

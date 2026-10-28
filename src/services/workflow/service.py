@@ -23,7 +23,7 @@ from src.models.requests import (
 from src.observability.audit import record_audit
 from src.security.permissions import require_role, visible_application
 from src.services.document_processing.service import DocumentService
-from src.services.financial_calculations.preview import EligibilityService
+from src.services.financial_calculations.preview import AffordabilityPreviewService
 from src.services.notifications.service import workflow_notification
 from src.services.pricing.service import PricingService
 from src.storage.application_db.repository import Repository
@@ -62,12 +62,12 @@ def transition(application: LoanApplication, next_status: ApplicationStatus, con
 class WorkflowService:
     def __init__(
         self, repository: Repository, catalogue: Catalogue, pricing: PricingService,
-        eligibility: EligibilityService, documents: DocumentService,
+        affordability: AffordabilityPreviewService, documents: DocumentService,
     ):
         self.repository = repository
         self.catalogue = catalogue
         self.pricing = pricing
-        self.eligibility = eligibility
+        self.affordability = affordability
         self.documents = documents
 
     def list(self, context: CallContext) -> list[LoanApplication]:
@@ -97,7 +97,7 @@ class WorkflowService:
                     id=new_id(), reference=unit.next_reference(), customer_id=context.actor.id,
                     customer=unit.customer(context.actor.id), reviewer_id=self.catalogue.fixtures.default_reviewer_id,
                     product_id=product.id, policy_version=product.policy_version, amount=quote.amount,
-                    months=input.months, quote=quote, assessment=self.eligibility.assess(unit, context.actor, input),
+                    months=input.months, quote=quote, affordability_preview=self.affordability.assess(unit, context.actor, input),
                     status=S.DRAFT, created_at=now, updated_at=now,
                     documents=[ApplicationDocument(kind=kind) for kind in DocumentKind],
                     required_document_kinds=product.required_documents,
@@ -107,6 +107,7 @@ class WorkflowService:
                         correlation_id=context.correlation_id,
                     )],
                 )
+                application.pricing_scenario_id = f"quote-{application.id}"
                 transition(application, S.AWAITING_DOCUMENTS, context, "Add the required synthetic document metadata.")
                 unit.save_application(application)
                 record_audit(unit, context, "APPLICATION_CREATED", application.id, "Synthetic draft only")

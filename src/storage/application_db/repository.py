@@ -77,11 +77,22 @@ class UnitOfWork:
         )]
 
     def save_application(self, application: LoanApplication) -> None:
+        row = self.connection.execute("SELECT payload FROM applications WHERE id = ?", (application.id,)).fetchone()
+        if row is not None:
+            previous = LoanApplication.model_validate_json(row[0])
+            if application.revision != previous.revision:
+                raise DomainError("APPLICATION_CHANGED", "Application changed; reload before retrying.", 409)
+            application.revision += 1
         self.connection.execute(
             """INSERT INTO applications(id, customer_id, reviewer_id, payload) VALUES (?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET payload = excluded.payload""",
             (application.id, application.customer_id, application.reviewer_id, encode(application)),
         )
+
+    def application_for_eligibility(self, application_id: str) -> LoanApplication | None:
+        """Internal trusted port; the eligibility service independently checks principal access."""
+        row = self.connection.execute("SELECT payload FROM applications WHERE id = ?", (application_id,)).fetchone()
+        return LoanApplication.model_validate_json(row[0]) if row is not None else None
 
     def next_reference(self) -> str:
         count = self.connection.execute("SELECT COUNT(*) FROM applications").fetchone()[0]
@@ -130,7 +141,24 @@ class UnitOfWork:
                 {private_filter} ORDER BY rowid DESC""",
             (actor.id, actor.id),
         )
-        return [AuditEvent.model_validate_json(row[0]) for row in rows]
+        events = [AuditEvent.model_validate_json(row[0]) for row in rows]
+        has_eligibility = self.connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'eligibility_audit'"
+        ).fetchone()
+        if has_eligibility:
+            from src.models.eligibility import AuditEvent as EligibilityAuditEvent
+
+            for row in self.connection.execute(
+                f"SELECT payload FROM eligibility_audit WHERE application_id IN (SELECT id FROM applications WHERE {column} = ?)",
+                (actor.id,),
+            ):
+                event = EligibilityAuditEvent.model_validate_json(row[0])
+                if event.action == "eligibility.assessed":
+                    events.append(AuditEvent(
+                        id=event.event_id, actor_id=event.actor_id, actor=event.actor_id, action="PRELIMINARY_ELIGIBILITY_CHECKED",
+                        object_id=event.application_id, at=event.timestamp, result=event.result, correlation_id=event.correlation_id,
+                    ))
+        return sorted(events, key=lambda event: event.at, reverse=True)
 
     def messages(self, customer_id: str) -> list[ChatMessage]:
         return [ChatMessage.model_validate_json(row[0]) for row in self.connection.execute(
@@ -241,6 +269,8 @@ class Repository:
         with self.transaction() as unit:
             seeded = unit.connection.execute("SELECT value FROM metadata WHERE key = 'seeded'").fetchone()
             if seeded is None:
+                if unit.connection.execute("SELECT COUNT(*) FROM actors").fetchone()[0]:
+                    raise ValueError("Existing backend identities have no seed marker; restore explicitly.")
                 for account in fixtures.accounts:
                     unit.connection.execute(
                         "INSERT INTO actors(id, payload) VALUES (?, ?)", (account.actor.id, encode(account.actor))
@@ -256,6 +286,8 @@ class Repository:
                         (loan.id, loan.customer_id, encode(loan)),
                     )
                 unit.connection.execute("INSERT INTO metadata(key, value) VALUES ('seeded', '1')")
+            elif seeded != ("1",):
+                raise ValueError("Unsupported synthetic database fixture version.")
             self._validate_records(unit)
 
     @staticmethod
@@ -266,8 +298,18 @@ class Repository:
             "conversation_messages": ChatMessage, "support_requests": SupportRequest,
         }
         for table, model in models.items():
-            for row in unit.connection.execute(f"SELECT payload FROM {table}"):
-                model.model_validate_json(row[0])
+            for row in unit.connection.execute(f"SELECT id, payload FROM {table}" if table != "consents" else "SELECT customer_id, payload FROM consents"):
+                item = model.model_validate_json(row[1])
+                if table != "consents" and item.id != row[0]:
+                    raise ValueError("Stored record identifiers are inconsistent.")
+        for row in unit.connection.execute("SELECT customer_id, reviewer_id, payload FROM applications"):
+            application = LoanApplication.model_validate_json(row[2])
+            if application.customer_id != row[0] or application.reviewer_id != row[1] or application.customer.id != row[0]:
+                raise ValueError("Application ownership or reviewer assignment is inconsistent.")
+        for table, model in (("loans", Loan), ("notifications", Notification), ("support_requests", SupportRequest)):
+            for row in unit.connection.execute(f"SELECT customer_id, payload FROM {table}"):
+                if model.model_validate_json(row[1]).customer_id != row[0]:
+                    raise ValueError("Stored customer relationship is inconsistent.")
         if unit.connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
             raise ValueError("Backend database relationships are inconsistent.")
 

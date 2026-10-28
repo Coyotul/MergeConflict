@@ -52,11 +52,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health", tags=["Health"], operation_id="get_backend_health", responses={503: {"model": Health}})
     def health(response: Response, services: Services) -> Health:
         available = services.repository.available()
-        response.status_code = 200 if available else 503
+        eligibility_available = services.evidence_eligibility.service.assessments.healthcheck()
+        healthy = available and eligibility_available
+        response.status_code = 200 if healthy else 503
         return Health(
-            status="ok" if available else "degraded",
+            status="ok" if healthy else "degraded",
             dependencies={
                 "database": "available" if available else "unavailable", "syntheticConfiguration": "loaded",
+                "eligibilityStorage": "available" if eligibility_available else "unavailable",
                 "orchestrator": "not-configured", "semanticRetrieval": "not-configured",
                 "documentProcessing": "metadata-only", "bankIntegrations": "simulated-only",
             },

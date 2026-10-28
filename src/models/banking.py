@@ -119,7 +119,7 @@ class LoanQuote(WireModel):
     assumptions: list[str] = Field(default_factory=list)
 
 
-class Assessment(WireModel):
+class AffordabilityPreview(WireModel):
     status: Literal[
         "PRELIMINARY_REQUIREMENTS_SATISFIED",
         "PRELIMINARY_REQUIREMENTS_NOT_SATISFIED",
@@ -135,6 +135,8 @@ class Assessment(WireModel):
     assessed_at: datetime
     human_review_required: Literal[True] = True
     indicative: Literal[True] = True
+    scope: Literal["SYNTHETIC_AFFORDABILITY_PREVIEW_ONLY"] = "SYNTHETIC_AFFORDABILITY_PREVIEW_ONLY"
+    final_credit_decision: Literal[False] = False
 
 
 class ApplicationDocument(WireModel):
@@ -195,10 +197,12 @@ class LoanApplication(WireModel):
     amount: Money
     months: int
     quote: LoanQuote
-    assessment: Assessment
+    affordability_preview: AffordabilityPreview
     status: ApplicationStatus
     created_at: datetime
     updated_at: datetime
+    revision: int = Field(default=1, ge=1)
+    pricing_scenario_id: str | None = None
     documents: list[ApplicationDocument]
     required_document_kinds: list[DocumentKind]
     requested_document: DocumentKind | None = None

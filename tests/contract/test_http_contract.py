@@ -29,6 +29,9 @@ class HttpContractTests(ApiFixture):
         self.assertFalse(inputs["additionalProperties"])
         self.assertEqual(inputs["properties"]["amount"]["type"], "string")
         self.assertEqual(inputs["properties"]["idempotencyKey"]["format"], "uuid")
+        eligibility_input = schema["components"]["schemas"]["EligibilityRunInput"]
+        self.assertEqual(set(eligibility_input["properties"]), {"applicationId", "pricingScenarioId", "idempotencyKey"})
+        self.assertFalse(eligibility_input["additionalProperties"])
         decision = schema["paths"]["/api/v1/applications/{application_id}/review"]["post"]
         self.assertFalse(decision["x-orchestrator-tool"])
         self.assertTrue(decision["x-human-action-required"])

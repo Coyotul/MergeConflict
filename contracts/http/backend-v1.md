@@ -11,7 +11,10 @@ replaces, backend permission checks.
 
 ## Wire and trust conventions
 
-- Requests and responses use **camelCase**. Unknown input fields are rejected;
+- Requests and primary backend responses use **camelCase**. The integrated
+  `EligibilityAssessment` response intentionally preserves the merged eligibility
+  module's **snake_case** contract and Decimal serialization; do not rewrite or
+  flatten its evidence/provenance. Unknown input fields are rejected;
   callers cannot supply an actor, customer owner, reviewer assignment, rate, fee,
   policy version, assessment or workflow status.
 - Money/rates are decimal **strings**, never JSON floats. Input money uses ASCII
@@ -28,7 +31,9 @@ replaces, backend permission checks.
   `Authorization: Bearer <token>`. Forward the user's verified token from the
   orchestrator; never let the LLM choose credentials or impersonate staff.
 - Customer application access is owner-filtered. Staff application access is
-  assigned-reviewer-filtered. Inaccessible and absent objects both return 404.
+  assigned-reviewer-filtered. Inaccessible and absent workflow objects both return
+  404. The existing eligibility boundary uses the same 403 `ACCESS_DENIED` for
+  inaccessible/missing applications and audits denial without exposing evidence.
   Customer results exclude internal notes and internal-note audit events.
 - The `/api` prefix is a convenience alias for these resource routes, excluded
   from OpenAPI. It is **not** a drop-in replacement for the Node demo: mutation
@@ -66,7 +71,9 @@ Paths below are relative to `/api/v1`.
 | `POST /policies/search` | `search_banking_policies` | Either | `{query, productId?, limit?}` -> sources, method, warnings |
 | `GET /products/{product_id}/required-documents` | `get_required_documents` | Either | Required/optional kinds, MIME types, size and version |
 | `POST /documents/validate` | `validate_document` | Either | Document metadata -> `DocumentValidation`, never VERIFIED |
-| `POST /eligibility/check` | `run_eligibility_check` | Customer | Scenario -> preliminary `Assessment` |
+| `POST /eligibility/check` | `run_eligibility_check` | Either, owner/assignment | `{applicationId, pricingScenarioId?, idempotencyKey}` -> existing `EligibilityAssessment` |
+| `GET /eligibility/assessments/{assessment_id}` | `get_eligibility_assessment` | Either, owner/assignment | Immutable historical assessment, never final approval |
+| `POST /calculations/affordability-preview` | `calculate_affordability_preview` | Customer | Scenario -> declared-income-only `AffordabilityPreview` |
 | `POST /calculations/loan-offer` | `calculate_loan_offer` | Customer | Scenario -> indicative `LoanQuote` with monthly schedule |
 | `POST /loans/{loan_id}/early-repayment/simulate` | `simulate_early_repayment` | Customer | `{repayment}` -> reduced-payment and reduced-term comparisons |
 | `POST /refinancing/compare` | `compare_refinancing_options` | Customer | `{loanIds, months}` -> monthly **and total** cost comparison |
@@ -77,12 +84,42 @@ A scenario is `{ "productId": "personal", "amount": "30000.00", "months": 36 }`.
 Product/rule configuration is in `config/products/demo.json` and
 `config/rules/demo.json`; rates and fees cannot be overridden by a tool call.
 
-Eligibility currently screens synthetic debt-to-income only, including existing
-installments and proposed payment/insurance. Results retain reason codes, evidence
-references, version and timestamp. Crossing the configured threshold yields
-`MANUAL_REVIEW_REQUIRED`, not a final rejection. Identity, age, bureau, tax/income
-verification and employment checks are **not implemented**. Every result requires
-human review; satisfactory screening is never credit approval.
+`run_eligibility_check` calls the **merged evidence-based reference service**, not
+the calculator preview. Only application/scenario IDs and a UUID key are accepted.
+The gateway translates its verified customer/reviewer principal and current
+assignment to the service's `ActorContext`; no role, income, policy, rate, evidence
+or provider-consent claim is accepted from a tool caller. The saved application
+returns `pricingScenarioId`; use that value to request its server-owned indicative
+quote. Personal product `personal` maps explicitly to the module's
+`personal_loan_ron`; mortgage/car do not inherit a personal-loan policy.
+
+The module supports four statuses: PRELIMINARY_REQUIREMENTS_SATISFIED,
+PRELIMINARY_REQUIREMENTS_NOT_SATISFIED, ADDITIONAL_INFORMATION_REQUIRED and
+MANUAL_REVIEW_REQUIRED. All results include `simulated: true`,
+`final_credit_decision: false`, `human_review_required: true`, rule-level reasons,
+policy digest/effective dates, sources and evidence provenance. Keep this response
+intact; ratio values are fractions, not the preview's percentage string. See the
+existing `contracts/http/eligibility.md` for the reference rules and assumptions.
+
+The workflow adapter has **no verified profile/identity evidence and no purpose-
+scoped income/bureau/internal-loan authorizations**. It does not clone reference
+fixture evidence or fabricate consents for Alex/Blake. Empty offline provider
+records are configured; without authorization, the existing service does not call
+them. Metadata identity evidence stays UNVERIFIED with unknown expiry. Therefore
+normal fresh drafts request more information; accepted metadata may require manual
+review. This is correct uncertainty, not a fake satisfied assessment. A later
+trusted document/profile/consent adapter is needed to complete automatic checks.
+Policy expiry (2026-11-26 in the reference snapshot), unsupported products, stale
+or conflicting evidence produce review outcomes, never silent passes. Eligibility
+does not edit workflow state. Its saved assessment/audit/actor-key replay records
+use the upstream immutable local SQLite tables in the same backend database.
+
+The separate affordability preview includes synthetic existing installments and
+proposed payment/insurance against the fictional DEMO-2026.1 percentage threshold.
+It is **not** `run_eligibility_check`, never verified income or a credit decision.
+Its `scope` is SYNTHETIC_AFFORDABILITY_PREVIEW_ONLY. Applications store this under
+`affordabilityPreview`, not as an evidence-based eligibility outcome. Every new
+credit application still requires independent human review.
 
 Policy search is deterministic keyword matching over versioned fictional sources,
 not embeddings/RAG. It preserves source ID/title/version/effective date/section;
@@ -122,6 +159,16 @@ string-sensitive (`"30000"` and `"30000.00"` are different payloads). Use a new 
 for an intentional new action, but reuse the same key after timeout/unknown outcome.
 Fetch current status separately after a replay. SQLite commits the state, audit,
 notifications and original response atomically and serializes concurrent retries.
+
+**Eligibility has its preserved distinct retry namespace and stricter snapshot
+semantics:** same actor/key/request **and unchanged application/policy snapshot**
+returns the original assessment/time. Changed document metadata, application
+revision/state or policy requires a new key; an old key returns 409. Terminal
+applications cannot receive a new check, but historical assessments remain readable
+after authorization. This does not conflict with workflow command replay, which
+returns its original response even after later transitions. Application `revision`
+increments on persisted mutations. Do not mutate reference consent/evidence or
+construct unverified data as VERIFIED to bypass these gates.
 
 Document metadata is:
 
@@ -196,15 +243,15 @@ Conversation storage is separate from authoritative workflow state.
 | --- | --- |
 | 400 | `VALIDATION_ERROR`; strict schema/range/type errors, invalid JSON |
 | 401 | `INVALID_CREDENTIALS`, `UNAUTHORIZED`; `WWW-Authenticate: Bearer` |
-| 403 | `FORBIDDEN`, `CONSENT_REQUIRED`; role or optional-notification consent |
-| 404 | `NOT_FOUND`; absent or inaccessible object |
+| 403 | `FORBIDDEN`, `CONSENT_REQUIRED`, `ACCESS_DENIED`; role, consent or eligibility access |
+| 404 | `NOT_FOUND`, `PRICING_SCENARIO_NOT_FOUND`, `ASSESSMENT_NOT_FOUND` |
 | 405 | `METHOD_NOT_ALLOWED` |
-| 409 | `INVALID_TRANSITION`, `EVIDENCE_REQUIRED`, `IDEMPOTENCY_CONFLICT`, `SETTLEMENT_QUOTE_REQUIRED` |
+| 409 | `INVALID_TRANSITION`, `INVALID_WORKFLOW_STATE`, `APPLICATION_CHANGED`, `EVIDENCE_REQUIRED`, `IDEMPOTENCY_CONFLICT`, `SETTLEMENT_QUOTE_REQUIRED` |
 | 413 | `PAYLOAD_TOO_LARGE`; request limit 32 KiB, including streamed bodies |
 | 429 | `RATE_LIMITED`; `Retry-After: 60`, per-client local limits |
 | 500 | `INTERNAL_ERROR`; safe message, no exception details |
 | 501 | `ORCHESTRATOR_NOT_CONFIGURED`; no fake assistant result |
-| 503 | `PERSISTENCE_UNAVAILABLE`; no successful state change recorded |
+| 503 | `PERSISTENCE_UNAVAILABLE`, `STORAGE_UNAVAILABLE`; no successful state change recorded |
 
 Validation uses 400 (not FastAPI's default 422). Retry transient errors with bounded
 backoff and the original idempotency key; do not automatically retry a different

@@ -3,20 +3,20 @@
 from decimal import Decimal
 
 from src.core.catalogue import Catalogue
-from src.models.banking import Actor, Assessment
+from src.models.banking import Actor, AffordabilityPreview
 from src.models.requests import LoanScenarioInput
-from src.rules.eligibility.affordability import assess_affordability
+from src.services.financial_calculations.preview_rule import assess_affordability
 from src.services.financial_calculations.engine import calculate_loan
 from src.services.pricing.service import PricingService
 from src.storage.application_db.repository import UnitOfWork
 
 
-class EligibilityService:
+class AffordabilityPreviewService:
     def __init__(self, catalogue: Catalogue, pricing: PricingService):
         self.catalogue = catalogue
         self.pricing = pricing
 
-    def assess(self, unit: UnitOfWork, actor: Actor, input: LoanScenarioInput) -> Assessment:
+    def assess(self, unit: UnitOfWork, actor: Actor, input: LoanScenarioInput) -> AffordabilityPreview:
         customer = unit.customer(actor.id)
         loans = unit.loans(actor.id)
         obligations = sum((calculate_loan(loan.principal, loan.annual_rate, loan.remaining_months).monthly_payment for loan in loans), Decimal("0"))

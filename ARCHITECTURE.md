@@ -163,6 +163,11 @@ assigned human review, notifications and audit. OCR, semantic RAG, verified bank
 data, administration, insights, restructuring/recovery and signing/settlement
 remain unimplemented. Refinancing and repayment currently simulate only; future
 execution requires specialized workflows rather than forcing origination states.
+The merged reference EligibilityService is exposed through the backend's ID-only
+run_eligibility_check, verified session/current assignment and a workflow repository
+adapter. The saved calculator preview is not a verified eligibility decision.
+Missing profile/document evidence and purpose-scoped authorizations remain absent;
+metadata is not promoted to VERIFIED. Original reference contracts/tests remain.
 
 ## Component boundaries
 

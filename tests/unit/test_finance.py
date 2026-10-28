@@ -4,7 +4,7 @@ from decimal import Decimal
 from src.core.catalogue import Catalogue
 from src.core.errors import DomainError
 from src.core.settings import ROOT
-from src.rules.eligibility.affordability import assess_affordability
+from src.services.financial_calculations.preview_rule import assess_affordability
 from src.services.financial_calculations.engine import calculate_loan, compare_refinancing, simulate_repayment
 
 

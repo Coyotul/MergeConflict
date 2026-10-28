@@ -61,6 +61,12 @@ class LoanScenarioInput(ApiInput):
     months: Annotated[StrictInt, Field(ge=1, le=600)]
 
 
+class EligibilityRunInput(ApiInput):
+    application_id: Annotated[str, StringConstraints(strict=True, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")]
+    pricing_scenario_id: Annotated[str, StringConstraints(strict=True, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")] | None = None
+    idempotency_key: UUID
+
+
 class CreateApplicationInput(LoanScenarioInput):
     idempotency_key: UUID
 

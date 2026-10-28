@@ -75,3 +75,11 @@ class PersistenceTests(ApiFixture):
             connection.close()
         with self.assertRaises(ValueError):
             Repository(unknown).initialize(self.app.state.container.catalogue.fixtures)
+
+    def test_sql_owner_and_typed_owner_mismatch_fails_startup(self):
+        customer = self.login()
+        application = self.create_application(customer)
+        with self.app.state.container.repository.transaction() as unit:
+            unit.connection.execute("UPDATE applications SET customer_id = 'customer-blake' WHERE id = ?", (application["id"],))
+        with self.assertRaises(ValueError):
+            Repository(self.path).initialize(self.app.state.container.catalogue.fixtures)

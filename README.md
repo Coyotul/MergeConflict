@@ -98,6 +98,11 @@ This starts the synthetic backend at http://127.0.0.1:8000:
   calculations, durable applications, assigned human review, consent, notifications
   and separate conversation context.
 
+`run_eligibility_check` uses the merged evidence-based service with only trusted
+application/scenario IDs and a retry key. It retains all four preliminary outcomes;
+missing profile/provider consent is not fabricated and metadata stays unverified.
+The declared-income calculator is separately labeled `affordability-preview`.
+
 Application state, history, audit and retry results persist transactionally in
 ignored `data/local/backend-demo.sqlite3`. Alex/Jamie's demo credentials above
 also work here; additional isolation-test accounts and complete commands are in

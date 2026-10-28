@@ -9,6 +9,10 @@ Node adapter (ADR 001). The owner requested backend routes that a future orchest
 can call. `SPECIFICATION.md` sections 6–13 require narrow validated tools, independent
 authorization, deterministic calculations, durable state, explicit submission and
 human-controlled credit outcomes. No cloud credentials or banking connection exist.
+During implementation, the owner-approved eligibility branch was merged upstream
+as `5e36e6a`. This branch merged that current master without changing frontend files,
+preserved its complete rule/service/tool/tests and bridged its trusted ports rather
+than overwriting them. ADR 005 remains the evidence-based eligibility decision.
 
 ## Decision
 
@@ -23,9 +27,19 @@ human-controlled credit outcomes. No cloud credentials or banking connection exi
   Products/rates/thresholds/policy versions come from validated synthetic JSON, not
   request bodies or prompts. Quote assumptions and preliminary evidence/reason
   codes are part of the wire contract.
+- Integrate `src/services/eligibility/service.py` through a backend adapter and
+  `WorkflowEligibilityRepository`. The canonical run_eligibility_check takes IDs
+  only, using verified session principal/current assignment and server-owned pricing.
+  Keep all four preliminary statuses and the existing snake_case output/provenance.
+  Its immutable assessment/audit tables share the local backend database. Metadata
+  stays UNVERIFIED; missing profile/purpose authorizations stay absent and providers
+  are never called without consent/notice. The simple declared-income calculation
+  is renamed `AffordabilityPreview` and is not a second eligibility rule engine.
 - Mirror resource naming and camelCase/decimal-string conventions of the frontend
   contract. Add idempotency to all durable creation/application/review commands.
-  Preserve the original replay response; separate GET requests return current state.
+  Preserve the original workflow-command replay response; separate GET requests
+  return current state. Eligibility retains its separate actor-key namespace and
+  stricter unchanged application/policy-snapshot replay, per ADR 005.
   The optional `/api` alias is not a full Node guided-chat compatibility layer.
 - Use **SQLite from Python's standard library for local development only**. No new
   hosted service, unconfirmed database driver or cloud free tier is needed. A SQL
@@ -65,6 +79,13 @@ known annuity results, cents/fees/insurance, principal conservation, partial
 repayment, refinancing trade-offs, strict validation, role spoofing, owner/assignment
 isolation, private notes, workflow/confirmation gates, retry conflicts, concurrent
 retries, transaction rollback, restart/resumption, corrupt stores and OpenAPI.
+The merged eligibility suite is retained; added integration tests exercise missing
+trusted evidence/authorizations, no inquiry, UNVERIFIED metadata, unchanged workflow,
+preserved historical replay, snapshot-change conflicts and policy expiry.
+Final verification: 160 Python tests (110 preserved + 50 added), 22 live backend
+Uvicorn HTTP checks including restart, seven original eligibility HTTP checks,
+generated eligibility contract parity, compileall/pip check and unchanged frontend
+ESLint/TypeScript/16 tests. No frontend files differ from the synchronized base.
 
 Versions verified via official FastAPI/Pydantic documentation and pip on 2026-10-28:
 FastAPI 0.162.0, Pydantic 2.14.1, Starlette 1.10.0, Uvicorn 0.54.0, HTTPX 0.28.1.

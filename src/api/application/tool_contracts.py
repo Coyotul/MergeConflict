@@ -13,7 +13,7 @@ CUSTOMER_TOOLS: dict[str, dict[str, Any]] = {
         "request_human_review", "create_customer_notification",
     )
 }
-for name in ("search_banking_policies", "get_required_documents", "validate_document", "get_application_status"):
+for name in ("search_banking_policies", "get_required_documents", "validate_document", "get_application_status", "run_eligibility_check"):
     CUSTOMER_TOOLS[name]["x-allowed-roles"] = ["customer", "reviewer"]
 CUSTOMER_TOOLS["submit_application"].update({
     "x-permitted-workflow-states": ["READY_FOR_SUBMISSION"],

@@ -1,0 +1,38 @@
+{
+  "description": "Run a synthetic deterministic preliminary personal-loan assessment using server-owned application evidence and an optional server-owned pricing scenario. Never approves/rejects a loan or changes workflow state. Requires backend authorization and a retry-safe idempotency key.",
+  "name": "run_eligibility_check",
+  "parameters": {
+    "additionalProperties": false,
+    "properties": {
+      "application_id": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+        "title": "Application Id",
+        "type": "string"
+      },
+      "idempotency_key": {
+        "pattern": "^[A-Za-z0-9_.:-]{8,128}$",
+        "title": "Idempotency Key",
+        "type": "string"
+      },
+      "pricing_scenario_id": {
+        "anyOf": [
+          {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Pricing Scenario Id"
+      }
+    },
+    "required": [
+      "application_id",
+      "idempotency_key"
+    ],
+    "title": "EligibilityCheckRequest",
+    "type": "object"
+  }
+}

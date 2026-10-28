@@ -8,8 +8,12 @@ interfaces. Backend folders are logical modules, not individual microservices.
 The local Next.js prototype and a separate synthetic FastAPI capability API are
 implemented. The frontend still uses its temporary Node adapter; the Python
 orchestrator, live banking integrations and remaining scaffold capabilities are
-not implemented. See ADR 005 and `contracts/http/backend-v1.md` for current backend
+not implemented. See ADR 006 and `contracts/http/backend-v1.md` for current backend
 behavior and the integration boundary.
+The merged `feature/eligibility-check` implementation provides synthetic preliminary
+eligibility, verification adapters, affordability and a narrow API/tool boundary
+(see `docs/decisions/005-eligibility-reference-service.md`). Its evidence-based
+contract is preserved; this is not a complete banking platform.
 
 ## Repository layout
 
@@ -218,6 +222,8 @@ execution requires specialized workflows rather than forcing origination states.
   tests for wire formats and end-to-end tests for workflow/review journeys as
   capabilities are implemented. Python unit/integration/contract tests and the
   frontend's existing domain/API/browser tests now exercise synthetic behavior.
+  Eligibility tests additionally cover reference rules, provider failures,
+  evidence provenance/freshness and synthetic screening journeys.
 
 ## Technology direction and persistence
 
@@ -229,9 +235,11 @@ in requirements; no cloud resources are provisioned and hosting/free-tier
 availability is not verified. The local
 backend deliberately uses standard-library SQLite with SQL migration, owner and
 assignment indexes, foreign keys, typed aggregates and atomic workflow/audit/
-notification/idempotency transactions (ADR 005). This is local synthetic storage,
+notification/idempotency transactions (ADR 006). This is local synthetic storage,
 not deployed cloud persistence or production authentication. Verify current
 provider documentation when selecting or deploying services.
+The evidence-based eligibility adapter likewise uses local-only SQLite for its
+independent demo; its reference models/rules and generated contracts are preserved.
 
 Application records, review decisions, status history, consents, conversations,
 notifications and knowledge versions need durable storage. The conceptual entity

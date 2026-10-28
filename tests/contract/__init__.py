@@ -1,0 +1,1 @@
+"""Eligibility wire-contract regression tests."""

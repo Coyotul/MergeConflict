@@ -1,0 +1,1 @@
+"""Synthetic test helpers; no real applicants or credentials."""

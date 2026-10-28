@@ -7,6 +7,10 @@ The repository contains a working local frontend prototype for customers and ban
 agents and an authenticated FastAPI backend with deterministic synthetic tools
 for a future AI orchestrator. They currently run independently. Authentication,
 data and decisions in the prototype are synthetic only.
+It also retains the merged evidence-based preliminary eligibility module from
+`feature/eligibility-check`. The Python services are not yet wired into the
+frontend's temporary Node adapter; none implements live banking or the complete
+credit lifecycle.
 
 Start with [SPECIFICATION.md](SPECIFICATION.md), the main product reference supplied
 by the project owner. See [ARCHITECTURE.md](ARCHITECTURE.md) for the folder tree, mapping of every
@@ -156,3 +160,28 @@ history. Include at least one refinancing or early repayment simulation.
 Every new credit application requires authorized human review. Signing and
 disbursement are separate stages and may only be simulated in this MVP. No real
 banking inquiries, financial transactions or loan approvals occur.
+
+## Evidence-based Eligibility Check implementation
+
+The merged `feature/eligibility-check` module implements Python preliminary screening:
+deterministic reference rules, Decimal affordability, synthetic ANAF/credit-bureau/
+internal-loan adapters, authorized API/tool access and local assessment/audit
+persistence. It is independent of the frontend prototype and never records a
+final credit decision or changes workflow state.
+
+See [the eligibility runbook](docs/runbooks/eligibility-demo.md),
+[HTTP/tool contract](contracts/http/eligibility.md), and
+[Raiffeisen/BNR research](docs/research/eligibility-raiffeisen-ro.md) for setup,
+sources and explicit synthetic assumptions. From the repository root:
+
+```powershell
+python -m unittest discover -s tests -v
+python -m scripts.eligibility_demo
+python -m scripts.eligibility_smoke
+python -m uvicorn src.api.gateway.eligibility_demo:create_app --factory --host 127.0.0.1 --port 8002
+```
+
+The API's public demo keys and SQLite storage are **local synthetic demonstration
+only**, not production authentication/infrastructure. The reproducible demo uses
+an explicit historical reference clock; the normal API enforces current evidence
+freshness and policy expiry. No real bank, ANAF or bureau requests are made.

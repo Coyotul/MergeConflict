@@ -1,0 +1,61 @@
+{
+  "policy_id": "demo_ro_personal",
+  "version": "2026-10-28.1",
+  "product_id": "personal_loan_ron",
+  "effective_from": "2026-10-15",
+  "effective_to": "2026-11-26",
+  "minimum_age_years": 21,
+  "maximum_maturity_age_years": {"FEMALE_REFERENCE": 63, "MALE_REFERENCE": 65},
+  "minimum_amount_ron": "2500.00",
+  "maximum_amount_ron": "250000.00",
+  "minimum_term_months": 18,
+  "maximum_term_months": 60,
+  "minimum_employment_months": 3,
+  "minimum_successive_renewals": 2,
+  "minimum_net_income_ron": "2700.00",
+  "maximum_debt_to_income_ratio": "0.40",
+  "revolving_limit_factor": "0.03",
+  "evidence_max_age_days": {
+    "CUSTOMER_PROFILE": 365,
+    "DOCUMENT": 365,
+    "ANAF": 30,
+    "CREDIT_BUREAU": 30,
+    "INTERNAL_LOANS": 7,
+    "PRICING": 7
+  },
+  "income_period_max_age_days": 62,
+  "provider_timeout_seconds": 2,
+  "provider_max_attempts": 2,
+  "sources": [
+    {"source_id": "RF_PRODUCT", "classification": "PUBLIC_BANK_REFERENCE", "title": "Flexicredit public product page", "url": "https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credit-de-nevoi-personale-fara-ipoteca.html", "retrieved_on": "2026-10-28", "section": "Eligibility, employment contracts, simulator and general information"},
+    {"source_id": "RF_CONDITIONS", "classification": "PUBLIC_BANK_REFERENCE", "title": "Personal-loan eligibility conditions", "url": "https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-de-nevoi-personale/conditii-credit-nevoi-personale.html", "retrieved_on": "2026-10-28", "section": "Income, age, employment and supporting documents"},
+    {"source_id": "RF_BUREAU", "classification": "PUBLIC_BANK_REFERENCE", "title": "Biroul de Credit explanation", "url": "https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-de-nevoi-personale/biroul-de-credit.html", "retrieved_on": "2026-10-28", "section": "Contextual assessment of history; registration alone is not disqualification"},
+    {"source_id": "RF_NOTICE", "classification": "PUBLIC_BANK_REFERENCE", "title": "Credit information notice", "url": "https://www.raiffeisen.ro/ro/aplica/nota-de-informare-credit.html", "retrieved_on": "2026-10-28", "section": "4.3/4.4, 5.4, 8.2, 10 and IMPORTANT inquiry purposes"},
+    {"source_id": "BNR_17", "classification": "REGULATORY", "title": "BNR Regulation 17/2012 consolidated text", "url": "https://legislatie.just.ro/Public/DetaliiDocument/143876", "retrieved_on": "2026-10-28", "section": "Articles 12, 13, 17, 19 and 20"},
+    {"source_id": "HG_146", "classification": "REGULATORY", "title": "HG 146/2026 gross minimum salary", "url": "https://legislatie.just.ro/Public/DetaliiDocument/308231", "retrieved_on": "2026-10-28", "section": "Article 1: gross 4325 RON from 2026-07-01; not a net threshold"},
+    {"source_id": "DEMO_POLICY", "classification": "SYNTHETIC_ASSUMPTION", "title": "Independent prototype assumptions", "retrieved_on": "2026-10-28", "section": "Synthetic net income threshold, freshness, retries, calendar conventions, domestic salary automation and human review"}
+  ],
+  "rule_sources": {
+    "POLICY": ["DEMO_POLICY"],
+    "PRODUCT": ["RF_PRODUCT", "BNR_17"],
+    "AGE": ["RF_PRODUCT", "RF_CONDITIONS", "DEMO_POLICY"],
+    "EMPLOYMENT": ["RF_PRODUCT", "RF_CONDITIONS"],
+    "IDENTITY": ["RF_PRODUCT", "DEMO_POLICY"],
+    "INCOME": ["RF_CONDITIONS", "HG_146", "DEMO_POLICY"],
+    "CREDIT_HISTORY": ["RF_PRODUCT", "RF_BUREAU", "RF_NOTICE"],
+    "OBLIGATIONS": ["BNR_17", "DEMO_POLICY"],
+    "AFFORDABILITY": ["BNR_17", "RF_PRODUCT", "DEMO_POLICY"],
+    "AUTHORIZATION": ["RF_NOTICE", "DEMO_POLICY"],
+    "VERIFICATION": ["DEMO_POLICY"]
+  },
+  "assumptions": [
+    "2700 RON minimum net income is synthetic, not a verified official net salary or bank threshold.",
+    "Effective dates bound this demo snapshot, not the bank's complete policy validity.",
+    "Freshness windows, income recency, timeout and retry settings are demo assumptions.",
+    "Calendar-month clamping and completed-year age boundaries are explicit demo conventions.",
+    "Only domestic salary has automatic rules; other income requires manual review.",
+    "No FICO cutoff, reporting threshold as rejection rule, or lender portfolio exception is invented.",
+    "All verification providers are synthetic; every submitted application needs human review."
+  ],
+  "simulated": true
+}

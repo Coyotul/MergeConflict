@@ -1,0 +1,1 @@
+"""Unit tests for deterministic eligibility and financial rules."""

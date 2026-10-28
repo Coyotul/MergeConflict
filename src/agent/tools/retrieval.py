@@ -37,6 +37,16 @@ class PolicySearch(Protocol):
         ...
 
 
+_STEM_LENGTH = 6
+
+
+def _same_word(a: str, b: str) -> bool:
+    """Equal, or sharing a stem of at least 6 characters ('documente' ~ 'documents')."""
+    if a == b:
+        return True
+    return len(a) >= _STEM_LENGTH and len(b) >= _STEM_LENGTH and a[:_STEM_LENGTH] == b[:_STEM_LENGTH]
+
+
 class StubPolicySearch:
     """Stub implementation using keyword overlap matching."""
 
@@ -158,7 +168,7 @@ class StubPolicySearch:
                 if word and word not in stopwords:
                     passage_tokens.add(word)
 
-            overlap = query_tokens & passage_tokens
+            overlap = {q for q in query_tokens if any(_same_word(q, p) for p in passage_tokens)}
             if overlap:
                 score = len(overlap) / len(query_tokens)
                 scored_passages.append((score, passage))

@@ -1,0 +1,5 @@
+{
+  "code": "service_unavailable",
+  "message": "The assistant is temporarily unavailable. Please try again.",
+  "retryable": true
+}

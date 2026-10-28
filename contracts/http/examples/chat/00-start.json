@@ -1,0 +1,25 @@
+{
+  "session_id": "example-session-1",
+  "turn_id": "example-turn-01",
+  "session_version": 0,
+  "messages": [
+    {
+      "role": "assistant",
+      "text": "Bună! Sunt asistentul tău pentru credite (mod demonstrativ, date simulate). Te pot ajuta cu o cerere de credit sau cu informații despre produse.",
+      "citations": [],
+      "created_at": "2026-10-28T09:00:00Z"
+    }
+  ],
+  "awaiting": {
+    "kind": "text",
+    "document_types": [],
+    "summary_version": null
+  },
+  "progress": {
+    "flow": "none",
+    "stage": null,
+    "steps": []
+  },
+  "blocks": [],
+  "simulated": false
+}

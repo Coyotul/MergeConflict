@@ -1,0 +1,930 @@
+openapi: 3.1.0
+info:
+  title: Credit Assistant API
+  description: AI-powered credit application assistant
+  version: 1.0.0
+paths:
+  /chat/sessions:
+    post:
+      tags:
+      - chat
+      summary: Create Session
+      description: "Create a new chat session.\n\nReturns:\n    201 with TurnResponse\
+        \ containing greeting"
+      operationId: create_session_chat_sessions_post
+      parameters:
+      - name: x-customer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Customer-Id
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TurnResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /chat/sessions/{session_id}/messages:
+    post:
+      tags:
+      - chat
+      summary: Send Message
+      description: "Send a text message in the conversation.\n\nReturns:\n    200\
+        \ with TurnResponse"
+      operationId: send_message_chat_sessions__session_id__messages_post
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: x-customer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Customer-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TurnResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /chat/sessions/{session_id}/documents:
+    post:
+      tags:
+      - chat
+      summary: Upload Document
+      description: "Upload a document for the application.\n\nReturns:\n    200 with\
+        \ TurnResponse"
+      operationId: upload_document_chat_sessions__session_id__documents_post
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: x-customer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Customer-Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_document_chat_sessions__session_id__documents_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TurnResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /chat/sessions/{session_id}/offer-selection:
+    post:
+      tags:
+      - chat
+      summary: Select Offer
+      description: "Select a loan offer.\n\nReturns:\n    200 with TurnResponse"
+      operationId: select_offer_chat_sessions__session_id__offer_selection_post
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: x-customer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Customer-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferSelectionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TurnResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /chat/sessions/{session_id}/confirmation:
+    post:
+      tags:
+      - chat
+      summary: Confirm Application
+      description: "Confirm or decline the application summary.\n\nReturns:\n    200\
+        \ with TurnResponse"
+      operationId: confirm_application_chat_sessions__session_id__confirmation_post
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: x-customer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Customer-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmationRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TurnResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /chat/sessions/{session_id}:
+    get:
+      tags:
+      - chat
+      summary: Get Session
+      description: "Get session view with messages and current state.\n\nReturns:\n\
+        \    200 with SessionView"
+      operationId: get_session_chat_sessions__session_id__get
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: x-customer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Customer-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      summary: Health
+      description: Health check endpoint.
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    ApplicationSubmittedBlock:
+      properties:
+        type:
+          type: string
+          const: application_submitted
+          title: Type
+          default: application_submitted
+        application_id:
+          type: string
+          title: Application Id
+        status:
+          type: string
+          title: Status
+      type: object
+      required:
+      - application_id
+      - status
+      title: ApplicationSubmittedBlock
+      description: Block confirming application submission.
+    ApplicationSummary:
+      properties:
+        summary_version:
+          type: string
+          title: Summary Version
+        application_id:
+          type: string
+          title: Application Id
+        product_code:
+          $ref: '#/components/schemas/Product'
+        product_name:
+          type: string
+          title: Product Name
+        amount:
+          $ref: '#/components/schemas/Money'
+        term_months:
+          type: integer
+          title: Term Months
+        offer:
+          $ref: '#/components/schemas/LoanOffer'
+        fields:
+          items:
+            $ref: '#/components/schemas/SummaryField'
+          type: array
+          title: Fields
+        documents:
+          items:
+            $ref: '#/components/schemas/DocumentChecklistItem'
+          type: array
+          title: Documents
+      type: object
+      required:
+      - summary_version
+      - application_id
+      - product_code
+      - product_name
+      - amount
+      - term_months
+      - offer
+      - fields
+      - documents
+      title: ApplicationSummary
+      description: Complete application summary for confirmation.
+    ApplicationSummaryBlock:
+      properties:
+        type:
+          type: string
+          const: application_summary
+          title: Type
+          default: application_summary
+        summary:
+          $ref: '#/components/schemas/ApplicationSummary'
+      type: object
+      required:
+      - summary
+      title: ApplicationSummaryBlock
+      description: Block showing application summary.
+    Awaiting:
+      properties:
+        kind:
+          $ref: '#/components/schemas/AwaitingKind'
+        document_types:
+          items:
+            type: string
+          type: array
+          title: Document Types
+          default: []
+        summary_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary Version
+      type: object
+      required:
+      - kind
+      title: Awaiting
+      description: What the assistant is currently awaiting.
+    AwaitingKind:
+      type: string
+      enum:
+      - text
+      - document
+      - offer_choice
+      - confirmation
+      - none
+      title: AwaitingKind
+      description: What the assistant is waiting for from the customer.
+    Body_upload_document_chat_sessions__session_id__documents_post:
+      properties:
+        doc_type:
+          type: string
+          title: Doc Type
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - doc_type
+      - file
+      title: Body_upload_document_chat_sessions__session_id__documents_post
+    ChatMessageView:
+      properties:
+        role:
+          type: string
+          enum:
+          - customer
+          - assistant
+          title: Role
+        text:
+          type: string
+          title: Text
+        citations:
+          items:
+            $ref: '#/components/schemas/CitationRef'
+          type: array
+          title: Citations
+          default: []
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - role
+      - text
+      - created_at
+      title: ChatMessageView
+      description: A chat message in the conversation.
+    CitationRef:
+      properties:
+        id:
+          type: string
+          title: Id
+        publisher:
+          type: string
+          title: Publisher
+        title:
+          type: string
+          title: Title
+        url:
+          type: string
+          title: Url
+        section:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Section
+        effective_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Effective Date
+      type: object
+      required:
+      - id
+      - publisher
+      - title
+      - url
+      title: CitationRef
+      description: Citation reference for assistant messages.
+    ConfirmationRequest:
+      properties:
+        summary_version:
+          type: string
+          title: Summary Version
+        decision:
+          type: string
+          enum:
+          - confirm
+          - decline
+          title: Decision
+      type: object
+      required:
+      - summary_version
+      - decision
+      title: ConfirmationRequest
+      description: Request to confirm or decline the application summary.
+    DocumentChecklistBlock:
+      properties:
+        type:
+          type: string
+          const: document_checklist
+          title: Type
+          default: document_checklist
+        items:
+          items:
+            $ref: '#/components/schemas/DocumentChecklistItem'
+          type: array
+          title: Items
+      type: object
+      required:
+      - items
+      title: DocumentChecklistBlock
+      description: Block showing document checklist.
+    DocumentChecklistItem:
+      properties:
+        doc_type:
+          type: string
+          title: Doc Type
+        label:
+          type: string
+          title: Label
+        status:
+          type: string
+          title: Status
+        rejection_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rejection Reason
+      type: object
+      required:
+      - doc_type
+      - label
+      - status
+      title: DocumentChecklistItem
+      description: An item in the document checklist.
+    EligibilityResult:
+      properties:
+        status:
+          $ref: '#/components/schemas/EligibilityStatus'
+        reasons:
+          items:
+            $ref: '#/components/schemas/ReasonItem'
+          type: array
+          title: Reasons
+        rule_version:
+          type: string
+          title: Rule Version
+        missing_fields:
+          items:
+            type: string
+          type: array
+          title: Missing Fields
+          default: []
+        simulated:
+          type: boolean
+          title: Simulated
+          default: true
+      type: object
+      required:
+      - status
+      - reasons
+      - rule_version
+      title: EligibilityResult
+      description: Result of an eligibility check.
+    EligibilityResultBlock:
+      properties:
+        type:
+          type: string
+          const: eligibility_result
+          title: Type
+          default: eligibility_result
+        result:
+          $ref: '#/components/schemas/EligibilityResult'
+      type: object
+      required:
+      - result
+      title: EligibilityResultBlock
+      description: Block showing eligibility check result.
+    EligibilityStatus:
+      type: string
+      enum:
+      - satisfied
+      - not_satisfied
+      - more_information_required
+      - manual_review
+      title: EligibilityStatus
+      description: Eligibility check status.
+    EscalationBlock:
+      properties:
+        type:
+          type: string
+          const: escalation
+          title: Type
+          default: escalation
+        ticket_id:
+          type: string
+          title: Ticket Id
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - ticket_id
+      - message
+      title: EscalationBlock
+      description: Block indicating case escalation.
+    ExtractedFieldView:
+      properties:
+        field:
+          type: string
+          title: Field
+        label:
+          type: string
+          title: Label
+        value:
+          type: string
+          title: Value
+        source:
+          type: string
+          title: Source
+        confidence:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Confidence
+        needs_confirmation:
+          type: boolean
+          title: Needs Confirmation
+        conflict_with:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Conflict With
+      type: object
+      required:
+      - field
+      - label
+      - value
+      - source
+      - needs_confirmation
+      title: ExtractedFieldView
+      description: A field extracted from documents or conversation.
+    ExtractedFieldsBlock:
+      properties:
+        type:
+          type: string
+          const: extracted_fields
+          title: Type
+          default: extracted_fields
+        fields:
+          items:
+            $ref: '#/components/schemas/ExtractedFieldView'
+          type: array
+          title: Fields
+      type: object
+      required:
+      - fields
+      title: ExtractedFieldsBlock
+      description: Block showing extracted fields.
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    LoanOffer:
+      properties:
+        offer_id:
+          type: string
+          title: Offer Id
+        product_code:
+          $ref: '#/components/schemas/Product'
+        amount:
+          $ref: '#/components/schemas/Money'
+        term_months:
+          type: integer
+          title: Term Months
+        annual_interest_rate_percent:
+          type: string
+          title: Annual Interest Rate Percent
+        monthly_installment:
+          $ref: '#/components/schemas/Money'
+        total_repayment:
+          $ref: '#/components/schemas/Money'
+        total_cost:
+          $ref: '#/components/schemas/Money'
+        fees:
+          $ref: '#/components/schemas/Money'
+        assumptions:
+          items:
+            type: string
+          type: array
+          title: Assumptions
+        indicative:
+          type: boolean
+          title: Indicative
+          default: true
+        simulated:
+          type: boolean
+          title: Simulated
+          default: true
+      type: object
+      required:
+      - offer_id
+      - product_code
+      - amount
+      - term_months
+      - annual_interest_rate_percent
+      - monthly_installment
+      - total_repayment
+      - total_cost
+      - fees
+      - assumptions
+      title: LoanOffer
+      description: A loan offer with calculated terms.
+    Money:
+      properties:
+        amount:
+          type: string
+          title: Amount
+        currency:
+          type: string
+          enum:
+          - RON
+          - EUR
+          title: Currency
+          default: RON
+      type: object
+      required:
+      - amount
+      title: Money
+      description: Monetary amount with currency.
+    OfferSelectionRequest:
+      properties:
+        offer_id:
+          type: string
+          title: Offer Id
+      type: object
+      required:
+      - offer_id
+      title: OfferSelectionRequest
+      description: Request to select a loan offer.
+    OffersBlock:
+      properties:
+        type:
+          type: string
+          const: offers
+          title: Type
+          default: offers
+        offers:
+          items:
+            $ref: '#/components/schemas/LoanOffer'
+          type: array
+          title: Offers
+        selected_offer_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Selected Offer Id
+      type: object
+      required:
+      - offers
+      title: OffersBlock
+      description: Block showing loan offers.
+    Product:
+      type: string
+      enum:
+      - personal_loan
+      - refinancing_unsecured
+      - refinancing_mortgage
+      - mortgage_casa_ta
+      - mortgage_casa_ta_verde
+      - mortgage_noua_casa
+      - mortgage_residential_projects
+      - overdraft
+      - credit_card
+      - general
+      title: Product
+      description: Credit products offered.
+    Progress:
+      properties:
+        flow:
+          type: string
+          enum:
+          - none
+          - product_info
+          - credit_application
+          title: Flow
+        stage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stage
+        steps:
+          items:
+            $ref: '#/components/schemas/ProgressStep'
+          type: array
+          title: Steps
+      type: object
+      required:
+      - flow
+      - stage
+      - steps
+      title: Progress
+      description: Progress through the credit application flow.
+    ProgressStep:
+      properties:
+        stage:
+          type: string
+          title: Stage
+        status:
+          type: string
+          enum:
+          - done
+          - current
+          - todo
+          title: Status
+      type: object
+      required:
+      - stage
+      - status
+      title: ProgressStep
+      description: A step in the credit application progress.
+    ReasonItem:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - code
+      - message
+      title: ReasonItem
+      description: A reason code with message.
+    SendMessageRequest:
+      properties:
+        text:
+          type: string
+          title: Text
+      type: object
+      required:
+      - text
+      title: SendMessageRequest
+      description: Request to send a text message.
+    SessionView:
+      properties:
+        session_id:
+          type: string
+          title: Session Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        messages:
+          items:
+            $ref: '#/components/schemas/ChatMessageView'
+          type: array
+          title: Messages
+        latest:
+          $ref: '#/components/schemas/TurnResponse'
+      type: object
+      required:
+      - session_id
+      - created_at
+      - messages
+      - latest
+      title: SessionView
+      description: Complete view of a session.
+    SummaryField:
+      properties:
+        label:
+          type: string
+          title: Label
+        value:
+          type: string
+          title: Value
+        source:
+          type: string
+          title: Source
+      type: object
+      required:
+      - label
+      - value
+      - source
+      title: SummaryField
+      description: A field in the application summary.
+    TurnResponse:
+      properties:
+        session_id:
+          type: string
+          title: Session Id
+        turn_id:
+          type: string
+          title: Turn Id
+        session_version:
+          type: integer
+          title: Session Version
+        messages:
+          items:
+            $ref: '#/components/schemas/ChatMessageView'
+          type: array
+          title: Messages
+        awaiting:
+          $ref: '#/components/schemas/Awaiting'
+        progress:
+          $ref: '#/components/schemas/Progress'
+        blocks:
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/DocumentChecklistBlock'
+            - $ref: '#/components/schemas/ExtractedFieldsBlock'
+            - $ref: '#/components/schemas/EligibilityResultBlock'
+            - $ref: '#/components/schemas/OffersBlock'
+            - $ref: '#/components/schemas/ApplicationSummaryBlock'
+            - $ref: '#/components/schemas/ApplicationSubmittedBlock'
+            - $ref: '#/components/schemas/EscalationBlock'
+            discriminator:
+              propertyName: type
+              mapping:
+                application_submitted: '#/components/schemas/ApplicationSubmittedBlock'
+                application_summary: '#/components/schemas/ApplicationSummaryBlock'
+                document_checklist: '#/components/schemas/DocumentChecklistBlock'
+                eligibility_result: '#/components/schemas/EligibilityResultBlock'
+                escalation: '#/components/schemas/EscalationBlock'
+                extracted_fields: '#/components/schemas/ExtractedFieldsBlock'
+                offers: '#/components/schemas/OffersBlock'
+          type: array
+          title: Blocks
+        simulated:
+          type: boolean
+          title: Simulated
+      type: object
+      required:
+      - session_id
+      - turn_id
+      - session_version
+      - messages
+      - awaiting
+      - progress
+      - blocks
+      - simulated
+      title: TurnResponse
+      description: Response from a single turn in the conversation.
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

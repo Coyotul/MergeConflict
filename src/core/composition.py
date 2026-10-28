@@ -3,6 +3,7 @@ from pathlib import Path
 
 import psycopg
 
+from src.agent.orchestration.demo_model import DemoChatModel
 from src.agent.orchestration.orchestrator import Orchestrator
 from src.agent.tools.registry import ToolRegistry
 from src.agent.tools.retrieval import PolicySearch, build_policy_search
@@ -27,11 +28,13 @@ def build_chat_model(settings: OrchestratorSettings) -> ChatModel:
     Returns:
         ChatModel implementation
 
+    "fake" selects the scripted DemoChatModel (mock mode, no API key needed).
+
     Raises:
-        ConfigurationError: If model is "fake" (not yet available) or configuration is invalid
+        ConfigurationError: If the Featherless configuration is invalid
     """
     if settings.model == "fake":
-        raise ConfigurationError("demo model not available")
+        return DemoChatModel(settings.config_dir)
     return FeatherlessChatModel(settings)
 
 

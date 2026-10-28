@@ -627,3 +627,15 @@ def test_offer_term_ordering_and_clamping():
     # Test 6: customer term outside product range is clamped
     # term 200 (way beyond personal_loan max 84) with options [36, 60] → [84, 36, 60]
     check_offers(200, [36, 60], [84, 36, 60])
+
+
+def test_stub_search_matches_word_forms():
+    """Inflected forms ('documente') match passage words ('documents')."""
+    from src.models.knowledge import SearchQuery, SearchStatus
+
+    search = StubPolicySearch(Path("config/orchestrator"))
+    result = search.search(SearchQuery(text="Ce documente îmi trebuie?"))
+    assert result.status == SearchStatus.ok
+    assert result.passages[0].header == "Required Documents for Personal Loans"
+    # a short shared stem is not a match
+    assert search.search(SearchQuery(text="xyzzy docu")).status == SearchStatus.insufficient_evidence

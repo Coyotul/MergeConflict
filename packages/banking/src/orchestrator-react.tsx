@@ -14,6 +14,7 @@ import {
   storageKey,
   shouldStartFresh,
   isValidCustomerId,
+  getRetryAction,
   type ChatState,
   type ChatEntry,
   type PendingAction,
@@ -183,20 +184,22 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
       action: PendingAction,
       localEntry?: ChatEntry
     ): Promise<boolean> => {
-      if (actionLockRef.current || !state.customerId) {
-        return false;
-      }
-
-      // Handle start action (for retry when orchestrator was down at mount)
+      // Handle start action first (for retry when orchestrator was down at mount)
       if (action.kind === "start") {
-        if (!lumaCustomerId) return false;
+        if (actionLockRef.current || !lumaCustomerId) return false;
         actionLockRef.current = true;
+        // Show spinner and clear error
+        dispatch({ type: "requested", action });
         const key = storageKey(lumaCustomerId);
         resumeOrStart(key, epochRef.current);
         return true;
       }
 
-      // Other actions require sessionId
+      // Other actions require customerId and sessionId
+      if (actionLockRef.current || !state.customerId) {
+        return false;
+      }
+
       if (!canSend(state)) {
         return false;
       }
@@ -330,38 +333,25 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
   );
 
   const retry = useCallback(async (): Promise<boolean> => {
-    // If orchestrator was down at mount, retry start
-    if (!state.sessionId && !state.lastAction) {
-      return executeAction({ kind: "start" });
-    }
-
-    if (!state.lastAction || state.lastAction.kind === "confirm") {
-      return false;
-    }
+    const action = getRetryAction(state);
+    if (!action) return false;
 
     // For message actions, don't append a new local entry (already in state)
-    if (state.lastAction.kind === "message") {
-      return executeAction(state.lastAction);
-    }
-
-    return executeAction(state.lastAction);
-  }, [state.lastAction, state.sessionId, executeAction]);
+    return executeAction(action);
+  }, [state, executeAction]);
 
   const restart = useCallback(() => {
     if (!lumaCustomerId) return;
 
-    // Respect lock
-    if (actionLockRef.current) return;
-
-    // Clear retry timer
+    // Cancel any pending 409 retry via epoch
     if (retryTimerRef.current) {
       clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
     }
 
-    // Increment epoch to drop stale responses
+    // Release lock and increment epoch to drop stale responses
+    actionLockRef.current = false;
     epochRef.current++;
-    actionLockRef.current = true;
 
     // Clear storage
     const key = storageKey(lumaCustomerId);
@@ -371,6 +361,7 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
     dispatch({ type: "reset" });
 
     // Start new session
+    actionLockRef.current = true;
     startFresh(key, epochRef.current);
   }, [lumaCustomerId, startFresh]);
 

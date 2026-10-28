@@ -128,7 +128,7 @@ export function chatReducer(state: ChatState, event: ChatEvent): ChatState {
         state.sessionId !== null &&
         event.response.session_id !== state.sessionId
       ) {
-        return state;
+        return { ...state, pending: false };
       }
 
       // Append assistant messages from the response
@@ -192,4 +192,18 @@ export function shouldStartFresh(error: OrchestratorError): boolean {
 
 export function isValidCustomerId(customerId: string): boolean {
   return (SYNTHETIC_CUSTOMERS as readonly string[]).includes(customerId);
+}
+
+export function getRetryAction(state: ChatState): PendingAction | null {
+  // If session failed to start/resume, retry initialization
+  if (!state.sessionId && !state.lastAction) {
+    return { kind: "start" };
+  }
+
+  // Can't retry confirm actions
+  if (state.lastAction?.kind === "confirm") {
+    return null;
+  }
+
+  return state.lastAction;
 }

@@ -11,6 +11,7 @@ import {
   storageKey,
   shouldStartFresh,
   isValidCustomerId,
+  getRetryAction,
   type ChatState,
   type ChatEntry,
 } from "../src/orchestrator-state";
@@ -169,10 +170,10 @@ describe("orchestrator-state", () => {
 
       const next = chatReducer(state, { type: "succeeded", response: staleResponse });
 
-      // State unchanged (response ignored)
+      // Response ignored but pending cleared
       assert.equal(next.sessionId, "sess-123");
       assert.equal(next.entries.length, 1);
-      assert.equal(next.pending, true); // Still pending
+      assert.equal(next.pending, false); // Pending cleared
       assert.equal(next.latest, null);
     });
   });
@@ -387,6 +388,58 @@ describe("orchestrator-state", () => {
       assert.equal(isValidCustomerId("cust-004"), false);
       assert.equal(isValidCustomerId("invalid"), false);
       assert.equal(isValidCustomerId(""), false);
+    });
+  });
+
+  describe("getRetryAction", () => {
+    it("returns start action when session failed to initialize", () => {
+      const state: ChatState = {
+        ...initialChatState,
+        sessionId: null,
+        lastAction: null,
+        error: {
+          status: 0,
+          code: "unavailable",
+          retryable: true,
+          message: "Service unavailable",
+        } as OrchestratorError,
+      };
+      const action = getRetryAction(state);
+      assert.deepEqual(action, { kind: "start" });
+    });
+
+    it("returns null for confirm actions", () => {
+      const state: ChatState = {
+        ...initialChatState,
+        sessionId: "sess-123",
+        lastAction: {
+          kind: "confirm",
+          summaryVersion: "v1",
+          decision: "confirm",
+        },
+      };
+      const action = getRetryAction(state);
+      assert.equal(action, null);
+    });
+
+    it("returns lastAction for other actions", () => {
+      const state: ChatState = {
+        ...initialChatState,
+        sessionId: "sess-123",
+        lastAction: { kind: "message", text: "Hello" },
+      };
+      const action = getRetryAction(state);
+      assert.deepEqual(action, { kind: "message", text: "Hello" });
+    });
+
+    it("returns null when no action to retry", () => {
+      const state: ChatState = {
+        ...initialChatState,
+        sessionId: "sess-123",
+        lastAction: null,
+      };
+      const action = getRetryAction(state);
+      assert.equal(action, null);
     });
   });
 });

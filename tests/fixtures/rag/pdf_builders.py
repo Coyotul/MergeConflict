@@ -1,12 +1,17 @@
 """PDF test fixture builders using PyMuPDF."""
 import pymupdf as fitz
+from pathlib import Path
+
+
+# Use Arial font for Romanian diacritic support
+FONT_FILE = Path("C:/Windows/Fonts/arial.ttf")
 
 
 def make_pdf(pages: list[list[tuple[float, float, str]]], fontsize: float = 9) -> bytes:
     """Build a PDF from positioned text spans.
 
     Args:
-        pages: Each page is a list of (x, y, text) tuples for insert_text calls
+        pages: Each page is a list of (x, y, text) tuples for TextWriter calls
         fontsize: Font size for text
 
     Returns:
@@ -14,29 +19,38 @@ def make_pdf(pages: list[list[tuple[float, float, str]]], fontsize: float = 9) -
     """
     doc = fitz.open()
 
+    # Load font once for all pages
+    font = fitz.Font(fontfile=str(FONT_FILE))
+
     for page_items in pages:
         page = doc.new_page(width=595, height=842)  # A4 size
+        tw = fitz.TextWriter(page.rect)
+
         for x, y, text in page_items:
-            # Use default font which supports Unicode/diacritics
-            page.insert_text((x, y), text, fontsize=fontsize)
+            # Use TextWriter for proper font embedding
+            tw.append((x, y), text, font=font, fontsize=fontsize)
+
+        tw.write_text(page)
 
     pdf_bytes = doc.tobytes()
     doc.close()
     return pdf_bytes
 
 
-def make_pdf_from_lines(lines: list[str], per_page: int = 40, fontsize: float = 6) -> bytes:
+def make_pdf_from_lines(lines: list[str], fontsize: float = 6) -> bytes:
     """Build a PDF from text lines with automatic pagination and wrapping.
 
     Args:
         lines: Text lines to write
-        per_page: Maximum lines per page
         fontsize: Font size for text (small fontsize to fit long lines)
 
     Returns:
         PDF bytes
     """
     doc = fitz.open()
+
+    # Load font for proper diacritic support
+    font = fitz.Font(fontfile=str(FONT_FILE))
 
     line_height = fontsize + 2  # Spacing between lines
     margin_left = 50
@@ -46,27 +60,52 @@ def make_pdf_from_lines(lines: list[str], per_page: int = 40, fontsize: float = 
 
     page = None
     y_position = margin_top
+    tw = None
+
+    def new_page():
+        nonlocal page, y_position, tw
+        if tw is not None:
+            tw.write_text(page)
+        page = doc.new_page(width=595, height=842)
+        y_position = margin_top
+        tw = fitz.TextWriter(page.rect)
 
     for line in lines:
         if page is None:
-            page = doc.new_page(width=595, height=842)
-            y_position = margin_top
+            new_page()
 
-        # Calculate rough height needed for this textbox
-        # Estimate 80-100 chars per line at fontsize 6
-        estimated_lines = max(1, len(line) // 90)
-        box_height = estimated_lines * line_height + 5
+        # Wrap text manually by words
+        words = line.split()
+        current_line = ""
+        x_position = margin_left
 
-        # Check if we need a new page
-        if y_position + box_height > margin_top + page_height:
-            page = doc.new_page(width=595, height=842)
-            y_position = margin_top
+        for word in words:
+            test_line = current_line + (" " if current_line else "") + word
+            # Estimate width (rough approximation)
+            text_width = font.text_length(test_line, fontsize=fontsize)
 
-        # Use insert_textbox for automatic wrapping
-        rect = fitz.Rect(margin_left, y_position, margin_left + page_width, y_position + box_height + 10)
-        page.insert_textbox(rect, line, fontsize=fontsize, align=0)
+            if text_width > page_width and current_line:
+                # Write current line and start new one
+                if y_position + line_height > margin_top + page_height:
+                    new_page()
 
-        y_position += box_height
+                tw.append((margin_left, y_position), current_line, font=font, fontsize=fontsize)
+                y_position += line_height
+                current_line = word
+            else:
+                current_line = test_line
+
+        # Write remaining text
+        if current_line:
+            if y_position + line_height > margin_top + page_height:
+                new_page()
+
+            tw.append((margin_left, y_position), current_line, font=font, fontsize=fontsize)
+            y_position += line_height
+
+    # Write final page
+    if tw is not None:
+        tw.write_text(page)
 
     pdf_bytes = doc.tobytes()
     doc.close()

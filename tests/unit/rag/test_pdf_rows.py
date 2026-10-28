@@ -59,3 +59,22 @@ def test_furniture_filter_counts_distinct_pages():
     # All content should be present
     assert "Content page 1" in line_texts
     assert "Content page 2" in line_texts
+
+
+def test_make_pdf_roundtrips_romanian_diacritics():
+    """Test that make_pdf preserves Romanian diacritics."""
+    from tests.fixtures.rag.pdf_builders import make_pdf
+    from src.services.document_ingestion.parsers.pdf_rows import pdf_lines
+    
+    # Create PDF with Romanian diacritics
+    text = "Plăți în lei: ș ț ă î â"
+    pdf = make_pdf([
+        [(50, 60, text)],
+    ])
+    
+    lines = pdf_lines(pdf, skip_first_page=False)
+    extracted_texts = [line for _, line in lines]
+    
+    # Should extract exactly the same text
+    assert len(extracted_texts) == 1
+    assert extracted_texts[0] == text

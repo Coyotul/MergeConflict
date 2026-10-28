@@ -55,5 +55,6 @@ out/
 playwright-report/
 test-results/
 coverage/
+.taste-skill/
 !apps/*/src/lib/
 !apps/*/src/lib/**

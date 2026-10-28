@@ -1,0 +1,101 @@
+"""Extractor for Romanian Identity Cards (Carte de Identitate)."""
+
+from datetime import date, datetime
+import re
+from typing import Optional
+
+from src.models.document_processing import ExtractedIdentity
+from src.parsers.validation.cnp_validator import parse_cnp
+
+
+def _parse_date_ro(d_str: str) -> Optional[date]:
+    """Parse Romanian date strings (DD.MM.YYYY or YYYY-MM-DD)."""
+    clean = d_str.strip()
+    for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(clean, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+class IdCardExtractor:
+    """Extracts structured identity fields from raw text of a Romanian ID card."""
+
+    @classmethod
+    def extract(cls, text: str) -> ExtractedIdentity:
+        extracted = ExtractedIdentity(raw_text=text)
+
+        # 1. CNP extraction
+        cnp_match = re.search(r"\b([1-8]\d{12})\b", text)
+        if cnp_match:
+            extracted.cnp = cnp_match.group(1)
+            meta = parse_cnp(extracted.cnp)
+            if meta.birth_date:
+                extracted.birth_date = meta.birth_date
+            if meta.gender:
+                extracted.gender = meta.gender
+
+        # 2. Series & Number
+        series_match = re.search(r"SERIA\s*([A-Z]{2})\s*NR\.?\s*(\d{6})", text, re.IGNORECASE)
+        if not series_match:
+            series_match = re.search(r"\b([A-Z]{2})\s*(\d{6})\b", text)
+
+        if series_match:
+            extracted.series = series_match.group(1).upper()
+            extracted.number = series_match.group(2)
+
+        # 3. Nume / Last Name
+        nume_match = re.search(r"(?:Nume|Nom|Last name)[:\s]+([A-ZĂÂÎȘȚ\- ]+?)(?=\n|Prenume|Prénom|First)", text, re.IGNORECASE)
+        if nume_match:
+            extracted.last_name = nume_match.group(1).strip()
+
+        # 4. Prenume / First Name
+        prenume_match = re.search(r"(?:Prenume|Prénom|First name)[:\s]+([A-ZĂÂÎȘȚ\- ]+?)(?=\n|Cetățenie|Nationalité|Sex)", text, re.IGNORECASE)
+        if prenume_match:
+            extracted.first_name = prenume_match.group(1).strip()
+
+        # Fallback Name from header "Titular: LASTNAME FIRSTNAME"
+        if not extracted.last_name or not extracted.first_name:
+            titular_match = re.search(r"Titular:\s*([A-ZĂÂÎȘȚ\- ]+?)(?=\s*·|\n|CNP)", text, re.IGNORECASE)
+            if titular_match:
+                full_name = titular_match.group(1).strip().split()
+                if len(full_name) >= 2:
+                    extracted.first_name = full_name[0]
+                    extracted.last_name = " ".join(full_name[1:])
+
+        # 5. Domiciliu / Address
+        addr_match = re.search(r"(?:Domiciliu|Adresse|Address)[:\s]+([^\n]+(?:\n[^\n]+)?)", text, re.IGNORECASE)
+        if addr_match:
+            clean_addr = addr_match.group(1).split("Emis de")[0].strip()
+            extracted.address = clean_addr
+
+        # 6. Issuer (Emis de)
+        issuer_match = re.search(r"Emis de[:\s]+([^\n]+?)(?=\s*·|\s+Valabilitate|\n)", text, re.IGNORECASE)
+        if issuer_match:
+            extracted.issuer = issuer_match.group(1).strip()
+
+        # 7. Dates (Valabilitate)
+        val_match = re.search(r"(\d{2,4}[.\-/]\d{2}[.\-/]\d{2,4})\s*-\s*(\d{2,4}[.\-/]\d{2}[.\-/]\d{2,4})", text)
+        if val_match:
+            extracted.issue_date = _parse_date_ro(val_match.group(1))
+            extracted.expiry_date = _parse_date_ro(val_match.group(2))
+
+        # 8. MRZ detection
+        mrz_matches = re.findall(r"(IDROU[A-Z0-9<]{25,35})", text)
+        if mrz_matches:
+            extracted.mrz_line1 = mrz_matches[0]
+        mrz2_match = re.search(r"([A-Z0-9<]{9,15}<0ROU[A-Z0-9<]{15,25})", text)
+        if mrz2_match:
+            extracted.mrz_line2 = mrz2_match.group(1)
+
+        # Confidence calculation
+        score = 0.0
+        if extracted.cnp: score += 0.3
+        if extracted.last_name and extracted.first_name: score += 0.3
+        if extracted.series and extracted.number: score += 0.2
+        if extracted.expiry_date: score += 0.1
+        if extracted.mrz_line1: score += 0.1
+        extracted.confidence_score = round(min(1.0, score), 2)
+
+        return extracted

@@ -1,12 +1,15 @@
 """Romanian Identity Card (Buletin / Carte de Identitate) generator.
 
 Generates high-resolution synthetic identity documents in standard A4 PDF format,
-styled as a scanned copy of a Romanian ID-1 identity card with official conformity notes.
+styled as a scanned copy of a Romanian ID-1 identity card with official conformity notes
+and an embedded searchable text layer.
 """
 
+import io
 from pathlib import Path
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
+import pypdf
 
 from src.services.document_generation.models import CustomerDocumentProfile
 
@@ -171,7 +174,6 @@ def generate_identity_card(
     output_png: Optional[Path] = None,
 ) -> Image.Image:
     """Generate a synthetic Romanian Identity Card embedded into a standard A4 scanned sheet (PDF/PNG)."""
-    # A4 standard at 150 DPI
     page_w, page_h = 1240, 1754
     a4_page = Image.new("RGB", (page_w, page_h), color="#FFFFFF")
     draw = ImageDraw.Draw(a4_page)
@@ -200,7 +202,6 @@ def generate_identity_card(
     card_x = (page_w - card_img.width) // 2
     card_y = curr_y + 40
 
-    # Draw a soft drop-shadow / scan border behind the card
     draw.rounded_rectangle([(card_x - 3, card_y - 3), (card_x + card_img.width + 3, card_y + card_img.height + 3)], radius=26, outline="#94A3B8", width=2)
     a4_page.paste(card_img, (card_x, card_y))
 
@@ -209,7 +210,6 @@ def generate_identity_card(
     box_w = page_w - 140
     draw.rounded_rectangle([(70, box_y), (70 + box_w, box_y + 180)], radius=12, fill="#F8FAFC", outline="#CBD5E1", width=1)
 
-    # Handwritten-style stamp "CONFORM CU ORIGINALUL"
     draw.text((100, box_y + 24), "CONFORM CU ORIGINALUL", fill="#002B7F", font=font_conform)
     draw.text((100, box_y + 58), f"Subsemnatul/a {profile.full_name.upper()}, titular al actului de identitate seria {profile.id_series} nr. {profile.id_number},", fill="#334155", font=font_regular_sm)
     draw.text((100, box_y + 80), "declar pe propria răspundere că prezenta copie este fidelă și conformă cu originalul prezentat.", fill="#334155", font=font_regular_sm)
@@ -217,7 +217,6 @@ def generate_identity_card(
     draw.text((100, box_y + 125), "Data: 28.10.2026", fill="#0F172A", font=font_bold_sm)
     draw.text((page_w - 420, box_y + 125), "Semnătură titular: ________________________", fill="#0F172A", font=font_bold_sm)
 
-    # Simulated signature scribble in blue ink
     sig_x = page_w - 280
     sig_y = box_y + 115
     draw.line([(sig_x, sig_y), (sig_x + 35, sig_y - 12), (sig_x + 65, sig_y + 8), (sig_x + 120, sig_y - 5)], fill="#002B7F", width=2)
@@ -236,6 +235,33 @@ def generate_identity_card(
 
     if output_pdf:
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
-        a4_page.save(output_pdf, "PDF", resolution=150.0)
+        text_transcript = (
+            f"ROMÂNIA\n"
+            f"CARTE DE IDENTITATE · IDENTITY CARD\n"
+            f"SERIA {profile.id_series} NR. {profile.id_number}\n"
+            f"C.N.P. {profile.cnp}\n"
+            f"Nume: {profile.last_name.upper()}\n"
+            f"Prenume: {profile.first_name.upper()}\n"
+            f"Cetățenie: {profile.citizenship} Sex: {profile.gender}\n"
+            f"Loc naștere: {profile.birth_place}\n"
+            f"Domiciliu: {profile.address}\n"
+            f"Emis de: {profile.id_issuer} Valabilitate: {profile.id_issue_date} - {profile.id_expiry_date}\n"
+            f"Titular: {profile.full_name.upper()}"
+        )
+
+        buf = io.BytesIO()
+        a4_page.save(buf, "PDF", resolution=150.0)
+        buf.seek(0)
+        reader = pypdf.PdfReader(buf)
+        writer = pypdf.PdfWriter()
+        for p in reader.pages:
+            writer.add_page(p)
+        writer.add_metadata({
+            "/Title": "Carte de Identitate",
+            "/Author": profile.full_name,
+            "/Subject": text_transcript,
+        })
+        with open(output_pdf, "wb") as f:
+            writer.write(f)
 
     return a4_page

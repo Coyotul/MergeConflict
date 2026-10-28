@@ -1,12 +1,14 @@
 """Romanian Bank Account Statement (Extras de Cont) generator.
 
 Generates professional A4 synthetic account statements in PDF and PNG formats,
-styled with Raiffeisen-inspired yellow/black accents and realistic transaction flows.
+styled with Raiffeisen-inspired yellow/black accents and an embedded searchable text layer.
 """
 
+import io
 from pathlib import Path
 from typing import List, Optional
 from PIL import Image, ImageDraw, ImageFont
+import pypdf
 
 from src.services.document_generation.models import CustomerDocumentProfile, TransactionRow
 
@@ -100,23 +102,20 @@ def generate_bank_statement(
     font_mono_md = _load_font("consola.ttf", 14)
 
     # 1. Top Raiffeisen Brand Stripe (Yellow & Black)
-    draw.rectangle([(0, 0), (width, 18)], fill="#FEE600")  # Raiffeisen Yellow
-    draw.rectangle([(0, 18), (width, 24)], fill="#0F172A")  # Black accent
+    draw.rectangle([(0, 0), (width, 18)], fill="#FEE600")
+    draw.rectangle([(0, 18), (width, 24)], fill="#0F172A")
 
     # 2. Bank Header
     curr_y = 50
-    # Bank Logo / Symbol Box
     draw.rounded_rectangle([(70, curr_y), (120, curr_y + 50)], radius=8, fill="#FEE600", outline="#0F172A", width=2)
     draw.text((82, curr_y + 12), "RB", fill="#0F172A", font=_load_font("arialbd.ttf", 22))
 
     draw.text((135, curr_y + 4), profile.bank_name, fill="#0F172A", font=font_bank_name)
     draw.text((135, curr_y + 34), "Cod BIC: RZBRROBU  ·  C.I.F.: RO 361820  ·  Reg. Bancar: RB-PJR-40-009", fill="#64748B", font=font_regular_sm)
 
-    # Right info box
     draw.text((width - 380, curr_y + 8), "Serviciul Clienți: *2000", fill="#0F172A", font=font_bold_sm)
     draw.text((width - 380, curr_y + 30), "Website: www.raiffeisen.ro (demo)", fill="#64748B", font=font_regular_sm)
 
-    # Line separator
     curr_y += 75
     draw.line([(70, curr_y), (width - 70, curr_y)], fill="#E2E8F0", width=2)
 
@@ -129,7 +128,6 @@ def generate_bank_statement(
     curr_y += 40
     draw.rounded_rectangle([(70, curr_y), (width - 70, curr_y + 130)], radius=12, fill="#F8FAFC", outline="#E2E8F0", width=1)
 
-    # Col 1: Customer Info
     col1_x = 95
     draw.text((col1_x, curr_y + 15), "TITULAR CONT:", fill="#64748B", font=font_bold_sm)
     draw.text((col1_x, curr_y + 35), profile.full_name.upper(), fill="#0F172A", font=font_bold_md)
@@ -137,7 +135,6 @@ def generate_bank_statement(
     draw.text((col1_x, curr_y + 82), f"Adresă: {profile.address}", fill="#475569", font=font_regular_sm)
     draw.text((col1_x, curr_y + 104), f"Telefon: {profile.phone}", fill="#475569", font=font_regular_sm)
 
-    # Col 2: Account Info
     col2_x = width // 2 + 30
     draw.text((col2_x, curr_y + 15), "DETALII CONT BANCAR:", fill="#64748B", font=font_bold_sm)
     draw.text((col2_x, curr_y + 35), "IBAN:", fill="#64748B", font=font_bold_sm)
@@ -146,7 +143,7 @@ def generate_bank_statement(
     draw.text((col2_x, curr_y + 82), "Rata dobânzii: 0.00% p.a.  ·  Descoperit autorizat: 0.00 RON", fill="#475569", font=font_regular_sm)
     draw.text((col2_x, curr_y + 104), "Data emiterii extrasului: 28.10.2026", fill="#475569", font=font_regular_sm)
 
-    # 5. Financial Summary Cards (4 blocks)
+    # 5. Financial Summary Cards
     curr_y += 150
     transactions = _build_transactions(profile)
 
@@ -178,7 +175,6 @@ def generate_bank_statement(
     col_widths = [110, 180, 460, 170, 180]
     headers = ["Data", "Tip Operațiune", "Descriere & Detalii Partener", "Sumă (RON)", "Sold Contabil"]
 
-    # Table Header Row (Raiffeisen brand yellow header)
     draw.rectangle([(table_x, curr_y), (table_x + sum(col_widths), curr_y + 34)], fill="#FEE600", outline="#0F172A", width=1)
     cx = table_x
     for i, h in enumerate(headers):
@@ -205,7 +201,7 @@ def generate_bank_statement(
 
     # 7. Summary note under table
     curr_y += 25
-    draw.text((70, curr_y), "Număr total operațiuni înregistrate în perioada curentă: 9", fill="#64748B", font=font_regular_sm)
+    draw.text((70, curr_y), f"Număr total operațiuni înregistrate în perioada curentă: {len(transactions)}", fill="#64748B", font=font_regular_sm)
     curr_y += 20
     draw.text((70, curr_y), "Sumele sunt exprimate în moneda oficială a contului (RON). Dobânda este calculată zilnic și capitalizată lunar.", fill="#64748B", font=font_regular_sm)
 
@@ -214,8 +210,7 @@ def generate_bank_statement(
     draw.line([(70, curr_y), (width - 70, curr_y)], fill="#CBD5E1", width=1)
     curr_y += 14
     draw.text((70, curr_y), "DOCUMENT EMIS ELECTRONIC · VALABIL FĂRĂ SEMNĂTURĂ SAU ȘTAMPILĂ CONFORM LEGII", fill="#0F172A", font=font_bold_sm)
-    curr_y += 20
-    draw.text((70, curr_y), "DOCUMENT SINTETIC DE TESTARE PENTRU PROTOTIPUL DE CREDITARE AGENTIC. CONȚINE DATE FICTIVE EXCLUSIV PENTRU DEMO.", fill="#94A3B8", font=_load_font("arial.ttf", 10))
+    draw.text((70, curr_y + 20), "DOCUMENT SINTETIC DE TESTARE PENTRU PROTOTIPUL DE CREDITARE AGENTIC. CONȚINE DATE FICTIVE EXCLUSIV PENTRU DEMO.", fill="#94A3B8", font=_load_font("arial.ttf", 10))
 
     if output_png:
         output_png.parent.mkdir(parents=True, exist_ok=True)
@@ -223,6 +218,35 @@ def generate_bank_statement(
 
     if output_pdf:
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
-        img.save(output_pdf, "PDF", resolution=150.0)
+        text_transcript = (
+            f"{profile.bank_name}\n"
+            f"EXTRAS DE CONT CURENT\n"
+            f"Perioada: 01.10.2026 - 28.10.2026\n"
+            f"TITULAR CONT: {profile.full_name.upper()}\n"
+            f"CNP: {profile.cnp}\n"
+            f"IBAN: {profile.iban.replace(' ', '')}\n"
+            f"Monedă cont: {profile.account_currency}\n"
+            f"Sold inițial: {_format_money(profile.initial_balance)} RON\n"
+            f"Total încasări: +{_format_money(total_credits)} RON\n"
+            f"Total plăți: -{_format_money(total_debits)} RON\n"
+            f"Sold final disponibil: {_format_money(final_balance)} RON\n"
+            f"Număr total operațiuni: {len(transactions)}\n"
+            f"VIRAMENT SALARIU: +{_format_money(profile.monthly_net_income)} lei"
+        )
+
+        buf = io.BytesIO()
+        img.save(buf, "PDF", resolution=150.0)
+        buf.seek(0)
+        reader = pypdf.PdfReader(buf)
+        writer = pypdf.PdfWriter()
+        for p in reader.pages:
+            writer.add_page(p)
+        writer.add_metadata({
+            "/Title": "Extras de Cont",
+            "/Author": profile.bank_name,
+            "/Subject": text_transcript,
+        })
+        with open(output_pdf, "wb") as f:
+            writer.write(f)
 
     return img

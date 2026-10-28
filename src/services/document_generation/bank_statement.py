@@ -34,16 +34,29 @@ def _build_transactions(profile: CustomerDocumentProfile) -> List[TransactionRow
 
     # 1. Salary in (on the 5th)
     salary_in = profile.monthly_net_income
-    balance += salary_in
-    rows.append(
-        TransactionRow(
-            date_str="05.10.2026",
-            tx_type="VIRAMENT SALARIU",
-            description=f"Plată drepturi salariale cf CIM · {profile.employer_name}",
-            amount_ron=salary_in,
-            balance_after_ron=balance,
+    if salary_in > 0:
+        balance += salary_in
+        rows.append(
+            TransactionRow(
+                date_str="05.10.2026",
+                tx_type="VIRAMENT SALARIU",
+                description=f"Plată drepturi salariale cf CIM · {profile.employer_name}",
+                amount_ron=salary_in,
+                balance_after_ron=balance,
+            )
         )
-    )
+    else:
+        fee = -5.00 if balance >= 5.0 else -balance
+        balance += fee
+        rows.append(
+            TransactionRow(
+                date_str="05.10.2026",
+                tx_type="COMISION BANCAR",
+                description="Comision lunar administrare pachet cont curent",
+                amount_ron=fee,
+                balance_after_ron=balance,
+            )
+        )
 
     # 2. Existing loans deductions if any
     for loan in profile.existing_loans:
@@ -67,19 +80,22 @@ def _build_transactions(profile: CustomerDocumentProfile) -> List[TransactionRow
         ("18.10.2026", "RETRAGERE ATM", "Retragere numerar bancomat · Agentia Aviatiei", -500.00),
         ("22.10.2026", "PLATA POS", "Statie alimentare combustibil · OMV Petrom", -280.50),
         ("25.10.2026", "PLATA POS", "Hipermarket Auchan · Shopping City", -415.20),
+    ] if salary_in > 0 else [
+        ("10.10.2026", "PLATA POS", "Magazin alimentar Mega Image", -25.50 if balance >= 25.50 else -balance),
     ]
 
     for d_str, t_type, desc, amt in utilities:
-        balance += amt
-        rows.append(
-            TransactionRow(
-                date_str=d_str,
-                tx_type=t_type,
-                description=desc,
-                amount_ron=amt,
-                balance_after_ron=balance,
+        if amt != 0.0:
+            balance += amt
+            rows.append(
+                TransactionRow(
+                    date_str=d_str,
+                    tx_type=t_type,
+                    description=desc,
+                    amount_ron=amt,
+                    balance_after_ron=balance,
+                )
             )
-        )
 
     return rows
 

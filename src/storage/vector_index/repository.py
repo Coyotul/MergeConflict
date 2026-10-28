@@ -297,3 +297,13 @@ def fetch_related_links(conn: Connection, chunk_ids: list[int], as_of: date) -> 
             RelatedLink(title=title, url=url, canonical_key=key, link_kind=LinkKind(kind))
         )
     return links
+
+
+def fetch_in_force_chunks(conn: Connection, as_of: date) -> list[tuple[str, list[str], str]]:
+    """(canonical_key, section_path, text) of every chunk in a version in force on as_of."""
+    rows = conn.execute(
+        f"WITH {IN_FORCE_CTE} SELECT d.canonical_key, c.section_path, c.text {CHUNK_JOINS} "
+        "WHERE v.id IN (SELECT id FROM in_force) ORDER BY d.canonical_key, c.ordinal",
+        {"as_of": as_of},
+    ).fetchall()
+    return [(r[0], list(r[1]), r[2]) for r in rows]

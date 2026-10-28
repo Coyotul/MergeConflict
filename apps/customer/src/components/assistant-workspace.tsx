@@ -1,66 +1,64 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, LoaderCircle, MessageCircle, ShieldCheck } from "lucide-react";
+import { LoaderCircle, MessageCircle, RotateCcw, ShieldCheck } from "lucide-react";
 import { useDemo } from "@banking/demo/react";
-import { AssistantAvatar, PilotNotice } from "@banking/ui/primitives";
+import { useOrchestratorChat } from "@banking/demo/orchestrator-react";
+import { hasCustomerMessages } from "@banking/demo/orchestrator-state";
+import { AssistantAvatar, InfoNote, PilotNotice } from "@banking/ui/primitives";
 import { Button } from "@banking/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@banking/ui/dialog";
 import { StartingCards } from "./guided-options";
-import { RichResponse } from "./rich-response";
 import { Composer } from "./composer";
 import { ContextPanel } from "./context-panel";
+import { OrchestratorConversation } from "./orchestrator/conversation";
+
+const TOPIC_QUERIES: Record<string, string> = {
+  support: "I need human support",
+  repayment: "I want to simulate early repayment",
+  refinance: "I want to explore refinancing",
+  loan: "I want a loan",
+  modify: "Change my current loan",
+  details: "My current loan details",
+  personal: "I want a personal loan",
+  mortgage: "I want a mortgage",
+  car: "I want a car loan",
+};
 
 export function AssistantWorkspace() {
-  const { snapshot, command, busy } = useDemo();
+  const { snapshot } = useDemo();
+  const { state, send, upload, chooseOffer, confirm, retry, restart } = useOrchestratorChat(snapshot?.customer.id);
   const [ending, setEnding] = useState(false);
-  const [sending, setSending] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
-  const lock = useRef(false);
-  const topicHandled = useRef(false);
-  const count = snapshot?.messages.length ?? 0;
-
-  const send = async (text: string) => {
-    if (lock.current) return false;
-    lock.current = true;
-    setSending(true);
-    try {
-      await command("/chat", { text });
-      return true;
-    } catch {
-      return false;
-    } finally {
-      lock.current = false;
-      setSending(false);
-    }
-  };
+  const topicRead = useRef(false);
+  const topicText = useRef<string | null>(null);
+  const count = state.entries.length;
 
   useEffect(() => {
     if (count > 0) bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [count]);
+  }, [count, state.pending]);
 
+  // ?topic= deep links (dashboard, products, loans): read once, then send once the session exists.
   useEffect(() => {
-    if (topicHandled.current || !snapshot) return;
-    topicHandled.current = true;
-    const topic = new URLSearchParams(window.location.search).get("topic");
-    if (topic) {
-      const queries: Record<string, string> = {
-        support: "I need human support",
-        repayment: "I want to simulate early repayment",
-        refinance: "I want to explore refinancing",
-        loan: "I want a loan",
-        modify: "Change my current loan",
-        details: "My current loan details",
-      };
-      const text = queries[topic] ?? (topic === "personal" || topic === "mortgage" || topic === "car" ? `I want a ${topic === "mortgage" ? "mortgage" : `${topic} loan`}` : undefined);
-      if (text) void command("/chat", { text }).catch(() => {});
-      window.history.replaceState({}, "", "/");
+    if (!snapshot) return;
+    if (!topicRead.current) {
+      topicRead.current = true;
+      const topic = new URLSearchParams(window.location.search).get("topic");
+      if (topic) {
+        window.history.replaceState({}, "", "/");
+        topicText.current = TOPIC_QUERIES[topic] ?? null;
+      }
     }
-  }, [snapshot, command]);
+    if (!topicText.current || !state.sessionId || state.pending) return;
+    const text = topicText.current;
+    topicText.current = null;
+    void send(text);
+  }, [snapshot, state.sessionId, state.pending, send]);
 
   if (!snapshot) return null;
-  const welcome = count === 0;
-  const disabled = busy || sending;
+  const welcome = !hasCustomerMessages(state);
+  const disabled = state.pending || !state.sessionId;
+  const onSend = (text: string) => { void send(text); };
 
   return (
     <div className="flex h-full min-h-0 flex-1 overflow-hidden">
@@ -73,11 +71,11 @@ export function AssistantWorkspace() {
               <p className="text-sm font-semibold">Luma assistant</p>
               <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
                 <span className="size-1.5 rounded-full bg-emerald-500" />
-                Your financial companion · guided demo
+                Your financial companion · AI assistant
               </p>
             </div>
           </div>
-          <Button variant="link" size="sm" disabled={disabled || welcome} onClick={() => setEnding(true)}>
+          <Button variant="link" size="sm" disabled={state.pending || welcome} onClick={() => setEnding(true)}>
             End chat
           </Button>
         </div>
@@ -94,39 +92,40 @@ export function AssistantWorkspace() {
                 </h1>
                 <p className="mt-2 text-xs text-slate-600">Pick a starting point, or simply ask me below.</p>
               </div>
-              <StartingCards disabled={disabled} onSelect={(text) => { void send(text); }} />
+              <StartingCards disabled={disabled} onSelect={onSend} />
               <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
                 <MessageCircle className="size-3.5 text-slate-400" />
                 One conversation. Every step of your credit journey.
               </div>
             </div>
           ) : (
-            <div className="mx-auto max-w-[780px] space-y-6">
-              <p className="text-center text-xs font-medium text-slate-500">YOUR CONVERSATION · SAVED LOCALLY</p>
-              {snapshot.messages.map((message) =>
-                message.role === "user" ? (
-                  <div key={message.id} className="flex justify-end">
-                    <div className="max-w-[85%] rounded-[20px] rounded-br-md bg-ink px-5 py-3 text-sm leading-relaxed text-white shadow-sm">
-                      {message.text}
-                    </div>
-                  </div>
-                ) : (
-                  <div key={message.id} className="flex gap-3">
-                    <AssistantAvatar small />
-                    <div className="min-w-0 flex-1 rounded-[20px] rounded-tl-md bg-slate-50 p-5">
-                      <p className="mb-2 text-xs font-semibold text-brand-ink">LUMA · DEMO ASSISTANT</p>
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{message.text}</p>
-                      <RichResponse message={message} onSelect={(text) => { void send(text); }} />
-                    </div>
-                  </div>
-                )
-              )}
-            </div>
+            <OrchestratorConversation
+              state={state}
+              onSend={onSend}
+              onUpload={(docType, file) => { void upload(docType, file); }}
+              onChooseOffer={(offerId) => { void chooseOffer(offerId); }}
+              onConfirm={(summaryVersion, decision) => { void confirm(summaryVersion, decision); }}
+              disabled={disabled}
+            />
           )}
-          {sending && (
+          {state.pending && (
             <div role="status" className="mx-auto mt-6 flex max-w-[780px] items-center gap-2 text-xs text-slate-500">
               <LoaderCircle className="size-4 animate-spin text-slate-400" />
-              Preparing a demo response…
+              Luma is thinking…
+            </div>
+          )}
+          {state.error && !state.pending && (
+            <div className="mx-auto mt-6 max-w-[780px]" role="alert">
+              <InfoNote warning>
+                <span className="flex flex-wrap items-center gap-3">
+                  <span>{state.error.message}</span>
+                  {state.error.retryable && (
+                    <Button variant="outline" size="sm" onClick={() => { void retry(); }}>
+                      <RotateCcw />Retry
+                    </Button>
+                  )}
+                </span>
+              </InfoNote>
             </div>
           )}
           <div ref={bottom} />
@@ -140,12 +139,9 @@ export function AssistantWorkspace() {
                 <PilotNotice />
               </div>
             ) : (
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <Button variant="ghost" size="sm" disabled={disabled} onClick={() => { void send("Back to options"); }}>
-                  <ChevronLeft />Back to options
-                </Button>
+              <div className="mb-2 flex items-center justify-end gap-3">
                 <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <ShieldCheck className="size-3.5 text-slate-400" />Synthetic data · indicative results
+                  <ShieldCheck className="size-3.5 text-slate-400" />Synthetic data · simulated, based on public conditions
                 </span>
               </div>
             )}
@@ -158,11 +154,11 @@ export function AssistantWorkspace() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Start a fresh conversation?</DialogTitle>
-            <DialogDescription>This clears only the chat. Your synthetic loan applications, documents and history remain saved locally.</DialogDescription>
+            <DialogDescription>This starts a new assistant conversation. Your synthetic loan applications, documents and history remain saved locally.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEnding(false)}>Keep chatting</Button>
-            <Button disabled={busy} onClick={() => { void command("/chat/reset", {}).then(() => setEnding(false)).catch(() => {}); }}>End chat & start fresh</Button>
+            <Button onClick={() => { restart(); setEnding(false); }}>End chat & start fresh</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

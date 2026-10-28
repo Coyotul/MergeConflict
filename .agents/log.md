@@ -20,3 +20,4 @@
 - [2026-10-28 20:45] [Antigravity/document-processing] Merged feature/document-processing-pipeline into main per user authorization with complete ADR 007, Technical Specification, README/ARCHITECTURE updates, and manual verification CLI tool (scripts/verify_documents.py).
 - [2026-10-28] [Claude] Claimed ORCH-01: AI orchestrator implementation (Featherless LLM, session state, chat API).
 - [2026-10-28] [Claude] Completed ORCH-01: Conversational AI orchestrator with Featherless gpt-oss-120b, session state (memory/file/postgres), chat HTTP API, 293 tests passing. Contract documented at contracts/http/README.md. Handoff message to frontend team.
+- [2026-10-28 23:00] [Antigravity] Completed ELIGIBILITY-SAMPLES-01: Created ANAF certificate generator, zero-income & eligible document test suites in data/test_samples_eligibility/, test runner scripts/test_eligibility_files.py, and unit tests tests/unit/test_eligibility_document_samples.py. All tests passing.

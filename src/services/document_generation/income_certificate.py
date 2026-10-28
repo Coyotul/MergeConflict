@@ -30,6 +30,9 @@ def _format_money(amount: float) -> str:
 
 def _build_salary_months(net_amount: float) -> List[SalaryMonth]:
     """Calculate 6 months of breakdown matching the net monthly income."""
+    months = ["Mai", "Iunie", "Iulie", "August", "Septembrie", "Octombrie"]
+    if net_amount <= 0:
+        return [SalaryMonth(month_name=m, year=2026, gross_ron=0.0, cas_ron=0.0, cass_ron=0.0, tax_ron=0.0, meal_tickets_ron=0.0, net_ron=0.0) for m in months]
     gross = round(net_amount / 0.585, 2)
     cas = round(gross * 0.25, 2)
     cass = round(gross * 0.10, 2)
@@ -106,8 +109,8 @@ def _render_certificate_sheet(profile: CustomerDocumentProfile) -> tuple[Image.I
         f"noastre în baza Contractului Individual de Muncă nr. 1042 / {profile.employment_start_date}, încheiat pe perioadă",
         f"NEDETERMINATĂ, ocupând în prezent funcția de {profile.job_title}.",
         "",
-        "Menționăm că salariatul nu se află în perioadă de probă sau preaviz și nu înregistrează",
-        "rețineri salariale, popriri din partea unor terți sau alte debite către societate.",
+        ("Menționăm că salariatul nu realizează venituri (concediu fără plată / contract fără ore lucrate)." if profile.monthly_net_income <= 0 else "Menționăm că salariatul nu se află în perioadă de probă sau preaviz și nu înregistrează"),
+        ("Salariatul figurează cu venit net 0,00 RON în ultimele 6 luni." if profile.monthly_net_income <= 0 else "rețineri salariale, popriri din partea unor terți sau alte debite către societate."),
     ]
 
     for line in lines:

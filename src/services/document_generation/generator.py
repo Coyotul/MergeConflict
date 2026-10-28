@@ -222,6 +222,77 @@ PRESET_PROFILES: Dict[str, CustomerDocumentProfile] = {
         initial_balance=4100.00,
         existing_loans=[],
     ),
+    "victor_nistor_zero_income": CustomerDocumentProfile(
+        customer_id="1830107000044",
+        first_name="Victor",
+        last_name="Nistor",
+        cnp="1830107000044",
+        birth_date="1983-01-07",
+        gender="M",
+        address="Calea Dorobanți nr. 29, bl. A5, ap. 13, Sector 1, București",
+        phone="+40 724 248 312",
+        email="victor.nistor@test.local",
+        persona_tag="ZERO_INCOME",
+        id_series="DP",
+        id_number="830107",
+        id_issuer="SPCLEP Sector 1 București",
+        id_issue_date="2020-02-15",
+        id_expiry_date="2030-02-15",
+        birth_place="Mun. București Sec. 1",
+        employer_name="Alfa Consult S.R.L.",
+        employer_cui="RO 14399840",
+        employer_reg_com="J40/3120/2014",
+        employer_address="Str. Mihai Eminescu nr. 10, București",
+        job_title="Consultant / Fără Activitate",
+        contract_type="Nedeterminată",
+        employment_start_date="2020-01-15",
+        monthly_net_income=0.00,
+        monthly_gross_income=0.00,
+        bank_name="RAIFFEISEN BANK S.A.",
+        iban="RO12RZBR0000060018301070",
+        initial_balance=25.00,
+        existing_loans=[
+            ExistingLoanInfo(
+                loan_type="Credit de Nevoi Personale",
+                lender="Bancă Parteneră",
+                original_amount_ron=15000.00,
+                current_balance_ron=8200.00,
+                monthly_installment_ron=350.00,
+                remaining_months=24,
+            )
+        ],
+    ),
+    "maria_popescu_low_income": CustomerDocumentProfile(
+        customer_id="2850912000084",
+        first_name="Maria",
+        last_name="Popescu",
+        cnp="2850912000084",
+        birth_date="1985-09-12",
+        gender="F",
+        address="Strada Primăverii nr. 14, Sector 2, București",
+        phone="+40 726 123 456",
+        email="maria.popescu@test.local",
+        persona_tag="LOW_INCOME",
+        id_series="RR",
+        id_number="850912",
+        id_issuer="SPCLEP Sector 2 București",
+        id_issue_date="2021-03-10",
+        id_expiry_date="2031-03-10",
+        birth_place="Mun. București",
+        employer_name="Confecții Textile S.R.L.",
+        employer_cui="RO 29481026",
+        employer_reg_com="J40/4120/2016",
+        employer_address="Strada Fabrica de Glucoză nr. 5, București",
+        job_title="Operator Confecții",
+        contract_type="Nedeterminată",
+        employment_start_date="2021-05-01",
+        monthly_net_income=1500.00,
+        monthly_gross_income=2564.00,
+        bank_name="RAIFFEISEN BANK S.A.",
+        iban="RO78RZBR0000060028509120",
+        initial_balance=850.00,
+        existing_loans=[],
+    ),
 }
 
 
@@ -269,7 +340,7 @@ def load_profile_from_db(
                 (cnp,),
             ).fetchone()
 
-            if inc_row and inc_row["net_amount_ron"]:
+            if inc_row and inc_row["net_amount_ron"] is not None:
                 monthly_net = round(inc_row["net_amount_ron"] / 12.0, 2)
                 monthly_gross = round((inc_row["gross_amount_ron"] or inc_row["net_amount_ron"] * 1.7) / 12.0, 2)
             else:
@@ -279,7 +350,7 @@ def load_profile_from_db(
             # Check loans
             loan_rows = db.execute(
                 "SELECT cp.*, pp.role FROM credit_products cp "
-                "JOIN product_participants pp ON pp.product_id = cp.id WHERE pp.cnp = ?",
+                "JOIN product_participants pp ON pp.product = cp.id WHERE pp.cnp = ?",
                 (cnp,),
             ).fetchall()
 

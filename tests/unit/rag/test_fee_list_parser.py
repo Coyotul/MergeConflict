@@ -82,5 +82,78 @@ def test_fee_list_value_line_patterns():
     doc = parse_fee_list(pdf)
     # Should only have one section path (the value lines should not create sections)
     paths = [c.section_path for c in doc.chunks]
-    assert len(paths) == 1
-    assert paths[0] == ["1. Sectiune test", "1.1. Subsectiune valida"]
+    assert len(paths) == 2
+    assert paths[0] == ["1. Sectiune test"]
+    assert paths[1] == ["1. Sectiune test", "1.1. Subsectiune valida"]
+
+
+def test_fee_list_flushes_on_every_heading():
+    """Test that every heading (any depth) starts a new section."""
+    pdf = make_pdf([
+        [(50, 80, "Tarife Demo")],
+        [
+            (50, 60, "1. Sectiune prima"),
+            (50, 80, "Content pentru 1"),
+            (50, 100, "1.1. Subsectiune 1.1"),
+            (50, 120, "Content pentru 1.1"),
+            (50, 140, "1.2. Subsectiune 1.2"),
+            (50, 160, "Content pentru 1.2"),
+            (50, 180, "2. Sectiune a doua"),
+            (50, 200, "Content pentru 2"),
+            (50, 220, "2.1. Subsectiune 2.1"),
+            (50, 240, "Content pentru 2.1"),
+        ]
+    ])
+    doc = parse_fee_list(pdf)
+    paths = [c.section_path for c in doc.chunks]
+    # Should have 5 chunks, one per heading
+    assert len(paths) == 5
+    assert paths[0] == ["1. Sectiune prima"]
+    assert paths[1] == ["1. Sectiune prima", "1.1. Subsectiune 1.1"]
+    assert paths[2] == ["1. Sectiune prima", "1.2. Subsectiune 1.2"]
+    assert paths[3] == ["2. Sectiune a doua"]
+    assert paths[4] == ["2. Sectiune a doua", "2.1. Subsectiune 2.1"]
+    # Check content landed in right chunks
+    assert "Content pentru 1" in doc.chunks[0].text
+    assert "Content pentru 1.1" in doc.chunks[1].text
+    assert "Content pentru 1.2" in doc.chunks[2].text
+
+
+def test_fee_list_page_not_overwritten_by_repeated_heading():
+    """Test that page is set to where section starts, not overwritten by continuation."""
+    pdf = make_pdf([
+        [(50, 80, "Tarife Demo")],
+        [
+            (50, 60, "1. Sectiune test"),
+            (50, 80, "Content line 1"),
+        ],
+        [
+            (50, 60, "1. Sectiune test"),  # Repeated on page 3
+            (50, 80, "Content line 2"),
+        ]
+    ])
+    doc = parse_fee_list(pdf)
+    assert len(doc.chunks) == 1
+    assert doc.chunks[0].page == 2  # Started on page 2, not overwritten to 3
+
+
+def test_fee_list_value_line_with_diacritics():
+    """Test value line detection with accent-insensitive matching."""
+    pdf = make_pdf([
+        [(50, 80, "Tarife Demo")],
+        [
+            (50, 60, "1. Sectiune test"),
+            (50, 80, "2. 5 lei"),  # Should be rejected
+            (50, 100, "3. 10% din suma"),  # Should be rejected
+            (50, 120, "5 intrari pe luna"),  # Should be rejected (no leading number)
+            (50, 140, "10 intrări gratuite pe an"),  # Should be rejected
+            (50, 160, "1.1. Conturi curente"),  # Should match
+            (50, 180, "Content demo"),
+        ]
+    ])
+    doc = parse_fee_list(pdf)
+    paths = [c.section_path for c in doc.chunks]
+    # Should only have paths for "1. Sectiune test" and "1.1. Conturi curente"
+    assert len(paths) == 2
+    assert paths[0] == ["1. Sectiune test"]
+    assert paths[1] == ["1. Sectiune test", "1.1. Conturi curente"]

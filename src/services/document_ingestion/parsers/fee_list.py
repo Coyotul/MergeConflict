@@ -33,18 +33,25 @@ def is_section_heading(line: str) -> bool:
         return False
 
     # Must not be a value line
-    # Lines starting with just a number (no dots) followed by currency/unit are value lines
-    if re.match(r"^\d+\s+(lei|euro|eur|usd|leu|intrari|intrare)", line, re.IGNORECASE):
+    # Check if line starts with just a number (no dots) followed by units/currency
+    # This catches "10 lei", "5 intrări pe lună", etc.
+    value_no_dots = r"^\d+\s+(lei|euro|eur|usd|%|leu|intr[aă]ri|intr[aă]re)"
+    if re.match(value_no_dots, line, re.IGNORECASE):
         return False
 
-    # Check if entire line matches value patterns
-    value_patterns = [
-        r"^\d[\d.,]*\s*(lei|euro|eur|usd|%)(\s|/|$)",  # Numbers with currency
-        r"^\d+\s+(lei|euro|eur|usd|intrari|intrare)",  # "10 lei", "10 intrari"
-        r"^\d+\s+intrări\s+gratuite",  # "10 intrări gratuite pe an,"
-    ]
-    for pattern in value_patterns:
-        if re.match(pattern, line, re.IGNORECASE):
+    # Extract text after the section number
+    match = re.match(r"^\d+(\.\d+)*\.?\s+(.*)", line)
+    if not match:
+        return False
+
+    remainder = match.group(2)
+
+    # Check if remainder starts with number followed by currency/unit (accent-insensitive)
+    # Pattern: starts with digit, optionally followed by more digits/punctuation, then currency/unit
+    if re.match(r"^\d", remainder):
+        # Value line patterns (accent-insensitive for intrări/intrari)
+        value_pattern = r"^\d[\d.,]*\s*(lei|euro|eur|usd|%|leu|intr[aă]ri|intr[aă]re)"
+        if re.search(value_pattern, remainder, re.IGNORECASE):
             return False
 
     return True
@@ -70,14 +77,20 @@ def parse_fee_list(data: bytes) -> ParsedDocument:
             break
 
     chunks = []
-    current_section = None
     current_section_path = []
     current_section_lines = []
     current_section_page = None
     column_header = None
+    depth_1_heading = None  # Track current depth-1 heading
 
     for page_num, line in lines:
         if is_section_heading(line):
+            # Check if this is a repeated heading (continuation page)
+            # It's a repeat if it matches the most recently added heading (last in path)
+            if current_section_path and line == current_section_path[-1]:
+                # Repeated heading on continuation page - don't flush, don't update page
+                continue
+
             # Parse new section
             match = re.match(r"^(\d+(?:\.\d+)*)\.?\s+(.*)", line)
             number = match.group(1)
@@ -85,41 +98,33 @@ def parse_fee_list(data: bytes) -> ParsedDocument:
             # Determine depth
             depth = number.count(".") + 1
 
-            # Get the top-level number
-            top_level_num = number.split(".")[0]
+            # Flush previous section on ANY new heading
+            if current_section_lines:
+                _flush_section(
+                    chunks,
+                    current_section_path,
+                    current_section_lines,
+                    current_section_page,
+                    column_header,
+                )
+                current_section_lines = []
 
-            # Check if we're changing top-level section
-            current_top_level = None
-            if current_section_path:
-                current_match = re.match(r"^(\d+)", current_section_path[0])
-                if current_match:
-                    current_top_level = current_match.group(1)
-
-            # Flush if we're moving to a different top-level section
-            if current_top_level is not None and top_level_num != current_top_level:
-                if current_section_lines:
-                    _flush_section(
-                        chunks,
-                        current_section_path,
-                        current_section_lines,
-                        current_section_page,
-                        column_header,
-                    )
-                    current_section_lines = []
-                    column_header = None
+            # Reset column header for new section
+            column_header = None
 
             # Update section path based on depth
             if depth == 1:
                 current_section_path = [line]
+                depth_1_heading = line
             else:
-                # Keep first element (top-level section), update/add subsection
-                if current_section_path:
-                    current_section_path = [current_section_path[0], line]
+                # Depth >= 2: use current depth-1 heading and this heading
+                if depth_1_heading:
+                    current_section_path = [depth_1_heading, line]
                 else:
                     current_section_path = [line]
 
-            if current_section_page is None or depth == 1:
-                current_section_page = page_num
+            # Set page to where this section starts
+            current_section_page = page_num
         else:
             # Content line
             if current_section_path:

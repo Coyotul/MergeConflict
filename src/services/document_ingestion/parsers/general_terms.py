@@ -55,9 +55,10 @@ def parse_general_terms(data: bytes) -> ParsedDocument:
             continue
 
         # Check for section within a chapter
-        # Can be either "N.M" format (e.g., "N.1") or numeric (e.g., "5.1")
+        # Must start with current chapter number (e.g., "5.1" in chapter 5)
         if current_chapter:
-            section_match = re.match(r"^((?:N\.\d+)|\d+\.\d+)\.?\s+(.*)", line)
+            section_pattern = rf"^({current_chapter}\.(\d+))\.?\s+(.*)"
+            section_match = re.match(section_pattern, line)
             if section_match:
                 # Flush previous section
                 if current_section_text:
@@ -71,11 +72,12 @@ def parse_general_terms(data: bytes) -> ParsedDocument:
                     )
 
                 current_section_num = section_match.group(1)
-                section_content = section_match.group(2)
+                section_content = section_match.group(3)
 
                 # Extract section title (up to first sub-clause, capped at 90 chars)
-                # Sub-clause pattern: N.M.K (e.g., "5.1.1" or "N.1.1")
-                subclause_match = re.search(r"(?<!\S)(?:(?:N\.\d+\.\d+)|\d+\.\d+\.\d+)", section_content)
+                # Sub-clause pattern: N.M.K (e.g., "5.1.1")
+                subclause_pattern = rf"(?<!\S){current_chapter}\.\d+\.\d+"
+                subclause_match = re.search(subclause_pattern, section_content)
                 if subclause_match:
                     current_section_title = section_content[:subclause_match.start()].strip()
                 else:
@@ -139,20 +141,21 @@ def _flush_section(
 
     # Long section: split by sub-clauses
     # Split at sub-clause numbers, even mid-line
-    # Sub-clause pattern: N.M.K (e.g., "5.1.1", "5.1.2", "N.1.1")
-    subclause_pattern = r"(?<!\S)((?:(?:N\.\d+\.\d+)|\d+\.\d+\.\d+))\.?\s+"
+    # Sub-clause pattern: N.M.K (e.g., "5.1.1", "5.1.2") using current chapter
+    subclause_pattern = rf"(?<!\S)({chapter}\.\d+\.\d+)\.?\s+"
     parts = re.split(subclause_pattern, section_text)
 
     # Reconstruct sub-clauses
     subclauses = []
     i = 0
+    subclause_check = rf"{chapter}\.\d+\.\d+"
     while i < len(parts):
-        if i == 0 and not re.match(r"(?:(?:N\.\d+\.\d+)|\d+\.\d+\.\d+)", parts[i]):
+        if i == 0 and not re.match(subclause_check, parts[i]):
             # First part before any subclause number
             if parts[i].strip():
                 subclauses.append(parts[i])
             i += 1
-        elif i + 1 < len(parts) and re.match(r"(?:(?:N\.\d+\.\d+)|\d+\.\d+\.\d+)", parts[i]):
+        elif i + 1 < len(parts) and re.match(subclause_check, parts[i]):
             # This is a subclause number followed by its text
             subclauses.append(parts[i] + " " + parts[i + 1])
             i += 2
@@ -199,17 +202,55 @@ def _pack_clauses(clauses: list[str]) -> list[str]:
             sent_current = []
             sent_tokens = 0
 
-            for i, sent in enumerate(sentences):
+            for sent in sentences:
                 sent_tokens_est = estimate_tokens(sent)
 
+                # Handle single sentence over limit - hard split by words
+                if sent_tokens_est > MAX_TOKENS:
+                    # Flush current window
+                    if sent_current:
+                        result.append(" ".join(sent_current))
+                        sent_current = []
+                        sent_tokens = 0
+
+                    # Hard split this sentence
+                    words = sent.split()
+                    word_chunk = []
+                    for word in words:
+                        # Try adding this word
+                        test_chunk = word_chunk + [word]
+                        test_text = " ".join(test_chunk)
+                        test_tokens = estimate_tokens(test_text)
+
+                        if test_tokens > MAX_TOKENS and word_chunk:
+                            # Flush what we have
+                            result.append(" ".join(word_chunk))
+                            word_chunk = [word]
+                        else:
+                            word_chunk.append(word)
+
+                    if word_chunk:
+                        result.append(" ".join(word_chunk))
+                    continue
+
+                # Check if adding would exceed limit
                 if sent_current and sent_tokens + sent_tokens_est > MAX_TOKENS:
                     result.append(" ".join(sent_current))
                     # Overlap: start next window with last sentence
-                    sent_current = [sent_current[-1] if sent_current else ""]
-                    sent_tokens = estimate_tokens(sent_current[0]) if sent_current else 0
+                    overlap = sent_current[-1] if sent_current else ""
+                    overlap_tokens = estimate_tokens(overlap)
 
-                sent_current.append(sent)
-                sent_tokens += sent_tokens_est
+                    # Re-check if overlap + new sentence exceeds limit
+                    if overlap_tokens + sent_tokens_est > MAX_TOKENS:
+                        # Drop overlap, start fresh
+                        sent_current = [sent]
+                        sent_tokens = sent_tokens_est
+                    else:
+                        sent_current = [overlap, sent]
+                        sent_tokens = overlap_tokens + sent_tokens_est
+                else:
+                    sent_current.append(sent)
+                    sent_tokens += sent_tokens_est
 
             if sent_current:
                 result.append(" ".join(sent_current))

@@ -36,3 +36,26 @@ def test_rebuild_rows_same_row_no_separator():
         Word(115, 100, 160, 108, "Word3"),
     ]
     assert rebuild_rows(words) == ["Word1 Word2 Word3"]
+
+
+def test_furniture_filter_counts_distinct_pages():
+    """Test that furniture filtering counts distinct pages, not occurrences."""
+    from tests.fixtures.rag.pdf_builders import make_pdf
+    from src.services.document_ingestion.parsers.pdf_rows import pdf_lines
+    
+    # Create a 4-page PDF where "Header" appears twice on page 1 only
+    pdf = make_pdf([
+        [(50, 60, "Header"), (50, 80, "Header"), (50, 100, "Content page 1")],
+        [(50, 60, "Content page 2")],
+        [(50, 60, "Content page 3")],
+        [(50, 60, "Content page 4")],
+    ])
+    
+    lines = pdf_lines(pdf, skip_first_page=False)
+    line_texts = [line for _, line in lines]
+    
+    # "Header" appears on 1 of 4 pages (25%), should NOT be filtered
+    assert "Header" in line_texts
+    # All content should be present
+    assert "Content page 1" in line_texts
+    assert "Content page 2" in line_texts

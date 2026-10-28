@@ -25,38 +25,48 @@ def make_pdf(pages: list[list[tuple[float, float, str]]], fontsize: float = 9) -
     return pdf_bytes
 
 
-def make_pdf_from_lines(lines: list[str], per_page: int = 40, fontsize: float = 9) -> bytes:
-    """Build a PDF from text lines with automatic pagination.
+def make_pdf_from_lines(lines: list[str], per_page: int = 40, fontsize: float = 6) -> bytes:
+    """Build a PDF from text lines with automatic pagination and wrapping.
 
     Args:
         lines: Text lines to write
         per_page: Maximum lines per page
-        fontsize: Font size for text
+        fontsize: Font size for text (small fontsize to fit long lines)
 
     Returns:
         PDF bytes
     """
     doc = fitz.open()
 
-    line_height = fontsize + 4  # Spacing between lines
+    line_height = fontsize + 2  # Spacing between lines
     margin_left = 50
     margin_top = 50
+    page_width = 595 - 100  # A4 width minus margins
+    page_height = 842 - 100  # A4 height minus margins
 
     page = None
-    line_count = 0
+    y_position = margin_top
 
     for line in lines:
-        if page is None or line_count >= per_page:
+        if page is None:
             page = doc.new_page(width=595, height=842)
-            line_count = 0
+            y_position = margin_top
 
-        y = margin_top + line_count * line_height
+        # Calculate rough height needed for this textbox
+        # Estimate 80-100 chars per line at fontsize 6
+        estimated_lines = max(1, len(line) // 90)
+        box_height = estimated_lines * line_height + 5
 
-        # Use insert_text for simple line insertion
-        # For long lines, they'll just extend beyond the page (PyMuPDF will still extract them)
-        page.insert_text((margin_left, y), line, fontsize=fontsize)
+        # Check if we need a new page
+        if y_position + box_height > margin_top + page_height:
+            page = doc.new_page(width=595, height=842)
+            y_position = margin_top
 
-        line_count += 1
+        # Use insert_textbox for automatic wrapping
+        rect = fitz.Rect(margin_left, y_position, margin_left + page_width, y_position + box_height + 10)
+        page.insert_textbox(rect, line, fontsize=fontsize, align=0)
+
+        y_position += box_height
 
     pdf_bytes = doc.tobytes()
     doc.close()

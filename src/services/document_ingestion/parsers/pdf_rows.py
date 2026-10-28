@@ -105,12 +105,12 @@ def pdf_lines(data: bytes, skip_first_page: bool = False) -> list[tuple[int, str
         List of (page_number, line) tuples, 1-indexed pages
     """
     doc = fitz.open(stream=data, filetype="pdf")
-    line_counts = defaultdict(int)  # Track line repetitions
+    line_pages = defaultdict(set)  # Track which pages each line appears on
 
     # Get total pages before processing
     total_pages = len(doc) if not skip_first_page else len(doc) - 1
 
-    # First pass: collect all lines
+    # First pass: collect all lines and track pages
     all_lines = []
     for page_num in range(len(doc)):
         if skip_first_page and page_num == 0:
@@ -124,7 +124,7 @@ def pdf_lines(data: bytes, skip_first_page: bool = False) -> list[tuple[int, str
             normalized = normalize_text(row)
             if normalized and normalized != "Banking 1:1":
                 all_lines.append((page_num + 1, normalized))
-                line_counts[normalized] += 1
+                line_pages[normalized].add(page_num + 1)
 
     doc.close()
 
@@ -134,7 +134,8 @@ def pdf_lines(data: bytes, skip_first_page: bool = False) -> list[tuple[int, str
     if total_pages >= 2:
         threshold = total_pages * 0.5
         for page_num, line in all_lines:
-            if line_counts[line] < threshold:
+            # Count distinct pages, not occurrences
+            if len(line_pages[line]) < threshold:
                 lines.append((page_num, line))
     else:
         lines = all_lines

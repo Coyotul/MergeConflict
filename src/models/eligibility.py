@@ -263,12 +263,43 @@ class InquiryPurpose(str, Enum):
     CREDIT_APPLICATION = "CREDIT_APPLICATION"
 
 
+class IncomeBasis(str, Enum):
+    MONTHLY_SALARY = "MONTHLY_SALARY"
+    ANNUAL_AVERAGE = "ANNUAL_AVERAGE"
+
+
 class IncomeVerificationData(ContractModel):
     customer_id: Identifier
     income_kind: IncomeKind
     net_monthly_income_ron: Money
     period_end: date
     recurring: StrictBool
+    income_basis: IncomeBasis = IncomeBasis.MONTHLY_SALARY
+    reference_date: date | None = None
+    fiscal_year: Annotated[int, Field(strict=True, ge=1, le=9999)] | None = None
+    reported_income_types: tuple[Literal[
+        "SALARY", "INDEPENDENT_ACTIVITY", "PENSION", "SOCIAL_INSURANCE",
+        "RENTAL", "INVESTMENT", "OTHER",
+    ], ...] = ()
+    observed_salary_months: tuple[date, ...] = ()
+
+    @model_validator(mode="after")
+    def coherent_income_period(self) -> "IncomeVerificationData":
+        if self.reference_date is not None and self.period_end > self.reference_date:
+            raise ValueError("Income period cannot extend beyond the source reporting date.")
+        if self.income_basis == IncomeBasis.ANNUAL_AVERAGE:
+            if self.fiscal_year is None or self.recurring:
+                raise ValueError("Annual-average evidence needs its year and cannot assert current recurring salary.")
+            if self.period_end != date(self.fiscal_year, 12, 31):
+                raise ValueError("Annual-average evidence must preserve the completed fiscal-year end.")
+            if self.reference_date is not None and self.fiscal_year >= self.reference_date.year:
+                raise ValueError("Annual income requires a completed fiscal year.")
+        months = self.observed_salary_months
+        if len(months) != len(set(months)) or any(month.day != 1 for month in months):
+            raise ValueError("Salary evidence needs distinct first-of-month periods.")
+        if any(month > self.period_end for month in months):
+            raise ValueError("Observed salary month is after the income period.")
+        return self
 
 
 class LoanVerificationData(ContractModel):

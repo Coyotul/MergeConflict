@@ -42,6 +42,15 @@ Do not send income, interest rates, roles, consent claims, profiles or provider
 reports through this endpoint. Evidence comes from trusted backend repositories,
 consent records and validated adapters. No CNP or real applicant data is needed.
 
+The ANAF SQLite adapter resolves a fictional CNP from trusted backend bindings,
+not a request field. It reads the supplied credit-source fixture in read-only
+mode and does not update its global reporting date. Provider provenance is
+synthetic. Monthly salary periods and completed-year averages are distinguished
+internally by `IncomeVerificationData`; serialized provider contract:
+`../schemas/anaf-income-verification.schema.json`. Historical annual averages
+cannot automatically establish current recurring salary or pass affordability.
+The public request/result/tool schemas are unchanged by this adapter wiring.
+
 Success: `{ "data": <EligibilityAssessment> }`. All amounts and ratios are
 decimal **strings**, timestamps are timezone-aware UTC, and evidence IDs resolve
 to the returned evidence references. Public sources retain ID, classification,

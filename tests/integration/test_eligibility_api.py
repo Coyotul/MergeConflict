@@ -9,6 +9,7 @@ from src.api.gateway.eligibility_demo import create_app
 from src.core.eligibility_demo import build_demo_service, load_reference_fixture
 from src.core.eligibility_errors import StorageUnavailable
 from tests.fixtures.eligibility import CUSTOMER, request
+from scripts.credit_sources.setup import create_database
 
 
 async def asgi_request(app, method, path, body=None, token=None):
@@ -47,11 +48,27 @@ async def asgi_request(app, method, path, body=None, token=None):
 
 
 class EligibilityApiTests(unittest.IsolatedAsyncioTestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sources_directory = TemporaryDirectory(prefix="eligibility-anaf-api-")
+        try:
+            cls.anaf_database = create_database(Path(cls.sources_directory.name) / "credit_sources.db")
+        except Exception:
+            cls.sources_directory.cleanup()
+            raise
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.sources_directory.cleanup()
+
     def setUp(self):
         self.directory = TemporaryDirectory(prefix="eligibility-api-")
         self.addCleanup(self.directory.cleanup)
-        self.service = build_demo_service(Path(self.directory.name) / "api.sqlite3",
-                                          lambda: load_reference_fixture().reference_time)
+        self.service = build_demo_service(
+            Path(self.directory.name) / "api.sqlite3",
+            lambda: load_reference_fixture().reference_time,
+            anaf_database_path=self.anaf_database,
+        )
         self.app = create_app(self.service)
 
     async def call(self, body=None, token="demo-customer-key", method="POST", path="/api/eligibility/assessments"):

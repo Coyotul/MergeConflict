@@ -8,12 +8,17 @@ from tempfile import TemporaryDirectory
 from src.core.eligibility_demo import build_demo_service, demo_cases, load_reference_fixture
 from src.models.eligibility import EligibilityCheckRequest
 from src.security.eligibility import ActorContext, ActorRole
+from scripts.credit_sources.setup import create_database
 
 
 async def run_demo() -> list[dict]:
     reference_time = load_reference_fixture().reference_time
     with TemporaryDirectory(prefix="eligibility-demo-") as directory:
-        service = build_demo_service(Path(directory) / "demo.sqlite3", clock=lambda: reference_time)
+        anaf_database = create_database(Path(directory) / "credit_sources.db")
+        service = build_demo_service(
+            Path(directory) / "demo.sqlite3", clock=lambda: reference_time,
+            anaf_database_path=anaf_database,
+        )
         cases = demo_cases()
         actor = ActorContext(
             "demo-reviewer-actor", ActorRole.REVIEWER,

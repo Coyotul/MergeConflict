@@ -78,3 +78,68 @@ def test_make_pdf_roundtrips_romanian_diacritics():
     # Should extract exactly the same text
     assert len(extracted_texts) == 1
     assert extracted_texts[0] == text
+
+
+def test_make_pdf_from_lines_roundtrips_romanian_diacritics_and_wraps_without_loss():
+    """Wrapped lines keep every word, diacritics included."""
+    from tests.fixtures.rag.pdf_builders import make_pdf_from_lines
+    from src.services.document_ingestion.parsers.pdf_rows import pdf_lines
+
+    long_line = " ".join(f"Plăți{i} în lei ș ț ă î â" for i in range(60))
+    pdf = make_pdf_from_lines(["Titlu demo cu diacritice: ș ț ă î â", long_line])
+
+    texts = [line for _, line in pdf_lines(pdf)]
+    assert texts[0] == "Titlu demo cu diacritice: ș ț ă î â"
+    assert len(texts) > 2  # the long line wrapped
+    assert " ".join(texts[1:]) == long_line
+
+
+def test_make_pdf_from_lines_raises_instead_of_clipping():
+    """A word that cannot fit on a line must raise, never be silently clipped."""
+    from tests.fixtures.rag.pdf_builders import make_pdf_from_lines
+
+    with pytest.raises(ValueError):
+        make_pdf_from_lines(["Ă" * 200])
+
+
+def test_furniture_line_on_one_page_of_two_is_kept():
+    """A line written twice on page 1 of a 2-page PDF appears on 1 distinct page: kept."""
+    from tests.fixtures.rag.pdf_builders import make_pdf
+    from src.services.document_ingestion.parsers.pdf_rows import pdf_lines
+
+    pdf = make_pdf([
+        [(50, 60, "Antet demo"), (50, 80, "Antet demo"), (50, 100, "Continut pagina 1")],
+        [(50, 60, "Continut pagina 2")],
+    ])
+    texts = [line for _, line in pdf_lines(pdf)]
+    assert texts == ["Antet demo", "Antet demo", "Continut pagina 1", "Continut pagina 2"]
+
+
+def test_furniture_footer_on_two_of_four_pages_is_dropped():
+    """A footer on 2 of 4 pages (50%) is page furniture."""
+    from tests.fixtures.rag.pdf_builders import make_pdf
+    from src.services.document_ingestion.parsers.pdf_rows import pdf_lines
+
+    pdf = make_pdf([
+        [(50, 60, "Continut 1"), (50, 800, "Subsol demo")],
+        [(50, 60, "Continut 2")],
+        [(50, 60, "Continut 3"), (50, 800, "Subsol demo")],
+        [(50, 60, "Continut 4")],
+    ])
+    texts = [line for _, line in pdf_lines(pdf)]
+    assert texts == ["Continut 1", "Continut 2", "Continut 3", "Continut 4"]
+
+
+def test_furniture_footer_on_one_of_four_pages_is_kept():
+    """A footer on 1 of 4 pages (25%) is kept, even when written twice on that page."""
+    from tests.fixtures.rag.pdf_builders import make_pdf
+    from src.services.document_ingestion.parsers.pdf_rows import pdf_lines
+
+    pdf = make_pdf([
+        [(50, 60, "Continut 1"), (50, 780, "Subsol demo"), (50, 800, "Subsol demo")],
+        [(50, 60, "Continut 2")],
+        [(50, 60, "Continut 3")],
+        [(50, 60, "Continut 4")],
+    ])
+    texts = [line for _, line in pdf_lines(pdf)]
+    assert texts == ["Continut 1", "Subsol demo", "Subsol demo", "Continut 2", "Continut 3", "Continut 4"]

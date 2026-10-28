@@ -45,7 +45,7 @@ def test_general_terms_title_extraction():
     text_lines = [
         "Conditii generale de emitere si utilizare a cardurilor",
         "1. INTRODUCERE",
-        "N.1 Prezentare Text demo aici."
+        "1.1 Prezentare Text demo aici."
     ]
     doc = parse_general_terms(make_pdf_from_lines(text_lines))
     assert doc.title == "Conditii generale de emitere si utilizare a cardurilor"
@@ -79,29 +79,49 @@ def test_general_terms_section_title_capping():
 
 
 def test_general_terms_rejects_cross_reference_as_section():
-    """Test that cross-references like '3.4 din prezentele...' in chapter 5 are not treated as sections."""
+    """A wrapped line that starts with a cross-reference ("3.4 din ...") inside chapter 5 is not a section."""
     text_lines = [
         "Conditii Demo",
-        "5. CAPITOL CINCI",
-        "5.1 Prima sectiune Text aici.",
-        "Referinta la 3.4 din prezentele CGB nu trebuie sa fie sectiune.",
-        "Mai mult text pentru 5.1.",
+        "5. CAPITOL CINCI DEMO",
+        "5.1 Prima sectiune Clientul respecta obligatiile prevazute la punctul",
+        "3.4 din prezentele Conditii, clientul demo informeaza banca in scris.",
         "5.2 A doua sectiune Text scurt."
     ]
     doc = parse_general_terms(make_pdf_from_lines(text_lines))
-    # Should only have sections 5.1 and 5.2, not 3.4
     paths = [c.section_path for c in doc.chunks]
-    assert len(paths) == 2
-    assert paths[0][1].startswith("5.1")
-    assert paths[1][1].startswith("5.2")
-    # The 3.4 reference should be in 5.1's text
-    assert "3.4" in doc.chunks[0].text
+    assert paths == [
+        ["5. Capitol Cinci Demo", "5.1 Prima sectiune Clientul respecta obligatiile prevazute la punctul"],
+        ["5. Capitol Cinci Demo", "5.2 A doua sectiune Text scurt."],
+    ]
+    assert "3.4 din prezentele Conditii, clientul demo informeaza banca in scris." in doc.chunks[0].text
+    assert "3.4" not in doc.chunks[1].text
+
+
+def test_pack_clauses_estimates_joined_text_not_sum_of_parts():
+    """Parts that sum to <= MAX_TOKENS can join to > MAX_TOKENS; every chunk must stay <= MAX_TOKENS."""
+    from src.services.document_ingestion.chunking import MAX_TOKENS
+    from src.services.document_ingestion.parsers.general_terms import _pack_clauses
+
+    # Clause packing: five clauses of 401 chars (100 tokens each) sum to 500,
+    # but joined with newlines they are 2009 chars = 502 tokens.
+    clauses = [f"5.1.{i} " + "c" * (401 - len(f"5.1.{i} ")) for i in range(1, 6)]
+    assert sum(estimate_tokens(c) for c in clauses) == MAX_TOKENS
+    packed = _pack_clauses(clauses)
+    assert all(estimate_tokens(p) <= MAX_TOKENS for p in packed)
+    assert "\n".join(packed) == "\n".join(clauses)
+
+    # Sentence windowing: one over-long clause of 401-char sentences (100 tokens each).
+    sentences = [f"Fraza {i:02d} " + "s" * (401 - len(f"Fraza {i:02d} ") - 1) + "." for i in range(12)]
+    windowed = _pack_clauses([" ".join(sentences)])
+    assert all(estimate_tokens(p) <= MAX_TOKENS for p in windowed)
+    for sentence in sentences:
+        assert any(sentence in p for p in windowed)
 
 
 def test_general_terms_windowing_respects_max_tokens():
     """Test that sentence windowing produces chunks within MAX_TOKENS."""
     # Create a section with a very long sentence
-    huge_sentence = "Text " * 1000  # ~2500 tokens
+    huge_sentence = "Text " * 1000  # 5000 chars, ~1250 tokens
     text_lines = [
         "Conditii Demo",
         "5. CAPITOL TEST",

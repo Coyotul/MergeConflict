@@ -184,7 +184,6 @@ def _pack_clauses(clauses: list[str]) -> list[str]:
 
     result = []
     current = []
-    current_tokens = 0
 
     for clause in clauses:
         clause_tokens = estimate_tokens(clause)
@@ -195,12 +194,10 @@ def _pack_clauses(clauses: list[str]) -> list[str]:
             if current:
                 result.append("\n".join(current))
                 current = []
-                current_tokens = 0
 
             # Window this clause
             sentences = re.split(r"(?<=[.;])\s+", clause)
             sent_current = []
-            sent_tokens = 0
 
             for sent in sentences:
                 sent_tokens_est = estimate_tokens(sent)
@@ -211,7 +208,6 @@ def _pack_clauses(clauses: list[str]) -> list[str]:
                     if sent_current:
                         result.append(" ".join(sent_current))
                         sent_current = []
-                        sent_tokens = 0
 
                     # Hard split this sentence
                     words = sent.split()
@@ -233,36 +229,27 @@ def _pack_clauses(clauses: list[str]) -> list[str]:
                         result.append(" ".join(word_chunk))
                     continue
 
-                # Check if adding would exceed limit
-                if sent_current and sent_tokens + sent_tokens_est > MAX_TOKENS:
+                # Estimate the joined window, not the sum of its parts
+                if sent_current and estimate_tokens(" ".join(sent_current + [sent])) > MAX_TOKENS:
                     result.append(" ".join(sent_current))
-                    # Overlap: start next window with last sentence
-                    overlap = sent_current[-1] if sent_current else ""
-                    overlap_tokens = estimate_tokens(overlap)
-
-                    # Re-check if overlap + new sentence exceeds limit
-                    if overlap_tokens + sent_tokens_est > MAX_TOKENS:
-                        # Drop overlap, start fresh
+                    # Overlap: start next window with last sentence, if it still fits
+                    overlap = sent_current[-1]
+                    if estimate_tokens(" ".join([overlap, sent])) > MAX_TOKENS:
                         sent_current = [sent]
-                        sent_tokens = sent_tokens_est
                     else:
                         sent_current = [overlap, sent]
-                        sent_tokens = overlap_tokens + sent_tokens_est
                 else:
                     sent_current.append(sent)
-                    sent_tokens += sent_tokens_est
 
             if sent_current:
                 result.append(" ".join(sent_current))
         else:
-            # Normal packing
-            if current and current_tokens + clause_tokens > MAX_TOKENS:
+            # Normal packing: estimate the joined chunk, not the sum of its parts
+            if current and estimate_tokens("\n".join(current + [clause])) > MAX_TOKENS:
                 result.append("\n".join(current))
                 current = []
-                current_tokens = 0
 
             current.append(clause)
-            current_tokens += clause_tokens
 
     # Flush remaining
     if current:

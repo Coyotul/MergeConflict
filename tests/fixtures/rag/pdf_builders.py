@@ -80,6 +80,8 @@ def make_pdf_from_lines(lines: list[str], fontsize: float = 6) -> bytes:
         x_position = margin_left
 
         for word in words:
+            if font.text_length(word, fontsize=fontsize) > page_width:
+                raise ValueError(f"word wider than the page, it would be clipped: {word[:40]!r}")
             test_line = current_line + (" " if current_line else "") + word
             # Estimate width (rough approximation)
             text_width = font.text_length(test_line, fontsize=fontsize)

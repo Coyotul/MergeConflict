@@ -1,5 +1,6 @@
 """Fee list PDF parser."""
 import re
+import unicodedata
 from src.services.document_ingestion.chunking import (
     ChunkDraft,
     ParsedDocument,
@@ -9,6 +10,12 @@ from src.services.document_ingestion.chunking import (
 )
 from src.services.document_ingestion.parsers.pdf_rows import pdf_lines
 from src.models.knowledge import ChunkKind
+
+
+def _fold(text: str) -> str:
+    """Lower-case and strip diacritics, for accent-insensitive matching."""
+    decomposed = unicodedata.normalize("NFD", text.lower())
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
 def is_section_heading(line: str) -> bool:
@@ -32,27 +39,20 @@ def is_section_heading(line: str) -> bool:
     if len(line) >= 120:
         return False
 
-    # Must not be a value line
-    # Check if line starts with just a number (no dots) followed by units/currency
-    # This catches "10 lei", "5 intrări pe lună", etc.
-    value_no_dots = r"^\d+\s+(lei|euro|eur|usd|%|leu|intr[aă]ri|intr[aă]re)"
-    if re.match(value_no_dots, line, re.IGNORECASE):
+    # Must not be a value line (accent-insensitive). A unit must not run on
+    # into a word, so "1. Europa" stays a heading while "30 EUR/intrare" does not.
+    folded = _fold(line)
+    unit_end = r"(?![a-z])"
+    # Whole line is an amount: "100 lei", "1.5 lei", "2.50 lei", "60 euro sau ..."
+    if re.match(r"^\d[\d.,]*\s*(lei|euro|eur|usd|%)" + unit_end, folded):
         return False
-
-    # Extract text after the section number
-    match = re.match(r"^\d+(\.\d+)*\.?\s+(.*)", line)
-    if not match:
+    # Bare count followed by a unit: "5 intrari pe luna", "10 intrari gratuite"
+    if re.match(r"^\d+\s+(leu|intrari|intrare)" + unit_end, folded):
         return False
-
-    remainder = match.group(2)
-
-    # Check if remainder starts with number followed by currency/unit (accent-insensitive)
-    # Pattern: starts with digit, optionally followed by more digits/punctuation, then currency/unit
-    if re.match(r"^\d", remainder):
-        # Value line patterns (accent-insensitive for intrări/intrari)
-        value_pattern = r"^\d[\d.,]*\s*(lei|euro|eur|usd|%|leu|intr[aă]ri|intr[aă]re)"
-        if re.search(value_pattern, remainder, re.IGNORECASE):
-            return False
+    # Remainder after the number starts with an amount: "2. 5 lei", "3. 10% din suma"
+    remainder = re.match(r"^\d+(?:\.\d+)*\.?\s+(.*)", folded).group(1)
+    if re.match(r"^\d[\d.,]*\s*(lei|euro|eur|usd|%|leu|intrari)" + unit_end, remainder):
+        return False
 
     return True
 
@@ -86,8 +86,8 @@ def parse_fee_list(data: bytes) -> ParsedDocument:
     for page_num, line in lines:
         if is_section_heading(line):
             # Check if this is a repeated heading (continuation page)
-            # It's a repeat if it matches the most recently added heading (last in path)
-            if current_section_path and line == current_section_path[-1]:
+            # It's a repeat if it equals the current depth-1 or depth-2 heading
+            if line in current_section_path:
                 # Repeated heading on continuation page - don't flush, don't update page
                 continue
 

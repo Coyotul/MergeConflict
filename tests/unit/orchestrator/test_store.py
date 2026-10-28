@@ -145,12 +145,15 @@ def test_messages_append_in_order(
     assert messages[1].message_id == "msg_2"
 
 
-def test_missing_session(store: SessionStore):
+def test_missing_session(store: SessionStore, sample_state: SessionState):
     """Test that operations on missing session raise SessionNotFound."""
     session_id = uuid4().hex
 
     with pytest.raises(SessionNotFound):
         store.get(session_id)
+
+    with pytest.raises(SessionNotFound):
+        store.save(sample_state, expected_version=0)
 
     with pytest.raises(SessionNotFound):
         store.messages(session_id)

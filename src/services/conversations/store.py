@@ -201,12 +201,7 @@ class FileSessionStore:
 
     def save(self, state: SessionState, expected_version: int) -> SessionState:
         """Save session state with optimistic locking."""
-        state_path = self._state_path(state.session_id)
-
-        if not state_path.exists():
-            raise SessionNotFound(f"Session {state.session_id} not found")
-
-        # Read current version
+        # Read current version (validates session_id and checks existence)
         current = self.get(state.session_id)
 
         if current.version != expected_version:
@@ -219,6 +214,7 @@ class FileSessionStore:
         updated = state.model_copy(update={"version": state.version + 1})
 
         # Write atomically
+        state_path = self._state_path(state.session_id)
         self._write_state_atomic(state_path, updated)
 
         return updated

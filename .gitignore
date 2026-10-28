@@ -42,6 +42,7 @@ ENV/
 
 # Logs & temp
 *.log
+.test_tmp/
 
 # Local runtime data (databases, uploads, document text and vector indexes)
 data/local/*

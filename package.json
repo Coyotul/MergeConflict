@@ -1,0 +1,36 @@
+{
+  "name": "mergeconflict-banking-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/customer",
+    "apps/staff",
+    "packages/banking",
+    "packages/ui"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "node scripts/frontend-dev.mjs",
+    "dev:customer": "npm run dev --workspace @banking/customer",
+    "dev:staff": "npm run dev --workspace @banking/staff",
+    "dev:api": "tsx packages/banking/server/index.ts",
+    "build": "npm run build --workspace @banking/customer && npm run build --workspace @banking/staff",
+    "lint": "eslint apps packages scripts tests/e2e/frontend.spec.ts playwright.config.ts",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "tsx --test packages/banking/test/*.test.ts",
+    "test:e2e": "playwright test",
+    "check": "npm run lint && npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^10.13.0",
+    "eslint-config-next": "16.4.3",
+    "tsx": "4.23.15",
+    "typescript": "^5.9.0"
+  }
+}

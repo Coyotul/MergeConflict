@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Callable, Literal, Union
+from typing import Callable, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -25,6 +25,16 @@ from src.agent.orchestration.actions import (
     parse_model_output,
 )
 from src.agent.orchestration.blocks import all_specs, build_summary, build_turn_response
+from src.agent.orchestration.events import (  # noqa: F401  (event types re-exported)
+    EVENT_TEXTS,
+    CodeEventsMixin,
+    ConfirmationDecision,
+    CustomerMessage,
+    DocumentUploaded,
+    OfferSelected,
+    SessionStarted,
+    TurnEvent,
+)
 from src.agent.orchestration.fields import (
     FieldUpdate,
     FieldValueError,
@@ -66,40 +76,6 @@ logger = logging.getLogger("src.agent.orchestration")
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
-
-
-# ---- events ---------------------------------------------------------------
-
-@dataclass(frozen=True)
-class SessionStarted:
-    pass
-
-
-@dataclass(frozen=True)
-class CustomerMessage:
-    text: str
-
-
-@dataclass(frozen=True)
-class DocumentUploaded:
-    document_id: str
-    doc_type: str
-    filename: str
-    size_bytes: int
-
-
-@dataclass(frozen=True)
-class OfferSelected:
-    offer_id: str
-
-
-@dataclass(frozen=True)
-class ConfirmationDecision:
-    summary_version: str
-    decision: Literal["confirm", "decline"]
-
-
-TurnEvent = Union[SessionStarted, CustomerMessage, DocumentUploaded, OfferSelected, ConfirmationDecision]
 
 
 # ---- fixed texts ----------------------------------------------------------
@@ -147,7 +123,7 @@ class _Turn:
         return self.history + self.new_messages
 
 
-class Orchestrator:
+class Orchestrator(CodeEventsMixin):
     def __init__(
         self,
         store: SessionStore,
@@ -204,7 +180,12 @@ class Orchestrator:
 
     def handle(self, session_id: str, customer_id: str, event: TurnEvent) -> TurnResponse:
         """Run one turn. Raises SessionNotFound, SessionAccessDenied, SessionBusy,
-        and ModelUnavailable (CustomerMessage; nothing is saved then)."""
+        InvalidUpload (DocumentUploaded for a document not requested), and
+        ModelUnavailable (CustomerMessage only; nothing is saved then).
+
+        Code-handled events never raise ModelUnavailable: their state is saved
+        and a fixed text replaces the model's explanation.
+        """
         self._load_owned(session_id, customer_id)
         lock = self._lock_for(session_id)
         if not lock.acquire(blocking=False):
@@ -213,9 +194,15 @@ class Orchestrator:
             state = self._store.get(session_id)
             if isinstance(event, CustomerMessage):
                 return self._handle_customer_message(state, event)
+            if isinstance(event, DocumentUploaded):
+                return self._handle_document_uploaded(state, event)
+            if isinstance(event, OfferSelected):
+                return self._handle_offer_selected(state, event)
+            if isinstance(event, ConfirmationDecision):
+                return self._handle_confirmation(state, event)
             if isinstance(event, SessionStarted):
                 raise ValueError("SessionStarted is handled by start_session")
-            raise NotImplementedError(f"{type(event).__name__} is not handled yet")
+            raise TypeError(f"Unknown event {type(event).__name__}")
         finally:
             lock.release()
 
@@ -418,6 +405,12 @@ class Orchestrator:
     # ---- code-side state sync ---------------------------------------------
 
     def _code_tool(self, turn: _Turn, name: str, arguments: dict) -> BaseModel | None:
+        """Run a tool as code; the typed output, or None on failure."""
+        return self._run_code_tool(turn, name, arguments)[1]
+
+    def _run_code_tool(
+        self, turn: _Turn, name: str, arguments: dict
+    ) -> tuple[ToolCallOutcome, BaseModel | None]:
         """Run a tool as code. Failures are logged and reported to the model."""
         outcome, output = self._registry.execute(name, arguments, turn.ctx, caller="code")
         if not outcome.ok:
@@ -426,9 +419,9 @@ class Orchestrator:
                 "tool": name, "error_code": outcome.error_code, "error": outcome.error_message,
             }))
             self._add_message(turn, "tool", outcome.as_message())
-            return None
+            return outcome, None
         self._store_output(turn, name, output)
-        return output
+        return outcome, output
 
     def _store_output(self, turn: _Turn, name: str, output: BaseModel) -> None:
         """Store a successful tool's typed output in state."""

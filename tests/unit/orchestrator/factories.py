@@ -1,4 +1,5 @@
 """Test factories for orchestrator unit tests."""
+import json
 from datetime import datetime, UTC
 from decimal import Decimal
 
@@ -153,3 +154,74 @@ def make_verified_app(requirements: ProductRequirements, now: datetime | None = 
         requirements=requirements,
         documents=documents,
     )
+
+
+def make_collecting_app(requirements: ProductRequirements, customer_values: dict | None = None,
+                        now: datetime | None = None):
+    """Return an ApplicationState with the product's requirements set, the
+    discovery fields, plus `customer_values` (name -> value) as confirmed
+    customer-stated fields. No documents, eligibility or offers."""
+    from src.agent.orchestration.fields import field_type_to_kind
+    from src.agent.orchestration.state import ApplicationState, FieldSource, FieldValue
+
+    now = now or datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
+    specs = {spec.name: spec for spec in requirements.fields}
+    values = {"purpose": ("text", "renovation"), "amount": ("money", Decimal("30000")),
+              "term_months": ("integer", 48)}
+    for name, value in (customer_values or {}).items():
+        values[name] = (field_type_to_kind(specs[name].type), value)
+    fields = {
+        name: FieldValue(kind=kind, value=value, source=FieldSource.customer, confirmed=True, updated_at=now)
+        for name, (kind, value) in values.items()
+    }
+    return ApplicationState(fields=fields, product_code=requirements.product_code, requirements=requirements)
+
+
+# ---- scripted model output and session seeding -----------------------------
+
+def respond(message="OK", intent="other", updates=None, citations=None) -> str:
+    """A scripted model `respond` action as raw JSON text."""
+    return json.dumps({
+        "intent": intent,
+        "field_updates": updates or [],
+        "action": {"type": "respond", "message": message, "citation_ids": citations or []},
+    })
+
+
+def call(tool, arguments=None, intent="credit_application", updates=None) -> str:
+    """A scripted model `call_tool` action as raw JSON text."""
+    return json.dumps({
+        "intent": intent,
+        "field_updates": updates or [],
+        "action": {"type": "call_tool", "tool": tool, "arguments": arguments or {}},
+    })
+
+
+def spy_tool(registry, name: str, *, fail: Exception | None = None) -> list:
+    """Wrap a registered tool's handler; return the list its inputs are recorded in.
+
+    With `fail`, the handler raises it instead of running.
+    """
+    import dataclasses
+
+    spec = registry.get(name)
+    calls: list = []
+
+    def handler(input, ctx):
+        calls.append(input)
+        if fail is not None:
+            raise fail
+        return spec.handler(input, ctx)
+
+    registry.register(dataclasses.replace(spec, handler=handler))
+    return calls
+
+
+def seed_application(store, session_id, app, *, active_flow=None) -> None:
+    """Put `app` into a stored session, bypassing model turns."""
+    from src.agent.orchestration.state import Flow
+
+    state = store.get(session_id)
+    state.application = app
+    state.active_flow = active_flow or Flow.credit_application
+    store.save(state, state.version)

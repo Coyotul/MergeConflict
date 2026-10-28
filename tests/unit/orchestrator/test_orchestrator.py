@@ -35,29 +35,13 @@ from src.core.errors import (
 )
 from src.models.credit import EligibilityResult, EligibilityStatus, ReasonItem
 from src.models.knowledge import Product
-from tests.unit.orchestrator.factories import make_verified_app
+from tests.unit.orchestrator.factories import call, make_verified_app, respond, seed_application
 
 CUSTOMER = "cust-001"
 NOW = datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
 
 
 # ---- scripted model output helpers ----------------------------------------
-
-def respond(message="OK", intent="other", updates=None, citations=None):
-    return json.dumps({
-        "intent": intent,
-        "field_updates": updates or [],
-        "action": {"type": "respond", "message": message, "citation_ids": citations or []},
-    })
-
-
-def call(tool, arguments=None, intent="credit_application", updates=None):
-    return json.dumps({
-        "intent": intent,
-        "field_updates": updates or [],
-        "action": {"type": "call_tool", "tool": tool, "arguments": arguments or {}},
-    })
-
 
 GREET = respond("Bună! Cu ce te pot ajuta?")
 DISCOVERY_UPDATES = [
@@ -73,13 +57,6 @@ def joined(messages) -> str:
 
 def turn_calls(model, before: int):
     return model.calls[before:]
-
-
-def seed_application(store, session_id, app, *, active_flow=Flow.credit_application):
-    state = store.get(session_id)
-    state.application = app
-    state.active_flow = active_flow
-    store.save(state, state.version)
 
 
 # ---- start_session --------------------------------------------------------

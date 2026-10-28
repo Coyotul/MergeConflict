@@ -1,0 +1,24 @@
+{
+  "name": "@banking/customer",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1 --port 3000 --webpack",
+    "build": "next build --webpack",
+    "start": "next start --hostname 127.0.0.1 --port 3000",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@banking/demo": "0.1.0",
+    "@banking/ui": "0.1.0",
+    "@fontsource-variable/inter": "5.3.0",
+    "lucide-react": "1.63.0",
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "tailwindcss": "4.3.3"
+  }
+}

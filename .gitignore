@@ -30,6 +30,16 @@ ENV/
 .env
 .env.local
 *.secret
+# Local agent credentials and SQLite files/sidecars are never versioned.
+/settings.json
+*.db
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
 
 # IDEs
 .vscode/*
@@ -47,3 +57,17 @@ ENV/
 # Local runtime data (databases, uploads, document text and vector indexes)
 data/local/*
 !data/local/.gitkeep
+
+# Frontend workspaces and generated test artifacts
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+playwright-report/
+test-results/
+coverage/
+.taste-skill/
+!apps/*/src/lib/
+!apps/*/src/lib/**
+
+factura_scanata.pdf

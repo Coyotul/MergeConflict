@@ -1,0 +1,12 @@
+{
+  "version": "demo-anaf-bindings-2026-10-28.1",
+  "simulated": true,
+  "bindings": [
+    {"customer_id": "demo-customer", "cnp": "2730519000512", "scenario_tag": "CALENDAR_TIME_TRAVEL"},
+    {"customer_id": "demo-customer-high-dti", "cnp": "2730519000512", "scenario_tag": "CALENDAR_TIME_TRAVEL"},
+    {"customer_id": "demo-customer-missing-id", "cnp": "2730519000512", "scenario_tag": "CALENDAR_TIME_TRAVEL"},
+    {"customer_id": "demo-customer-adverse-history", "cnp": "2730519000512", "scenario_tag": "CALENDAR_TIME_TRAVEL"},
+    {"customer_id": "demo-customer-bureau-unavailable", "cnp": "2730519000512", "scenario_tag": "CALENDAR_TIME_TRAVEL"},
+    {"customer_id": "demo-customer-missing-consent", "cnp": "2730519000512", "scenario_tag": "CALENDAR_TIME_TRAVEL"}
+  ]
+}

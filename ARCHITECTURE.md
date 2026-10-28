@@ -5,7 +5,10 @@ AI platform for the full credit lifecycle. The earlier banking diagram remains
 the component baseline, extended below for servicing, refinancing and assistance.
 Use a Python 3.11+/FastAPI modular monolith with separate Next.js customer and staff
 interfaces. Backend folders are logical modules, not individual microservices.
-No service behavior or frontend application is implemented yet.
+The `feature/eligibility-check` branch now implements synthetic preliminary
+eligibility, verification adapters, affordability and a narrow API/tool boundary
+(see `docs/decisions/005-eligibility-reference-service.md`). Other service folders
+remain scaffold locations; this is not a complete banking platform.
 
 ## Repository layout
 
@@ -207,15 +210,17 @@ repayment, restructuring and recovery have specialized workflows owned by
   volumes, applicant files or vector-index snapshots.
 - Add unit tests for deterministic rules, integration tests for adapters, contract
   tests for wire formats and end-to-end tests for workflow/review journeys as
-  capabilities are implemented. Current test folders are placeholders.
+  capabilities are implemented. Eligibility tests now cover rules, providers,
+  API/tool contracts, authorization, persistence and synthetic screening journeys.
 
 ## Technology direction and persistence
 
 The specification selects FastAPI and recommends Next.js/React/TypeScript with
 Tailwind CSS for the interfaces. PostgreSQL is the database direction, preferably
 via Supabase, with pgvector and Supabase Storage as initial candidates. Model
-providers and banking APIs remain behind adapters. No packages or cloud resources
-are provisioned by this scaffold; hosting/free-tier availability is not verified
+providers and banking APIs remain behind adapters. The eligibility branch declares
+FastAPI/Uvicorn/Pydantic dependencies and uses stdlib SQLite for a local-only demo;
+no cloud resources are provisioned. Hosting/free-tier availability is not verified
 here. Verify current provider documentation when selecting or deploying services.
 
 Application records, review decisions, status history, consents, conversations,
@@ -242,3 +247,35 @@ Financial calculations need known-result unit tests. Authorization, customer dat
 isolation, review permissions, repeated submissions and interrupted/resumed
 workflows must be tested independently of the LLM (specification section 19).
 Record subsequent architecture choices in `docs/decisions/`.
+
+## External credit-source fixture ownership
+
+The credit-source database is an **offline synthetic external-data simulator**,
+not an application-db migration or replacement for assessment/audit storage.
+ADR 006 and the credit-source runbook describe the boundary. Current checkout:
+
+- `C:\Users\msi\Downloads\mergeconflict-integration\data\synthetic\credit_sources`:
+  schema-only SQL, reproducible sample SQL/manifest and scenario catalogue.
+- `C:\Users\msi\Downloads\mergeconflict-integration\scripts\credit_sources`:
+  stdlib setup/generation/verification commands; no runtime bank provider yet.
+- `C:\Users\msi\Downloads\mergeconflict-integration\tests\credit_sources`:
+  73 SQL/fixture/setup tests, including an optional benchmark.
+- `C:\Users\msi\Downloads\mergeconflict-integration\data\local\credit_sources.db`:
+  ignored local reconstruction, separate from eligibility and frontend stores.
+
+Do not bypass existing `VerificationProvider`/Pydantic/application ownership to
+consume SQL rows directly. A future authorized adapter must explicitly handle
+customer-to-CNP mapping, Decimal conversion, RON versus original currencies/CHF,
+canonical liabilities, missing-data completeness, evidence provenance/freshness,
+preliminary inquiry semantics and the application's revolving affordability
+rules. The global SQL reporting date must not be mutated concurrently per request.
+The import makes no frontend, provider, workflow, API-contract or decision change.
+
+## Document processing pipeline ownership & architecture
+
+Implemented under `src/services/document_processing/`, `src/parsers/`, and `src/storage/secure_documents/`:
+- **Stage 1 (Ingestion & Secure Storage)**: `SecureDocumentStore` stores applicant files under `data/local/secure_documents/<customer_id>/` with sanitized UUIDs, MIME/size enforcement, and SHA-256 tamper-evident integrity hashing.
+- **Stage 2 (OCR & Extraction)**: `PdfExtractor` handles native vector text and integrates `winocr` (Windows Media OCR with `ro-RO` and `en-US` language models) for scanned raster PDFs and images with auto-rotation detection. Extracted data models (`ExtractedIdentity`, `ExtractedIncome`, `ExtractedStatement`) are parsed by dedicated extractors.
+- **Stage 3 (Validation & Verification)**: `DocumentValidator` verifies Romanian banking norms (BNR Regulations 17/2012 and 12/2018), Modulo 11 CNP & CUI algorithms, ISO 7064 MOD 97-10 IBAN checksums, income recency (<= 30 days), employment stability (>= 3 months, indefinite contract), and bank statement balance integrity.
+- **Stage 4 (Cross-Document Reconciliation)**: Evaluates identity consistency (name, CNP) across all submitted documents and reconciles declared net income against detected statement salary deposits.
+- See ADR 007 (`docs/decisions/007-document-processing-pipeline.md`) and specification table (`docs/reference/document-processing-specification.md`).

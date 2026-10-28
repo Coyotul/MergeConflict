@@ -69,6 +69,11 @@ class GetProductRequirementsInput(BaseModel):
     product_code: Product
 
 
+class RunEligibilityInput(BaseModel):
+    """Input for run_eligibility tool."""
+    pass
+
+
 class ProcessDocumentInput(BaseModel):
     """Input for process_document tool."""
     document_id: str
@@ -184,6 +189,8 @@ __all__ = [
     "CustomerProfileOutput",
     "GetProductRequirementsInput",
     "ProductRequirements",
+    "RunEligibilityInput",
+    "EligibilityResult",
     "ProcessDocumentInput",
     "ProcessDocumentOutput",
     "CalculateOffersInput",
@@ -196,5 +203,4 @@ __all__ = [
     "ApplicationStatusOutput",
     "RequestHumanReviewInput",
     "RequestHumanReviewOutput",
-    "EligibilityResult",
 ]

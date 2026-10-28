@@ -311,3 +311,16 @@ def test_get_returns_spec_or_none(registry):
 
     spec = registry.get("nonexistent")
     assert spec is None
+
+
+def test_run_eligibility_input_validates_empty_dict():
+    """RunEligibilityInput validates empty dict and ignores extra fields."""
+    from src.agent.tools.contracts import RunEligibilityInput
+
+    # Empty dict is valid
+    input_obj = RunEligibilityInput.model_validate({})
+    assert input_obj is not None
+
+    # Extra fields are ignored (Pydantic default behavior)
+    input_obj = RunEligibilityInput.model_validate({"extra": "ignored"})
+    assert input_obj is not None

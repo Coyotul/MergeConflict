@@ -57,7 +57,7 @@ The customer workspace will connect to the orchestrator automatically. Each new 
 **Environment variables:**
 
 - `NEXT_PUBLIC_ORCHESTRATOR_URL` (default: `http://127.0.0.1:8000`): Orchestrator API base URL.
-- `ORCHESTRATOR_CORS_ORIGINS` (default: `http://127.0.0.1:3000`): Comma-separated list of allowed frontend origins for CORS.
+- `ORCHESTRATOR_CORS_ORIGINS` (default: `http://127.0.0.1:3000,http://127.0.0.1:3001,http://localhost:3000,http://localhost:3001`): Comma-separated list of allowed frontend origins for CORS.
 
 If the orchestrator is not running or becomes unavailable, the chat displays an error message with a retry button.
 

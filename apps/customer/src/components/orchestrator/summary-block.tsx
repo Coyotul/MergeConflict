@@ -3,6 +3,7 @@
 import { FileText } from "lucide-react";
 import type { ApplicationSummaryBlock } from "@banking/demo/orchestrator";
 import { formatMoneyString } from "@banking/demo/orchestrator-format";
+import { documentStatusLabel } from "@banking/demo/orchestrator-labels";
 import { Button } from "@banking/ui/button";
 import { Pill } from "@banking/ui/primitives";
 
@@ -70,7 +71,7 @@ export function SummaryBlockComponent({
                 tone={doc.status === "accepted" ? "green" : "slate"}
                 className="ml-auto px-2 py-0 text-[9px]"
               >
-                {doc.status}
+                {documentStatusLabel(doc.status)}
               </Pill>
             </div>
           ))}

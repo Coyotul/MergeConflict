@@ -6,6 +6,7 @@ import type {
   ApplicationSubmittedBlock,
   EscalationBlock,
 } from "@banking/demo/orchestrator";
+import { humaniseStatus } from "@banking/demo/orchestrator-labels";
 import { InfoNote, Pill } from "@banking/ui/primitives";
 
 export function EligibilityResultBlock({
@@ -59,15 +60,6 @@ export function EligibilityResultBlock({
   );
 }
 
-function humanReadableStatus(status: string): string {
-  const statusMap: Record<string, string> = {
-    PENDING_HUMAN_REVIEW: "Pending human review",
-    APPROVED: "Approved",
-    REJECTED: "Rejected",
-  };
-  return statusMap[status] || status;
-}
-
 export function ApplicationSubmittedBlock({
   block,
 }: {
@@ -78,7 +70,7 @@ export function ApplicationSubmittedBlock({
       <InfoNote>
         <ShieldCheck className="mr-1 inline size-3.5" />
         <strong>
-          Application {block.application_id} · {humanReadableStatus(block.status)}
+          Application {block.application_id} · {humaniseStatus(block.status)}
         </strong>
         <br />
         Submitted for human review — no decision yet.

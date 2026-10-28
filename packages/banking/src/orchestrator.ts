@@ -236,7 +236,7 @@ export function createOrchestratorClient(
         0,
         "unavailable",
         true,
-        "The AI assistant service is not reachable. Start it with: uvicorn src.api.app:create_app --factory"
+        "The AI assistant service is not reachable (or blocked by CORS). Start it with: uvicorn src.api.app:create_app --factory"
       );
     }
 

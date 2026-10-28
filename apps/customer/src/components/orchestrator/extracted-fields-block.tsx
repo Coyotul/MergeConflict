@@ -2,6 +2,12 @@
 
 import { FileText } from "lucide-react";
 import type { ExtractedFieldsBlock } from "@banking/demo/orchestrator";
+import {
+  confirmFieldLabel,
+  confirmFieldMessage,
+  documentValueLabel,
+  documentValueMessage,
+} from "@banking/demo/orchestrator-labels";
 import { Button } from "@banking/ui/button";
 
 export function ExtractedFieldsBlockComponent({
@@ -52,9 +58,9 @@ export function ExtractedFieldsBlockComponent({
                   variant="secondary"
                   size="sm"
                   disabled={disabled}
-                  onClick={() => onSend("Yes, use the document value")}
+                  onClick={() => onSend(documentValueMessage(field.label))}
                 >
-                  Use document value
+                  {documentValueLabel(field.label)}
                 </Button>
               </div>
             )}
@@ -64,9 +70,9 @@ export function ExtractedFieldsBlockComponent({
                   variant="secondary"
                   size="sm"
                   disabled={disabled}
-                  onClick={() => onSend("Yes, that's correct")}
+                  onClick={() => onSend(confirmFieldMessage(field.label))}
                 >
-                  Confirm
+                  {confirmFieldLabel(field.label)}
                 </Button>
               </div>
             )}

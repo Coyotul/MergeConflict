@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { LoaderCircle, MessageCircle, RotateCcw, ShieldCheck } from "lucide-react";
 import { useDemo } from "@banking/demo/react";
 import { useOrchestratorChat } from "@banking/demo/orchestrator-react";
-import { hasCustomerMessages } from "@banking/demo/orchestrator-state";
+import { hasCustomerMessages, retryNotice } from "@banking/demo/orchestrator-state";
 import { AssistantAvatar, InfoNote, PilotNotice } from "@banking/ui/primitives";
 import { Button } from "@banking/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@banking/ui/dialog";
@@ -59,6 +59,9 @@ export function AssistantWorkspace() {
   const welcome = !hasCustomerMessages(state);
   const disabled = state.pending || !state.sessionId;
   const onSend = (text: string) => { void send(text); };
+  // A failed confirmation is never replayed automatically: the summary stays visible
+  // and the customer presses Confirm again.
+  const notice = retryNotice(state);
 
   return (
     <div className="flex h-full min-h-0 flex-1 overflow-hidden">
@@ -119,7 +122,8 @@ export function AssistantWorkspace() {
               <InfoNote warning>
                 <span className="flex flex-wrap items-center gap-3">
                   <span>{state.error.message}</span>
-                  {state.error.retryable && (
+                  {notice && <span>{notice}</span>}
+                  {state.error.retryable && !notice && (
                     <Button variant="outline" size="sm" onClick={() => { void retry(); }}>
                       <RotateCcw />Retry
                     </Button>

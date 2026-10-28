@@ -245,7 +245,7 @@ def create_app(
     def handle_unexpected_error(request: Request, exc: Exception):
         """Handle all unexpected errors with logging."""
         logger.exception("Unhandled exception in request")
-        return JSONResponse(
+        response = JSONResponse(
             status_code=500,
             content=ErrorBody(
                 code="internal_error",
@@ -253,5 +253,12 @@ def create_app(
                 retryable=False
             ).model_dump()
         )
+        # The catch-all handler runs in ServerErrorMiddleware, outside
+        # CORSMiddleware, so add the CORS headers for allowed origins here.
+        origin = request.headers.get("origin")
+        if origin and origin in settings.cors_origins:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Vary"] = "Origin"
+        return response
 
     return app

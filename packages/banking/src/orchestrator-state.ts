@@ -182,6 +182,14 @@ export function hasCustomerMessages(state: ChatState): boolean {
   return state.entries.some((entry) => entry.role === "customer");
 }
 
+/** Index of the latest assistant entry (blocks render under it), or -1. */
+export function lastAssistantEntryIndex(state: ChatState): number {
+  for (let i = state.entries.length - 1; i >= 0; i--) {
+    if (state.entries[i].role === "assistant") return i;
+  }
+  return -1;
+}
+
 export function storageKey(lumaCustomerId: string): string {
   return `luma-orchestrator-chat-v1-${lumaCustomerId}`;
 }
@@ -206,4 +214,15 @@ export function getRetryAction(state: ChatState): PendingAction | null {
   }
 
   return state.lastAction;
+}
+
+export const CONFIRM_RETRY_NOTICE =
+  "Nothing was submitted. Review the summary and press Confirm again.";
+
+/**
+ * Guidance shown instead of a Retry button when the failed action cannot be
+ * replayed automatically (a confirmation must be re-pressed explicitly).
+ */
+export function retryNotice(state: ChatState): string | null {
+  return state.lastAction?.kind === "confirm" ? CONFIRM_RETRY_NOTICE : null;
 }

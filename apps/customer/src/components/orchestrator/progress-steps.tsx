@@ -2,17 +2,8 @@
 
 import { Check } from "lucide-react";
 import type { Progress } from "@banking/demo/orchestrator";
+import { stepLabel, stepStatusText } from "@banking/demo/orchestrator-labels";
 import { Pill } from "@banking/ui/primitives";
-
-const STEP_LABELS: Record<string, string> = {
-  discovery: "Discovery",
-  details: "Your details",
-  eligibility: "Eligibility",
-  documents: "Documents",
-  offers: "Offers",
-  confirm: "Confirm",
-  submitted: "Submitted",
-};
 
 const SIDE_STAGE_LABELS: Record<string, string> = {
   not_eligible: "Not eligible (preliminary)",
@@ -44,22 +35,27 @@ export function ProgressSteps({ progress }: { progress: Progress }) {
 
   return (
     <section aria-label="Application progress" className="mb-6">
-      <div className="flex items-center gap-2">
+      <ol className="flex flex-wrap items-center gap-2">
         {progress.steps.map((step, index) => {
-          const label = STEP_LABELS[step.stage] || step.stage;
+          const label = stepLabel(step.stage);
           const isDone = step.status === "done";
           const isCurrent = step.status === "current";
           const isLast = index === progress.steps.length - 1;
 
           return (
-            <div key={step.stage} className="flex items-center gap-2">
+            <li
+              key={step.stage}
+              className="flex items-center gap-2"
+              aria-current={isCurrent ? "step" : undefined}
+            >
               <div className="flex items-center gap-2">
                 {isDone ? (
-                  <span className="flex size-6 items-center justify-center rounded-full bg-emerald-500 text-white">
+                  <span aria-hidden="true" className="flex size-6 items-center justify-center rounded-full bg-emerald-500 text-white">
                     <Check className="size-3.5" strokeWidth={3} />
                   </span>
                 ) : (
                   <span
+                    aria-hidden="true"
                     className={`flex size-6 items-center justify-center rounded-full ${
                       isCurrent
                         ? "bg-ink text-white"
@@ -79,19 +75,21 @@ export function ProgressSteps({ progress }: { progress: Progress }) {
                   }`}
                 >
                   {label}
+                  <span className="sr-only"> ({stepStatusText(step.status)})</span>
                 </span>
               </div>
               {!isLast && (
                 <div
+                  aria-hidden="true"
                   className={`h-px w-4 ${
                     isDone ? "bg-emerald-500" : "bg-slate-200"
                   }`}
                 />
               )}
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ol>
     </section>
   );
 }

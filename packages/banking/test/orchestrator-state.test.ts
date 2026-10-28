@@ -12,6 +12,8 @@ import {
   shouldStartFresh,
   isValidCustomerId,
   getRetryAction,
+  retryNotice,
+  lastAssistantEntryIndex,
   type ChatState,
   type ChatEntry,
 } from "../src/orchestrator-state";
@@ -440,6 +442,42 @@ describe("orchestrator-state", () => {
       };
       const action = getRetryAction(state);
       assert.equal(action, null);
+    });
+  });
+
+  describe("retryNotice", () => {
+    it("explains that nothing was submitted after a failed confirm", () => {
+      const state: ChatState = {
+        ...initialChatState,
+        sessionId: "sess-123",
+        lastAction: { kind: "confirm", summaryVersion: "v1", decision: "confirm" },
+        error: { status: 0, code: "unavailable", retryable: true, message: "down" } as OrchestratorError,
+      };
+      assert.equal(
+        retryNotice(state),
+        "Nothing was submitted. Review the summary and press Confirm again."
+      );
+    });
+
+    it("is null for retryable non-confirm actions", () => {
+      const state: ChatState = {
+        ...initialChatState,
+        sessionId: "sess-123",
+        lastAction: { kind: "message", text: "Hello" },
+      };
+      assert.equal(retryNotice(state), null);
+    });
+  });
+
+  describe("lastAssistantEntryIndex", () => {
+    it("finds the last assistant entry even when a customer entry is last", () => {
+      const entry = (id: string, role: "customer" | "assistant"): ChatEntry => ({ id, role, text: id, citations: [] });
+      const state: ChatState = {
+        ...initialChatState,
+        entries: [entry("a1", "assistant"), entry("c1", "customer"), entry("a2", "assistant"), entry("c2", "customer")],
+      };
+      assert.equal(lastAssistantEntryIndex(state), 2);
+      assert.equal(lastAssistantEntryIndex(initialChatState), -1);
     });
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { BookOpen } from "lucide-react";
-import type { ChatState } from "@banking/demo/orchestrator-state";
+import { lastAssistantEntryIndex, type ChatState } from "@banking/demo/orchestrator-state";
 import { AssistantAvatar } from "@banking/ui/primitives";
 import { ProgressSteps } from "./progress-steps";
 import { Blocks } from "./blocks";
@@ -59,6 +59,8 @@ export function OrchestratorConversation({
   onConfirm: (summaryVersion: string, decision: "confirm" | "decline") => void;
   disabled: boolean;
 }) {
+  const lastAssistantIndex = lastAssistantEntryIndex(state);
+
   return (
     <div className="mx-auto max-w-[780px] space-y-6">
       <p className="text-center text-xs font-medium text-slate-500">
@@ -70,9 +72,9 @@ export function OrchestratorConversation({
       )}
 
       {state.entries.map((entry, index) => {
-        const isLastAssistant =
-          entry.role === "assistant" &&
-          index === state.entries.length - 1;
+        // Blocks belong to the latest assistant reply, even while a newer
+        // customer message is pending or has failed.
+        const isLastAssistant = index === lastAssistantIndex;
 
         return entry.role === "customer" ? (
           <div key={entry.id} className="flex justify-end">

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import type { OffersBlock, Awaiting } from "@banking/demo/orchestrator";
 import { formatMoneyString } from "@banking/demo/orchestrator-format";
+import { chooseOfferLabel } from "@banking/demo/orchestrator-labels";
 import { Button } from "@banking/ui/button";
 import { Pill } from "@banking/ui/primitives";
 
@@ -89,6 +90,9 @@ export function OffersBlockComponent({
                 {offer.assumptions.length > 0 && (
                   <div className="mt-3">
                     <button
+                      type="button"
+                      aria-expanded={isExpanded}
+                      aria-controls={`assumptions-${offer.offer_id}`}
                       onClick={() =>
                         setExpandedOffer(isExpanded ? null : offer.offer_id)
                       }
@@ -107,7 +111,10 @@ export function OffersBlockComponent({
                       )}
                     </button>
                     {isExpanded && (
-                      <ul className="mt-2 space-y-1 rounded-lg bg-slate-50 p-3">
+                      <ul
+                        id={`assumptions-${offer.offer_id}`}
+                        className="mt-2 space-y-1 rounded-lg bg-slate-50 p-3"
+                      >
                         {offer.assumptions.map((assumption, index) => (
                           <li
                             key={index}
@@ -127,9 +134,14 @@ export function OffersBlockComponent({
                 className="mt-4 w-full"
                 disabled={disabled}
                 onClick={() => onChooseOffer(offer.offer_id)}
-                aria-label={`Choose ${offer.term_months}-month offer`}
               >
-                Choose this offer
+                {chooseOfferLabel(
+                  offer.term_months,
+                  formatMoneyString(
+                    offer.monthly_installment.amount,
+                    offer.monthly_installment.currency
+                  )
+                )}
               </Button>
             )}
           </div>

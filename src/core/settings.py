@@ -84,7 +84,12 @@ class OrchestratorSettings(BaseModel):
     retrieval: Literal["stub", "rag"] = "stub"
     database_url: str = "postgresql://rag:rag@127.0.0.1:5433/rag"
     cors_origins: list[str] = Field(
-        default_factory=lambda: ["http://127.0.0.1:3000", "http://127.0.0.1:3001"]
+        default_factory=lambda: [
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://localhost:3000",
+            "http://localhost:3001",
+        ]
     )
 
 

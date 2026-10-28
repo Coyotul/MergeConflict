@@ -64,5 +64,32 @@ def test_cors_default_origins():
     """Test that default CORS origins are set correctly."""
     assert load_orchestrator_settings({}).cors_origins == [
         "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001"
+        "http://127.0.0.1:3001",
+        "http://localhost:3000",
+        "http://localhost:3001",
     ]
+
+
+def test_unhandled_exception_response_carries_cors_headers(test_uploads_dir):
+    """A 500 from the catch-all handler must still be readable by the browser."""
+    settings = OrchestratorSettings(
+        model="fake",
+        session_store="memory",
+        uploads_dir=test_uploads_dir,
+    )
+    app = create_app(settings)
+
+    def boom():
+        raise RuntimeError("unexpected")
+
+    app.add_api_route("/boom", boom, methods=["GET"])
+    client = TestClient(app, raise_server_exceptions=False)
+
+    r = client.get("/boom", headers={"Origin": "http://127.0.0.1:3000"})
+    assert r.status_code == 500
+    assert r.json()["code"] == "internal_error"
+    assert r.headers["access-control-allow-origin"] == "http://127.0.0.1:3000"
+
+    r = client.get("/boom", headers={"Origin": "https://evil.example"})
+    assert r.status_code == 500
+    assert "access-control-allow-origin" not in r.headers

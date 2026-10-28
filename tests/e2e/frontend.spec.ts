@@ -151,6 +151,25 @@ test("assistant runs on the orchestrator", async ({ page }, testInfo) => {
   expect(errors).toEqual([]);
 });
 
+test("assistant shows a retryable alert while the orchestrator is down", async ({ page }) => {
+  await page.route(`${ORCHESTRATOR_URL}/**`, (route) => route.abort());
+  await login(page, "customer");
+  await expect(page.getByRole("heading", { name: /Hey Alex/ })).toBeVisible();
+  const alert = page.getByRole("alert").filter({ hasText: "not reachable" });
+  await expect(alert).toContainText("The AI assistant service is not reachable (or blocked by CORS)");
+  const retry = alert.getByRole("button", { name: "Retry" });
+  await expect(retry).toBeVisible();
+  await page.unroute(`${ORCHESTRATOR_URL}/**`);
+  await retry.click();
+  await expect(alert).not.toBeVisible();
+  await expect(page.getByRole("heading", { name: /Hey Alex/ })).toBeVisible();
+  // The session now exists: a message goes through and the assistant replies.
+  await page.getByLabel("Message the assistant").fill("Vreau un credit de 30000 lei pe 60 de luni pentru renovare");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.getByLabel("Message the assistant")).toHaveValue("");
+  await expect(page.getByText("LUMA · AI ASSISTANT", { exact: true })).toHaveCount(2);
+});
+
 
 test("customer submission, reviewer information request, resumed application and final human outcome", async ({ page, context }, testInfo) => {
   // Several routes (/products, staff /applications/[id], /audit) are compiled on first visit by the dev servers.

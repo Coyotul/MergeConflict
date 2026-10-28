@@ -133,7 +133,10 @@ test("client maps network failure to unavailable", async () => {
       assert.equal(err.status, 0);
       assert.equal(err.code, "unavailable");
       assert.equal(err.retryable, true);
-      assert.match(err.message, /not reachable/);
+      assert.equal(
+        err.message,
+        "The AI assistant service is not reachable (or blocked by CORS). Start it with: uvicorn src.api.app:create_app --factory"
+      );
       return true;
     }
   );

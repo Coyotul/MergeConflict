@@ -29,8 +29,19 @@ export function DocumentChecklistBlockComponent({
     );
   };
 
+  const anyUpload = block.items.some(
+    (item) =>
+      canUpload(item.doc_type) &&
+      (item.status === "requested" || item.status === "rejected")
+  );
+
   return (
     <div className="mt-4 space-y-2">
+      {anyUpload && (
+        <p className="text-[11px] text-slate-500">
+          Use synthetic documents only — files are sent to the local assistant service.
+        </p>
+      )}
       {block.items.map((item) => {
         const isAccepted = item.status === "accepted";
         const isRejected = item.status === "rejected";

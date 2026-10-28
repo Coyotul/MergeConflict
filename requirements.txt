@@ -1,0 +1,15 @@
+# Project dependencies
+# You can install them by running:
+# pip install -r requirements.txt
+
+# Core & Environment
+python-dotenv
+pydantic
+
+# Data & Documents (useful for banking documents & tabular records)
+pandas
+openpyxl
+
+# LLM / AI integrations (optional depending on chosen stack, e.g. openai, google-genai, langchain)
+# openai
+# google-genai

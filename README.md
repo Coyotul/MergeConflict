@@ -148,3 +148,35 @@ The API's public demo keys and SQLite storage are **local synthetic demonstratio
 only**, not production authentication/infrastructure. The reproducible demo uses
 an explicit historical reference clock; the normal API enforces current evidence
 freshness and policy expiry. No real bank, ANAF or bureau requests are made.
+
+## Synthetic external credit-source database
+
+An independent offline SQLite fixture now models **ANAF**, **Biroul de Credit**
+and **CRC**, with one shared product/history source and date-sensitive report
+views. It provides 323 fictional people, 422 products and 73 labelled edge-case
+scenarios. The canonical schema remains empty; sample data is a separate SQL
+export. No real identities or provider calls are used.
+
+Schema, sample SQL and metadata live at
+`C:\Users\msi\Downloads\mergeconflict-integration\data\synthetic\credit_sources`
+in the integration checkout. The setup command reconstructs an ignored local
+database and refuses to overwrite an existing file:
+
+```powershell
+Set-Location 'C:\Users\msi\Downloads\mergeconflict-integration'
+py -3 -B -m scripts.credit_sources.setup
+py -3 -B -m scripts.credit_sources.verify_credit_sources --replay
+```
+
+See `C:\Users\msi\Downloads\mergeconflict-integration\docs\runbooks\credit-sources.md`
+for commands, test coverage, data-quality limitations and the adapter handoff.
+Paths in these examples should be adjusted to your checkout; executable tooling
+discovers the repository root from its own location.
+
+**This is not yet wired into the existing eligibility providers or frontend.**
+The external source has CNPs rather than application customer IDs, REAL/RON
+figures rather than typed Decimal evidence, and intentional incomplete histories.
+Its descriptive DSTI view does not replace new-loan affordability, revolving
+rules, authorization, evidence provenance or human review. The existing backend
+and frontend behavior is preserved. Runtime SQLite files stay in ignored local
+storage; only reproducible fictional source fixtures and tools are versioned.

@@ -40,9 +40,21 @@ export interface Money {
   currency: string;
 }
 
+export type Product =
+  | "personal_loan"
+  | "refinancing_unsecured"
+  | "refinancing_mortgage"
+  | "mortgage_casa_ta"
+  | "mortgage_casa_ta_verde"
+  | "mortgage_noua_casa"
+  | "mortgage_residential_projects"
+  | "overdraft"
+  | "credit_card"
+  | "general";
+
 export interface LoanOffer {
   offer_id: string;
-  product_code: string;
+  product_code: Product;
   amount: Money;
   term_months: number;
   annual_interest_rate_percent: string;
@@ -89,7 +101,7 @@ export interface SummaryField {
 export interface ApplicationSummary {
   summary_version: string;
   application_id: string;
-  product_code: string;
+  product_code: Product;
   product_name: string;
   amount: Money;
   term_months: number;
@@ -211,49 +223,58 @@ export function createOrchestratorClient(
     const headers = new Headers(options.headers);
     headers.set("X-Customer-Id", customerId);
 
+    let response: Response;
     try {
-      const response = await fetchImpl(url, {
+      response = await fetchImpl(url, {
         ...options,
         headers,
         signal: AbortSignal.timeout(60000),
       });
-
-      if (!response.ok) {
-        let errorBody: ErrorBody | null = null;
-        try {
-          errorBody = await response.json();
-        } catch {
-          // Non-JSON error response
-        }
-
-        if (errorBody?.code) {
-          throw new OrchestratorError(
-            response.status,
-            errorBody.code,
-            errorBody.retryable ?? response.status >= 500,
-            errorBody.message
-          );
-        } else {
-          throw new OrchestratorError(
-            response.status,
-            "request_failed",
-            response.status >= 500,
-            "The request failed."
-          );
-        }
-      }
-
-      return await response.json();
-    } catch (error) {
-      if (error instanceof OrchestratorError) {
-        throw error;
-      }
+    } catch {
       // Network failure or timeout
       throw new OrchestratorError(
         0,
         "unavailable",
         true,
         "The AI assistant service is not reachable. Start it with: uvicorn src.api.app:create_app --factory"
+      );
+    }
+
+    if (!response.ok) {
+      let errorBody: ErrorBody | null = null;
+      try {
+        errorBody = await response.json();
+      } catch {
+        // Non-JSON error response
+      }
+
+      if (errorBody?.code) {
+        throw new OrchestratorError(
+          response.status,
+          errorBody.code,
+          errorBody.retryable ?? response.status >= 500,
+          errorBody.message
+        );
+      } else {
+        throw new OrchestratorError(
+          response.status,
+          "request_failed",
+          response.status >= 500,
+          "The request failed."
+        );
+      }
+    }
+
+    try {
+      return await response.json();
+    } catch {
+      // JSON parse failure on successful response
+      const retryable = response.status >= 500 || (response.status >= 200 && response.status < 300);
+      throw new OrchestratorError(
+        response.status,
+        "invalid_response",
+        retryable,
+        "The AI assistant returned an unreadable response."
       );
     }
   }

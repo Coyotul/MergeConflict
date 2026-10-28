@@ -196,3 +196,91 @@ test("confirm sends summary_version and decision", async () => {
     assert.deepEqual(JSON.parse(log.body), { summary_version: "v1", decision: "confirm" });
   } finally { await f.close(); }
 });
+
+test("client maps 2xx invalid JSON to invalid_response", async () => {
+  const f = await fixture();
+  try {
+    f.setHandler((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end("not json");
+    });
+
+    const client = createOrchestratorClient("customer-123", f.url);
+
+    await assert.rejects(
+      async () => client.createSession(),
+      (err: OrchestratorError) => {
+        assert.equal(err.status, 200);
+        assert.equal(err.code, "invalid_response");
+        assert.equal(err.retryable, true);
+        assert.match(err.message, /unreadable response/);
+        return true;
+      }
+    );
+  } finally { await f.close(); }
+});
+
+test("getSession parses SessionView", async () => {
+  const f = await fixture();
+  try {
+    const now = new Date().toISOString();
+    f.setHandler((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        session_id: "sess_1",
+        created_at: now,
+        messages: [
+          { role: "customer", text: "Hello", citations: [], created_at: now },
+          { role: "assistant", text: "Hi", citations: [], created_at: now }
+        ],
+        latest: {
+          session_id: "sess_1",
+          turn_id: "turn_1",
+          session_version: 1,
+          messages: [{ role: "assistant", text: "Hi", citations: [], created_at: now }],
+          awaiting: { kind: "text" },
+          progress: { flow: "none", stage: null, steps: [] },
+          blocks: [],
+          simulated: true,
+        }
+      }));
+    });
+
+    const client = createOrchestratorClient("customer-123", f.url);
+    const session = await client.getSession("sess_1");
+
+    assert.equal(session.session_id, "sess_1");
+    assert.equal(session.messages.length, 2);
+    assert.equal(session.latest.turn_id, "turn_1");
+    assert.equal(f.logs[0].method, "GET");
+    assert.equal(f.logs[0].url, "/chat/sessions/sess_1");
+  } finally { await f.close(); }
+});
+
+test("selectOffer sends offer_id", async () => {
+  const f = await fixture();
+  try {
+    f.setHandler((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        session_id: "sess_1",
+        turn_id: "turn_4",
+        session_version: 4,
+        messages: [{ role: "assistant", text: "Offer selected", citations: [], created_at: new Date().toISOString() }],
+        awaiting: { kind: "confirmation", summary_version: "v1" },
+        progress: { flow: "credit_application", stage: "summary", steps: [] },
+        blocks: [],
+        simulated: true,
+      }));
+    });
+
+    const client = createOrchestratorClient("customer-123", f.url);
+    await client.selectOffer("sess_1", "offer-123");
+
+    assert.equal(f.logs.length, 1);
+    const log = f.logs[0];
+    assert.equal(log.method, "POST");
+    assert.equal(log.url, "/chat/sessions/sess_1/offer-selection");
+    assert.deepEqual(JSON.parse(log.body), { offer_id: "offer-123" });
+  } finally { await f.close(); }
+});

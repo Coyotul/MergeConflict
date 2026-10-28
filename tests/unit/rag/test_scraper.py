@@ -607,16 +607,13 @@ Disallow: /admin/
     scraper = Scraper(client, source_config, tmp_path / "raw", min_interval_s=0.01, now=now, sleep=sleep)
     report = scraper.run([])
 
-    # Exactly these URLs should be requested
-    assert "/robots.txt" in request_log
-    assert "/sitemap.xml" in request_log
-    assert "/persoane-fizice/credite/nevoi-personale" in request_log
-    assert "/documents/cgb.pdf" in request_log
-
-    # These should NOT be requested
-    assert "/admin/secret" not in request_log
-    assert "/despre-noi" not in request_log
-    assert "/documents/marketing.pdf" not in request_log
+    # Exactly these URLs should be requested (no more, no less, no duplicates)
+    assert sorted(request_log) == sorted([
+        "/robots.txt",
+        "/sitemap.xml",
+        "/persoane-fizice/credite/nevoi-personale",
+        "/documents/cgb.pdf"
+    ])
 
     # Should have exactly the page and PDF in entries
     assert len(report.entries) == 2

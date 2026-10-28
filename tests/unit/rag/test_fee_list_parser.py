@@ -1,6 +1,9 @@
 """Tests for fee list parser."""
+from datetime import date, datetime, timezone
+
 import pytest
-from src.models.knowledge import ChunkKind
+from src.models.knowledge import ChunkKind, DocKind
+from src.services.document_ingestion.metadata import extract_effective_date
 from src.services.document_ingestion.parsers.fee_list import parse_fee_list
 from tests.fixtures.rag.pdf_builders import make_pdf
 
@@ -197,6 +200,20 @@ def test_is_section_heading_rejects_value_lines(line):
 def test_is_section_heading_accepts_headings(line):
     from src.services.document_ingestion.parsers.fee_list import is_section_heading
     assert is_section_heading(line)
+
+
+def test_fee_list_cover_date_reaches_metadata_text():
+    """The edition date printed only on the cover is found by extract_effective_date."""
+    pdf = make_pdf([
+        [(50, 80, "Tarife și comisioane Demo"), (50, 100, "Valabil din 1 septembrie 2026")],
+        [(50, 60, "1. Conturi demo"), (50, 80, "Deschidere cont"), (300, 80, "0 lei")],
+    ])
+    doc = parse_fee_list(pdf)
+    assert doc.metadata_text.startswith("Tarife și comisioane Demo\nValabil din 1 septembrie 2026\n")
+    assert all("septembrie" not in c.text for c in doc.chunks)
+    fetched = datetime(2026, 10, 20, tzinfo=timezone.utc)
+    assert extract_effective_date(DocKind.fee_list, doc.metadata_text, "https://example.invalid/tarife.pdf", None, fetched) \
+        == (date(2026, 9, 1), "document_text")
 
 
 def test_fee_list_value_lines_with_diacritics_stay_content():

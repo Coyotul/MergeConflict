@@ -148,7 +148,8 @@ def parse_fee_list(data: bytes) -> ParsedDocument:
     return ParsedDocument(
         title=title,
         chunks=chunks,
-        metadata_text="\n".join(line for _, line in lines),
+        # The cover carries the edition date: it is metadata text, but never chunk text.
+        metadata_text="\n".join([line for page, line in all_lines_with_cover if page == 1] + [line for _, line in lines]),
         parser_name="fee_list",
         parser_version=CHUNKER_VERSION,
     )

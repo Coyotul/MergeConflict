@@ -180,3 +180,66 @@ Its descriptive DSTI view does not replace new-loan affordability, revolving
 rules, authorization, evidence provenance or human review. The existing backend
 and frontend behavior is preserved. Runtime SQLite files stay in ignored local
 storage; only reproducible fictional source fixtures and tools are versioned.
+
+## Synthetic banking test documents
+
+The repository includes a generator for realistic Romanian banking documents in standard A4 PDF format:
+1. **Carte de Identitate (Buletin)**: Romanian national identity card with CNP, series/number, VIZ fields, and MRZ checksum lines.
+2. **Adeverință de Venit**: Salary & employer certificate with employer CUI, monthly net income, 6-month salary table, indefinite contract, and seniority.
+3. **Extras de Cont Bancar**: Multi-transaction bank account statement (Raiffeisen Bank, BT, BCR, etc.) with IBAN, initial balance, salary deposit inflows, debits, and closing balance.
+
+```powershell
+# Generate default document suites for Alex Morgan and primary personas:
+.\.venv\Scripts\python.exe scripts/generate_documents.py
+
+# Generate for a specific scenario persona or customer:
+.\.venv\Scripts\python.exe scripts/generate_documents.py --customer alex_morgan
+```
+
+Generated PDF files are stored under `data/synthetic/documents/<customer_id>/`.
+
+## Document Processing Pipeline & Regulatory Verification
+
+Implements the 4-stage document processing architecture:
+1. **Secure Document Storage** (`src/storage/secure_documents/`):
+   - Customer-isolated storage under `data/local/secure_documents/<customer_id>/`.
+   - Content hashing with SHA-256 for non-repudiation and tamper detection (`verify_integrity`).
+   - Path-traversal defense, sanitized UUID filenames, and strict MIME/size controls.
+2. **OCR & Extraction** (`src/parsers/ocr/`, `src/parsers/extraction/`):
+   - Fast vector text extraction via `pypdf`.
+   - Native **Windows Media OCR** integration (`winocr`) with Romanian (`ro-RO`) and English (`en-US`) language models for scanned raster PDFs and image files (`.png`, `.jpg`).
+   - Auto-orientation detection for tilted or inverted/upside-down scans (90°, 180°, 270°).
+   - Structured field extractors for ID Cards (`IdCardExtractor`), Income Certificates (`IncomeCertificateExtractor`), and Bank Statements (`BankStatementExtractor`).
+3. **Regulatory & Mathematical Validation** (`src/parsers/validation/`):
+   - **CNP Validator**: Official Romanian Modulo 11 checksum (`279146358279`), century/gender decoding, calendar birth date, county mapping, and age policy (18–70 years).
+   - **CUI Validator**: Official Romanian ANAF fiscal code algorithm (`753217532`, modulo 11).
+   - **IBAN Validator**: ISO 7064 MOD 97-10 check digits for Romanian accounts (`RO..`).
+   - **BNR Underwriting Norms** (Regulations 17/2012 and 12/2018):
+     - Income certificate recency <= 30 calendar days.
+     - Employment seniority >= 3 months at current employer and indefinite contract (`NEDETERMINATĂ`).
+     - Minimum net income >= 2,363 RON (Romanian statutory threshold).
+     - Statement recency <= 90 days, balance integrity (`Initial + Credits - Debits == Closing`), and salary deposit detection.
+4. **Cross-Document Verification**:
+   - Reconciles applicant full name across ID card, income certificate, and statement holder.
+   - CNP identity matching between ID card and income certificate.
+   - Cross-checks net income against detected recurring statement salary inflow.
+
+### Manual Verification CLI Tool
+
+You can manually inspect any document or full customer dossier using [`scripts/verify_documents.py`](scripts/verify_documents.py):
+
+```powershell
+# Verify full dossier for demo customer Alex Morgan:
+.\.venv\Scripts\python.exe scripts/verify_documents.py
+
+# Verify a specific synthetic customer dossier:
+.\.venv\Scripts\python.exe scripts/verify_documents.py --customer dan_ionescu_dsti_39
+
+# List all available synthetic customer folders:
+.\.venv\Scripts\python.exe scripts/verify_documents.py --list
+
+# Verify any single custom PDF or image scan:
+.\.venv\Scripts\python.exe scripts/verify_documents.py --file path/to/document.pdf --type identity
+```
+
+See [ADR 007](docs/decisions/007-document-processing-pipeline.md) and the [Technical Specification](docs/reference/document-processing-specification.md) for complete details.

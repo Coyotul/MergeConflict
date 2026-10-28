@@ -27,7 +27,11 @@ class IdCardExtractor:
         extracted = ExtractedIdentity(raw_text=text)
 
         # 1. CNP extraction
-        cnp_match = re.search(r"\b([1-8]\d{12})\b", text)
+        cnp_match = re.search(r"CNP[:\s]*([0-9]{13})\b", text)
+        if not cnp_match:
+            cnp_match = re.search(r"\b([1-8]\d{12})\b", text)
+        if not cnp_match:
+            cnp_match = re.search(r"\b([0-9]{13})\b", text)
         if cnp_match:
             extracted.cnp = cnp_match.group(1)
             meta = parse_cnp(extracted.cnp)
@@ -38,6 +42,8 @@ class IdCardExtractor:
 
         # 2. Series & Number
         series_match = re.search(r"SERIA\s*([A-Z]{2})\s*NR\.?\s*(\d{6})", text, re.IGNORECASE)
+        if not series_match:
+            series_match = re.search(r"Seria\s*(?:si|și)?\s*nr\.?[:\s]*([A-Z]{2,4})[- /]?([0-9A-Z\-]+)", text, re.IGNORECASE)
         if not series_match:
             series_match = re.search(r"\b([A-Z]{2})\s*(\d{6})\b", text)
 
@@ -55,14 +61,14 @@ class IdCardExtractor:
         if prenume_match:
             extracted.first_name = prenume_match.group(1).strip()
 
-        # Fallback Name from header "Titular: LASTNAME FIRSTNAME"
+        # Fallback Name from header "Titular: ..." or "Cumpărător ..."
         if not extracted.last_name or not extracted.first_name:
-            titular_match = re.search(r"Titular:\s*([A-ZĂÂÎȘȚ\- ]+?)(?=\s*·|\n|CNP)", text, re.IGNORECASE)
+            titular_match = re.search(r"(?:Titular|Cumpărător)[:\s]+([A-ZĂÂÎȘȚa-zăâîșț\- ]+?)(?=\s*·|\n|CNP)", text)
             if titular_match:
-                full_name = titular_match.group(1).strip().split()
-                if len(full_name) >= 2:
-                    extracted.first_name = full_name[0]
-                    extracted.last_name = " ".join(full_name[1:])
+                tokens = titular_match.group(1).strip().split()
+                if len(tokens) >= 2:
+                    extracted.last_name = tokens[0].upper()
+                    extracted.first_name = " ".join(tokens[1:]).upper()
 
         # 5. Domiciliu / Address
         addr_match = re.search(r"(?:Domiciliu|Adresse|Address)[:\s]+([^\n]+(?:\n[^\n]+)?)", text, re.IGNORECASE)

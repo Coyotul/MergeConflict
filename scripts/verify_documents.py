@@ -104,6 +104,17 @@ def verify_single_file(
 
     # 2. OCR & Extraction
     print_section("ETAPA 2: OCR & Extracție Date Structurate")
+    from src.parsers.ocr.pdf_extractor import PdfExtractor
+    raw_ocr = PdfExtractor.extract_text(file_path) if file_path.suffix.lower() == ".pdf" else PdfExtractor.extract_image_text(file_path)
+    if raw_ocr:
+        preview = raw_ocr.strip().replace("\r\n", " ").replace("\n", " ")
+        if len(preview) > 350:
+            preview = preview[:350] + " ... [trunchiat]"
+        print(f"  [Text Extras prin OCR ({len(raw_ocr)} caractere)]:")
+        print(f"  \"{preview}\"\n")
+    else:
+        print("  [Atenție]: Nu s-a putut extrage text prin OCR.\n")
+
     if result.extracted_data:
         for key, value in result.extracted_data.items():
             if value is not None and value != "" and value != [] and key != "raw_text":

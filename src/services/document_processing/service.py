@@ -75,8 +75,13 @@ class DocumentProcessingService:
                 raw_text = PdfExtractor.extract_text(content_bytes)
             except Exception as exc:
                 raw_text = f"[OCR Extraction Warning: {exc}]"
+        elif mime_type.lower().startswith("image/") or any(filename.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".tiff")):
+            try:
+                raw_text = PdfExtractor.extract_image_text(content_bytes)
+            except Exception as exc:
+                raw_text = f"[OCR Image Extraction Warning: {exc}]"
         else:
-            raw_text = f"[Image/Binary Document: {filename}]"
+            raw_text = f"[Binary Document: {filename}]"
 
         # 3. Field Extraction based on document kind
         extracted_data_dict: Dict[str, Any] = {}

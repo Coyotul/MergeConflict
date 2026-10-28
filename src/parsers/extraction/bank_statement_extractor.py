@@ -53,9 +53,16 @@ class BankStatementExtractor:
             extracted.account_holder = holder_match.group(1).strip()
 
         # 3. IBAN
-        iban_match = re.search(r"\b(RO\d{2}[A-Z]{4}[0-9A-Z]{16})\b", text.replace(" ", ""))
+        clean_text_for_iban = re.sub(r"\bR0(\d{2})", r"RO\1", text.replace(" ", "").upper())
+        iban_match = re.search(r"\b(RO\d{2}[A-Z]{4}[0-9A-Z]{16})\b", clean_text_for_iban)
+        if not iban_match:
+            iban_match = re.search(r"IBAN[:\s]*([A-Z0-9]{24})\b", clean_text_for_iban)
         if iban_match:
-            extracted.iban = iban_match.group(1)
+            raw_iban = iban_match.group(1)
+            # normalize common OCR '0' to 'O' for RO country code
+            if raw_iban.startswith("R0"):
+                raw_iban = "RO" + raw_iban[2:]
+            extracted.iban = raw_iban
 
         # 4. Currency
         if "EUR" in text and "RON" not in text:

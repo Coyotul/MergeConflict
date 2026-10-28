@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --color-background: #ffffff;
+  --color-foreground: #171717;
+  --color-ink: #171717;
+  --color-primary: #ffed00;
+  --color-primary-foreground: #171717;
+  --color-secondary: #f5f5f4;
+  --color-muted: #f6f6f2;
+  --color-muted-foreground: #78716c;
+  --color-accent: #fffce0;
+  --color-brand-soft: #fffce0;
+  --color-brand-border: #e6d500;
+  --color-brand-ink: #625a00;
+  --color-border: #e7e5e4;
+  --color-input: #e7e5e4;
+  --color-ring: #a39500;
+  --color-destructive: #dc2626;
+  --color-slate-50: #fafaf9;
+  --color-slate-100: #f5f5f4;
+  --color-slate-200: #e7e5e4;
+  --color-slate-300: #d6d3d1;
+  --color-slate-400: #a8a29e;
+  --color-slate-500: #78716c;
+  --color-slate-600: #57534e;
+  --color-slate-700: #44403c;
+  --color-slate-800: #292524;
+  --color-slate-900: #1c1917;
+  --color-slate-950: #0c0a09;
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font-sans); color: #171717; background: #171717; -webkit-font-smoothing: antialiased; }
+button:not(:disabled), a, summary, [role="button"] { cursor: pointer; }
+a { text-decoration: none; }
+button, input, textarea, select { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+input[type="range"] { accent-color: #7a7100; cursor: pointer; }
+input[type="checkbox"] { accent-color: #171717; }
+:focus-visible { outline: 3px solid #a39500; outline-offset: 3px; }
+::selection { background: #ffed00; color: #171717; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 99px; }
+
+.app-backdrop { background: radial-gradient(ellipse at 8% 0%, #ffed0012 0%, transparent 55%), #171717; }
+.main-surface { box-shadow: 0 20px 80px #00000030; }
+.greeting-highlight { background: linear-gradient(transparent 62%, #ffed00 62%, #ffed00 94%, transparent 94%); padding-right: 5px; }
+.blink-cursor { display: inline-block; width: 4px; height: .88em; margin-left: 7px; vertical-align: -0.02em; border-radius: 3px; background: #171717; animation: cursor 1.2s step-end infinite; }
+@keyframes cursor { 50% { opacity: 0; } }
+@keyframes float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-5px) rotate(1deg); } }
+.illustration-float { animation: float 6s ease-in-out infinite; }
+.conversation-scroll { scrollbar-gutter: stable; }
+.guided-card { position: relative; isolation: isolate; overflow: hidden; transition: transform .2s ease, box-shadow .2s ease; }
+.guided-card::before { content: ""; position: absolute; width: 190px; height: 190px; border-radius: 50%; top: -80px; right: -85px; background: currentColor; opacity: .04; z-index: -1; }
+.guided-card:hover { transform: translateY(-4px); box-shadow: 0 12px 30px #17171718; }
+.field { display: block; width: 100%; min-height: 44px; border: 1px solid #d6d3d1; border-radius: 12px; background: white; padding: 10px 12px; font-size: 14px; color: #171717; outline: none; transition: box-shadow .2s; }
+.field:focus { border-color: #a39500; box-shadow: 0 0 0 3px #ffed0040; }
+.field::placeholder { color: #a8a29e; }
+.field-label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #44403c; }
+.table-wrap { overflow-x: auto; border: 1px solid #e7e5e4; border-radius: 16px; }
+.data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; white-space: nowrap; }
+.data-table th { padding: 14px 18px; background: #fafaf9; color: #78716c; font-weight: 500; font-size: 11px; }
+.data-table td { padding: 16px 18px; border-top: 1px solid #f5f5f4; }
+.data-table tbody tr:hover { background: #fffef2; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

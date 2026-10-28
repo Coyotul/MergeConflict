@@ -618,3 +618,28 @@ def test_discovery_fields_defined():
     assert amount_field.type == FieldType.money
     assert amount_field.min == Decimal("1000")
     assert amount_field.max == Decimal("1000000")
+
+
+def test_field_type_to_kind_maps_enum_to_text():
+    """enum is a FieldType but not a FieldValue kind; enum values are stored as text."""
+    from src.agent.orchestration.fields import field_type_to_kind
+
+    assert field_type_to_kind(FieldType.money) == "money"
+    assert field_type_to_kind(FieldType.integer) == "integer"
+    assert field_type_to_kind(FieldType.text) == "text"
+    assert field_type_to_kind(FieldType.boolean) == "boolean"
+    assert field_type_to_kind(FieldType.enum) == "text"
+
+
+def test_enum_field_update_accepted():
+    app = make_app()
+    results = apply_field_updates(
+        app,
+        [FieldUpdate(field="employment_type", value="Employed")],
+        make_specs(),
+        offer_ids=set(),
+        now=datetime.now(UTC),
+    )
+    assert results[0].accepted
+    assert app.fields["employment_type"].value == "employed"
+    assert app.fields["employment_type"].kind == "text"

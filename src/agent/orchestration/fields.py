@@ -49,9 +49,14 @@ class FieldValueError(ValueError):
     pass
 
 
-def _field_type_to_kind(field_type: FieldType) -> str:
-    """Map FieldType to FieldValue kind."""
-    return field_type.value  # They have matching names
+def field_type_to_kind(field_type: FieldType) -> str:
+    """Map FieldType to FieldValue kind.
+
+    enum values are canonical option strings, so they are stored as text.
+    """
+    if field_type == FieldType.enum:
+        return "text"
+    return field_type.value
 
 
 def parse_money(raw: str | int | float | Decimal) -> Decimal:
@@ -429,7 +434,7 @@ def apply_field_updates(
 
         # Accept the update
         app.fields[update.field] = FieldValue(
-            kind=_field_type_to_kind(spec.type),
+            kind=field_type_to_kind(spec.type),
             value=parsed_value,
             source=FieldSource.customer,
             confirmed=True,
@@ -524,7 +529,7 @@ def merge_document_extraction(
 
         # Set field to document value
         app.fields[field_name] = FieldValue(
-            kind=_field_type_to_kind(spec.type),
+            kind=field_type_to_kind(spec.type),
             value=parsed_value,
             source=FieldSource.document,
             document_id=doc.document_id,

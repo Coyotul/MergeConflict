@@ -90,3 +90,66 @@ def make_app(**overrides):
     }
     defaults.update(overrides)
     return ApplicationState(**defaults)
+
+
+def make_verified_app(requirements: ProductRequirements, now: datetime | None = None):
+    """Return a personal-loan ApplicationState for cust-001 with every required
+    field present and verified (identity from profile, the rest from accepted,
+    confirmed documents) and all required documents accepted.
+
+    Eligibility and offers are not set; run the tools to get them.
+    """
+    from src.agent.orchestration.fields import field_type_to_kind
+    from src.agent.orchestration.state import (
+        ApplicationState,
+        DocumentRecord,
+        DocumentStatus,
+        FieldSource,
+        FieldValue,
+    )
+
+    now = now or datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
+    values = {
+        "purpose": "renovation",
+        "amount": Decimal("30000"),
+        "term_months": 48,
+        "full_name": "Ana Popescu",
+        "age": 34,
+        "employment_type": "employed",
+        "employment_months": 48,
+        "monthly_net_income": Decimal("6200"),
+        "employer_name": "TechCorp SRL",
+        "existing_monthly_obligations": Decimal("400"),
+    }
+    kinds = {"purpose": "text", "amount": "money", "term_months": "integer"}
+    specs = {spec.name: spec for spec in requirements.fields}
+    documents = [
+        DocumentRecord(
+            document_id=f"doc-{d.doc_type}",
+            doc_type=d.doc_type,
+            filename=f"{d.doc_type}.pdf",
+            status=DocumentStatus.accepted,
+            uploaded_at=now,
+        )
+        for d in requirements.documents
+    ]
+    fields = {}
+    for name, value in values.items():
+        spec = specs.get(name)
+        kind = kinds.get(name) or field_type_to_kind(spec.type)
+        if spec is not None and spec.identity:
+            fields[name] = FieldValue(kind=kind, value=value, source=FieldSource.profile,
+                                      confirmed=True, updated_at=now)
+        elif spec is not None and spec.verified_by:
+            fields[name] = FieldValue(kind=kind, value=value, source=FieldSource.document,
+                                      document_id=f"doc-{spec.verified_by}", confidence=0.95,
+                                      confirmed=True, updated_at=now)
+        else:
+            fields[name] = FieldValue(kind=kind, value=value, source=FieldSource.customer,
+                                      confirmed=True, updated_at=now)
+    return ApplicationState(
+        fields=fields,
+        product_code=requirements.product_code,
+        requirements=requirements,
+        documents=documents,
+    )

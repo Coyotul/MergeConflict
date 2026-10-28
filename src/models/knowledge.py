@@ -179,6 +179,7 @@ class Citation(BaseModel):
     publisher: str
     title: str
     url: str
+    canonical_key: str
     page: int | None = None
     anchor: str | None = None
     section_path: list[str]

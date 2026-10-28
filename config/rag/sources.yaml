@@ -1,0 +1,65 @@
+sitemap_url: https://www.raiffeisen.ro/ro/sitemap.xml
+page_allow:
+  - ^https://www\.raiffeisen\.ro/ro/persoane-fizice/produsele-noastre/credite/.*\.html$
+  - ^https://www\.raiffeisen\.ro/ro/persoane-fizice/produsele-noastre/carduri/.*credit.*\.html$
+  - ^https://www\.raiffeisen\.ro/ro/aplica/restructurare-credit\.html$
+  - ^https://www\.raiffeisen\.ro/ro/persoane-fizice/in-sprijinul-tau/tine-ti-ratele-sub-control\.html$
+  - ^https://www\.raiffeisen\.ro/ro/persoane-fizice/in-sprijinul-tau/informatii-utile/.*\.html$
+  - ^https://www\.raiffeisen\.ro/ro/.*despre-bani-1-la-1/.*(credit|rata|rate|dobanda|refinant|ipotec|imobiliar|dae|ircc|imprumut).*\.html$
+pdf_allow:
+  - ^https://www\.raiffeisen\.ro/content/dam/rbi/retail/eu/ro/documents/(costuri|pf/credite|pf/tarife-comisioane-standard-pf|conditii-general-bancare-pf)/.*
+  - ^https://www\.raiffeisen\.ro/content/dam/rbi/retail/eu/ro/documents/pf/tarife-comisioane-standard-pf\.sv\.pdf$
+discovery_seeds:
+  - https://www.raiffeisen.ro/ro/persoane-fizice/in-sprijinul-tau/documente.html
+extra_urls: []
+drop_headings: ["Când și de ce", "Cum obții", "Calculează rata", "Ce spun clienții", "gândit pentru tine",
+                "Articole utile", "Descoperă mai multe", "Motive în plus", "Lasă-ne datele"]
+category_hubs:
+  - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite.html
+  - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-de-nevoi-personale.html
+  - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-imobiliare.html
+  - https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credite-de-refinantare.html
+link_drop_patterns:
+  - "adjust\\.com|\\.adj\\.st|go\\.link"
+  - "/agentii|harta-agentiilor|locator|programare-online|rezerva"
+doc_kind_rules:
+  - {pattern: "/costuri/", value: cost_sheet}
+  - {pattern: "tarife-comisioane", value: fee_list}
+  - {pattern: "conditii-general-bancare", value: general_terms}
+  - {pattern: "\\.pdf", value: pdf_generic}
+  - {pattern: "intrebari-frecvente", value: faq_page}
+  - {pattern: "despre-bani-1-la-1/", value: article}
+  - {pattern: "/credite/credite-(de-nevoi-personale|imobiliare)/.+\\.html$", value: guide}
+product_rules:
+  - {pattern: "refinantare-garantat-cu-ipoteca|flexi-integral", products: [refinancing_mortgage]}
+  - {pattern: "refinantare", products: [refinancing_unsecured]}
+  - {pattern: "casa-ta-verde", products: [mortgage_casa_ta_verde]}
+  - {pattern: "casa-ta", products: [mortgage_casa_ta]}
+  - {pattern: "noua-casa", products: [mortgage_noua_casa]}
+  - {pattern: "proiecte-rezidentiale", products: [mortgage_residential_projects]}
+  - {pattern: "overdraft", products: [overdraft]}
+  - {pattern: "card", products: [credit_card]}
+  - {pattern: "nevoi-personale|flexicredit", products: [personal_loan]}
+  - {pattern: "credite-imobiliare|/ipotecare/", products: [mortgage_casa_ta, mortgage_casa_ta_verde, mortgage_noua_casa, mortgage_residential_projects]}
+topic_keyword_rules:
+  - {pattern: "rambursa\\w* anticipat|plata anticipat", topic: early_repayment}
+  - {pattern: "refinant", topic: refinancing}
+  - {pattern: "restructur|dificult|amanare|amânare|suspendare|darea in plata", topic: restructuring_difficulty}
+  - {pattern: "ircc|robor|dobanda variabil|marja", topic: variable_rate_ircc}
+  - {pattern: "rate (egale|descrescatoare)|modalitat\\w* de rambursare", topic: repayment_methods}
+  - {pattern: "acte|documente necesare|documente solicitate|adeverint", topic: required_documents}
+  - {pattern: "conditii|eligibil|varsta|venit minim|vechime", topic: eligibility}
+  - {pattern: "dae|dobanda|comision|costuri|tarif", topic: costs_fees}
+general_terms_sections: {"1": other, "1.6": aml, "2.1": data_protection, "2.2": data_protection,
+                         "2.3": general_terms_credit, "3": accounts, "3.4": general_terms_credit,
+                         "3.5": general_terms_credit, "4": payments, "5": cards, "6": other,
+                         "7": payments, "8": general_terms_credit}
+fee_list_sections:
+  - {pattern: "card\\w* de credit", topic: costs_fees, products: [credit_card]}
+  - {pattern: "card", topic: cards, products: [general]}
+  - {pattern: "incasar|transfer|plat|compensare|electronic banking|debitare", topic: payments, products: [general]}
+  - {pattern: "cont|economii", topic: accounts, products: [general]}
+  - {pattern: "alte servicii", topic: other, products: [general]}
+default_topic_by_doc_kind: {product_page: credit_process, category_hub: credit_process, guide: credit_process, faq_page: credit_process,
+                            article: credit_process, cost_sheet: costs_fees, pdf_generic: credit_process,
+                            fee_list: other, general_terms: other}

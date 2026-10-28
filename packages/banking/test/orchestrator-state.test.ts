@@ -9,6 +9,8 @@ import {
   canConfirm,
   hasCustomerMessages,
   storageKey,
+  shouldStartFresh,
+  isValidCustomerId,
   type ChatState,
   type ChatEntry,
 } from "../src/orchestrator-state";
@@ -115,14 +117,7 @@ describe("orchestrator-state", () => {
           session_id: "sess-123",
           turn_id: "turn-2",
           session_version: 2,
-          messages: [
-            {
-              role: "assistant",
-              text: "How can I help?",
-              citations: [],
-              created_at: "2026-10-28T09:01:10Z",
-            },
-          ],
+          messages: [], // Contract: latest.messages is empty on GET
           awaiting: { kind: "text" },
           progress: { flow: "none", stage: null, steps: [] },
           blocks: [],
@@ -140,7 +135,45 @@ describe("orchestrator-state", () => {
       assert.equal(next.sessionId, "sess-123");
       assert.equal(next.customerId, "cust-002");
       assert.deepEqual(next.latest, view.latest);
-      assert.equal(next.entries.length, 3); // 2 from view.messages + 1 from latest.messages
+      assert.equal(next.entries.length, 2); // Only from view.messages
+    });
+
+    it("succeeded ignores stale responses from different session", () => {
+      const state: ChatState = {
+        ...initialChatState,
+        sessionId: "sess-123",
+        customerId: "cust-001",
+        pending: true,
+        entries: [
+          { id: "entry-1", role: "customer", text: "Hello", citations: [] },
+        ],
+      };
+
+      const staleResponse: TurnResponse = {
+        session_id: "sess-old",
+        turn_id: "turn-1",
+        session_version: 1,
+        messages: [
+          {
+            role: "assistant",
+            text: "Stale response",
+            citations: [],
+            created_at: "2026-10-28T10:00:00Z",
+          },
+        ],
+        awaiting: { kind: "text" },
+        progress: { flow: "none", stage: null, steps: [] },
+        blocks: [],
+        simulated: true,
+      };
+
+      const next = chatReducer(state, { type: "succeeded", response: staleResponse });
+
+      // State unchanged (response ignored)
+      assert.equal(next.sessionId, "sess-123");
+      assert.equal(next.entries.length, 1);
+      assert.equal(next.pending, true); // Still pending
+      assert.equal(next.latest, null);
     });
   });
 
@@ -298,6 +331,62 @@ describe("orchestrator-state", () => {
 
       assert.equal(next.pending, false);
       assert.deepEqual(next.error, error);
+    });
+  });
+
+  describe("shouldStartFresh", () => {
+    it("returns true for 404", () => {
+      const error = {
+        status: 404,
+        code: "not_found",
+        retryable: false,
+        message: "Not found",
+      } as OrchestratorError;
+      assert.equal(shouldStartFresh(error), true);
+    });
+
+    it("returns true for 403", () => {
+      const error = {
+        status: 403,
+        code: "forbidden",
+        retryable: false,
+        message: "Forbidden",
+      } as OrchestratorError;
+      assert.equal(shouldStartFresh(error), true);
+    });
+
+    it("returns false for 500", () => {
+      const error = {
+        status: 500,
+        code: "internal_error",
+        retryable: true,
+        message: "Server error",
+      } as OrchestratorError;
+      assert.equal(shouldStartFresh(error), false);
+    });
+
+    it("returns false for 0/unavailable", () => {
+      const error = {
+        status: 0,
+        code: "unavailable",
+        retryable: true,
+        message: "Service unavailable",
+      } as OrchestratorError;
+      assert.equal(shouldStartFresh(error), false);
+    });
+  });
+
+  describe("isValidCustomerId", () => {
+    it("returns true for synthetic customers", () => {
+      assert.equal(isValidCustomerId("cust-001"), true);
+      assert.equal(isValidCustomerId("cust-002"), true);
+      assert.equal(isValidCustomerId("cust-003"), true);
+    });
+
+    it("returns false for invalid customers", () => {
+      assert.equal(isValidCustomerId("cust-004"), false);
+      assert.equal(isValidCustomerId("invalid"), false);
+      assert.equal(isValidCustomerId(""), false);
     });
   });
 });

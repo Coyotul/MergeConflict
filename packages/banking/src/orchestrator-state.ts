@@ -90,12 +90,9 @@ export function chatReducer(state: ChatState, event: ChatEvent): ChatState {
       };
 
     case "resumed": {
-      // Build entries from both view.messages and view.latest.messages
-      const historicalEntries = event.view.messages.map((msg, i) =>
+      // Build entries from view.messages (contract: latest.messages is empty on GET)
+      const entries = event.view.messages.map((msg, i) =>
         messageViewToEntry(msg, i)
-      );
-      const latestEntries = event.view.latest.messages.map((msg, i) =>
-        messageViewToEntry(msg, historicalEntries.length + i)
       );
 
       return {
@@ -103,7 +100,7 @@ export function chatReducer(state: ChatState, event: ChatEvent): ChatState {
         sessionId: event.sessionId,
         customerId: event.customerId,
         latest: event.view.latest,
-        entries: [...historicalEntries, ...latestEntries],
+        entries,
         pending: false,
         error: null,
       };
@@ -126,6 +123,14 @@ export function chatReducer(state: ChatState, event: ChatEvent): ChatState {
     }
 
     case "succeeded": {
+      // Ignore responses from a different session (stale after restart)
+      if (
+        state.sessionId !== null &&
+        event.response.session_id !== state.sessionId
+      ) {
+        return state;
+      }
+
       // Append assistant messages from the response
       const newEntries = event.response.messages.map((msg, i) =>
         messageViewToEntry(msg, state.entries.length + i)
@@ -179,4 +184,12 @@ export function hasCustomerMessages(state: ChatState): boolean {
 
 export function storageKey(lumaCustomerId: string): string {
   return `luma-orchestrator-chat-v1-${lumaCustomerId}`;
+}
+
+export function shouldStartFresh(error: OrchestratorError): boolean {
+  return error.status === 404 || error.status === 403;
+}
+
+export function isValidCustomerId(customerId: string): boolean {
+  return (SYNTHETIC_CUSTOMERS as readonly string[]).includes(customerId);
 }

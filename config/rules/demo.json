@@ -1,0 +1,9 @@
+{
+  "version": "DEMO-2026.1",
+  "debtRatioThreshold": "40.00",
+  "earlyRepaymentFeePercent": "1.00",
+  "refinancingAnnualRate": "7.50",
+  "refinancingFee": "250.00",
+  "refinancingMinMonths": 6,
+  "refinancingMaxMonths": 60
+}

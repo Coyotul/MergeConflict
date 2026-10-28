@@ -1,0 +1,17 @@
+{
+  "accounts": [
+    {"actor": {"id": "customer-alex", "name": "Alex Morgan", "role": "customer"}, "email": "alex@example.test", "password": "ClientDemo123!"},
+    {"actor": {"id": "customer-blake", "name": "Blake Rivera", "role": "customer"}, "email": "blake@example.test", "password": "ClientDemo123!"},
+    {"actor": {"id": "reviewer-jamie", "name": "Jamie Carter", "role": "reviewer"}, "email": "jamie@example.test", "password": "AgentDemo123!"},
+    {"actor": {"id": "reviewer-taylor", "name": "Taylor Quinn", "role": "reviewer"}, "email": "taylor@example.test", "password": "AgentDemo123!"}
+  ],
+  "customers": [
+    {"id": "customer-alex", "name": "Alex Morgan", "email": "alex@example.test", "initials": "AM", "monthlyIncome": "8500.00", "monthlyExpenses": "3200.00", "balance": "12480.50", "employer": "Northstar Studio · fictional"},
+    {"id": "customer-blake", "name": "Blake Rivera", "email": "blake@example.test", "initials": "BR", "monthlyIncome": "4500.00", "monthlyExpenses": "2600.00", "balance": "7250.00", "employer": "Harbor Design · fictional"}
+  ],
+  "loans": [
+    {"id": "loan-personal", "customerId": "customer-alex", "name": "Personal loan", "principal": "24750.00", "originalAmount": "35000.00", "annualRate": "9.90", "remainingMonths": 36, "nextPaymentDate": "2026-11-10T00:00:00Z"},
+    {"id": "loan-car", "customerId": "customer-alex", "name": "Car loan", "principal": "12800.00", "originalAmount": "20000.00", "annualRate": "8.40", "remainingMonths": 24, "nextPaymentDate": "2026-11-10T00:00:00Z"}
+  ],
+  "defaultReviewerId": "reviewer-jamie"
+}

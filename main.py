@@ -1,10 +1,20 @@
-import sys
+"""Run the loopback-only synthetic FastAPI backend with the existing .venv."""
+
+import logging
+
+import uvicorn
+
+from src.api.gateway.app import create_app
+from src.core.settings import Settings
+
+
+app = create_app()
 
 
 def main():
-    print("[OK] Virtual environment activat cu succes!")
-    print(f"Python interpreter: {sys.executable}")
-    print(f"Python version: {sys.version.split()[0]}")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    settings = Settings.from_environment()
+    uvicorn.run(app, host=settings.host, port=settings.port, access_log=False)
 
 
 if __name__ == "__main__":

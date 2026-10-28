@@ -1,0 +1,29 @@
+{
+  "version": "DEMO-2026.1",
+  "products": [
+    {
+      "id": "personal", "name": "Personal loan",
+      "description": "A little room for your next big idea. Synthetic product only.",
+      "annualRate": "8.90", "fee": "150.00", "monthlyInsurance": "0.00",
+      "minAmount": "5000.00", "maxAmount": "100000.00", "minMonths": 6, "maxMonths": 60,
+      "policyId": "personal-policy", "policyVersion": "DEMO-2026.1",
+      "requiredDocuments": ["identity", "income"]
+    },
+    {
+      "id": "mortgage", "name": "Mortgage",
+      "description": "Illustrative mortgage; valuation and down-payment rules are not implemented.",
+      "annualRate": "6.50", "fee": "1000.00", "monthlyInsurance": "35.00",
+      "minAmount": "100000.00", "maxAmount": "1500000.00", "minMonths": 60, "maxMonths": 360,
+      "policyId": "mortgage-policy", "policyVersion": "DEMO-2026.1",
+      "requiredDocuments": ["identity", "income"]
+    },
+    {
+      "id": "car", "name": "Car loan",
+      "description": "Illustrative car-loan product. No real bank quotation.",
+      "annualRate": "7.90", "fee": "300.00", "monthlyInsurance": "15.00",
+      "minAmount": "10000.00", "maxAmount": "200000.00", "minMonths": 12, "maxMonths": 84,
+      "policyId": "car-policy", "policyVersion": "DEMO-2026.1",
+      "requiredDocuments": ["identity", "income"]
+    }
+  ]
+}

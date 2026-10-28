@@ -1,0 +1,32 @@
+{
+  "sources": [
+    {
+      "id": "personal-policy", "productId": "personal",
+      "title": "Personal loan · synthetic product guide", "version": "DEMO-2026.1",
+      "effectiveDate": "2026-10-01", "section": "§2 Pricing and §3 evidence",
+      "content": "Fictional personal loan: fixed nominal annual interest 8.90%, one-off fee 150.00 RON, no monthly insurance. Amount 5000.00–100000.00 RON, duration 6–60 months. Identity and income document metadata are required; a reviewer may request a statement. Explicit customer submission and an independent human decision are mandatory. No real credit approval, signing or funding occurs."
+    },
+    {
+      "id": "mortgage-policy", "productId": "mortgage",
+      "title": "Mortgage · synthetic product guide", "version": "DEMO-2026.1",
+      "effectiveDate": "2026-10-01", "section": "§2 Illustrative mortgage pricing",
+      "content": "Fictional mortgage: fixed nominal annual interest 6.50%, one-off fee 1000.00 RON, monthly insurance 35.00 RON. Amount 100000.00–1500000.00 RON, duration 60–360 months. Identity and income metadata and independent human review are required. Property valuation, down-payment and actual bank mortgage rules are NOT implemented. All results are illustrative only."
+    },
+    {
+      "id": "car-policy", "productId": "car",
+      "title": "Car loan · synthetic product guide", "version": "DEMO-2026.1",
+      "effectiveDate": "2026-10-01", "section": "§2 Illustrative car-loan pricing",
+      "content": "Fictional car loan: fixed nominal annual interest 7.90%, one-off fee 300.00 RON, monthly insurance 15.00 RON. Amount 10000.00–200000.00 RON, duration 12–84 months. Identity and income document metadata are required. Explicit submission and assigned human review are mandatory. No real bank offer or financial operation occurs."
+    },
+    {
+      "id": "eligibility-policy", "title": "Preliminary affordability · synthetic rule",
+      "version": "DEMO-2026.1", "effectiveDate": "2026-10-01", "section": "§1 Debt-to-income",
+      "content": "Demo debt-to-income threshold is 40.00% of synthetic monthly income. Include existing synthetic installments and the proposed installment and insurance. A threshold breach requires manual review; it is not a final credit rejection. Income, identity, age and bureau information are not externally verified. Every new credit application requires human review irrespective of this preliminary result."
+    },
+    {
+      "id": "repayment-policy", "title": "Early repayment and refinancing · demo assumptions",
+      "version": "DEMO-2026.1", "effectiveDate": "2026-10-01", "section": "§4 Indicative comparisons",
+      "content": "Partial early repayment uses a fictional 1.00% fee and a fixed nominal rate. Compare a lower monthly payment with a shorter term. Refinancing uses a fictional 7.50% annual nominal rate, a 250.00 RON fee and a 6–60 month term. A longer term may increase total repayment despite reducing monthly payments. Outstanding principal is NOT an authoritative settlement amount. Full payoff, payment execution, signing, disbursement and debt closure are unavailable."
+    }
+  ]
+}

@@ -5,7 +5,11 @@ AI platform for the full credit lifecycle. The earlier banking diagram remains
 the component baseline, extended below for servicing, refinancing and assistance.
 Use a Python 3.11+/FastAPI modular monolith with separate Next.js customer and staff
 interfaces. Backend folders are logical modules, not individual microservices.
-No service behavior or frontend application is implemented yet.
+The local Next.js prototype and a separate synthetic FastAPI capability API are
+implemented. The frontend still uses its temporary Node adapter; the Python
+orchestrator, live banking integrations and remaining scaffold capabilities are
+not implemented. See ADR 005 and `contracts/http/backend-v1.md` for current backend
+behavior and the integration boundary.
 
 ## Repository layout
 
@@ -147,9 +151,14 @@ MergeConflict/
 | Application recovery | `src/services/application_recovery/` | Correct missing evidence, explain recorded reasons and coordinate authorized follow-ups. |
 | Contract explanation | `src/services/contracts/`, `src/services/retrieval/` | Extract terms and explain clauses with citations; keep explanation separate from signature execution. |
 
-These folders are implementation locations, not completed features. Refinancing,
-repayment, restructuring and recovery have specialized workflows owned by
-`src/services/workflow/`, rather than one forced origination sequence.
+These folders define ownership, not blanket completion claims. Current Python
+services implement synthetic profile access, separate conversation context,
+keyword policy search, document metadata validation, preliminary affordability,
+Decimal pricing/repayment/refinancing simulations, persistent origination,
+assigned human review, notifications and audit. OCR, semantic RAG, verified banking
+data, administration, insights, restructuring/recovery and signing/settlement
+remain unimplemented. Refinancing and repayment currently simulate only; future
+execution requires specialized workflows rather than forcing origination states.
 
 ## Component boundaries
 
@@ -207,16 +216,22 @@ repayment, restructuring and recovery have specialized workflows owned by
   volumes, applicant files or vector-index snapshots.
 - Add unit tests for deterministic rules, integration tests for adapters, contract
   tests for wire formats and end-to-end tests for workflow/review journeys as
-  capabilities are implemented. Current test folders are placeholders.
+  capabilities are implemented. Python unit/integration/contract tests and the
+  frontend's existing domain/API/browser tests now exercise synthetic behavior.
 
 ## Technology direction and persistence
 
 The specification selects FastAPI and recommends Next.js/React/TypeScript with
 Tailwind CSS for the interfaces. PostgreSQL is the database direction, preferably
 via Supabase, with pgvector and Supabase Storage as initial candidates. Model
-providers and banking APIs remain behind adapters. No packages or cloud resources
-are provisioned by this scaffold; hosting/free-tier availability is not verified
-here. Verify current provider documentation when selecting or deploying services.
+providers and banking APIs remain behind adapters. Core backend packages are pinned
+in requirements; no cloud resources are provisioned and hosting/free-tier
+availability is not verified. The local
+backend deliberately uses standard-library SQLite with SQL migration, owner and
+assignment indexes, foreign keys, typed aggregates and atomic workflow/audit/
+notification/idempotency transactions (ADR 005). This is local synthetic storage,
+not deployed cloud persistence or production authentication. Verify current
+provider documentation when selecting or deploying services.
 
 Application records, review decisions, status history, consents, conversations,
 notifications and knowledge versions need durable storage. The conceptual entity

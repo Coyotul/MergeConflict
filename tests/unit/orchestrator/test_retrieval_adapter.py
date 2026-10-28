@@ -455,15 +455,27 @@ def test_build_policy_search_stub_mode():
 
 
 def test_rag_policy_search_has_no_simulated_attribute():
-    """Test that RagPolicySearch does not have a simulated attribute."""
+    """Test that RagPolicySearch does not have a simulated attribute and passes results through."""
+    from src.agent.tools.retrieval import RagPolicySearch
+
     # Create a mock RetrievalService
     mock_service = Mock()
-    mock_service.search.return_value = SearchResult(
+    expected_result = SearchResult(
         status=SearchStatus.insufficient_evidence,
         passages=[]
     )
+    mock_service.search.return_value = expected_result
 
-    # We need to test RagPolicySearch directly, but it will be created in retrieval.py
-    # For now, we'll check via build_policy_search with a monkeypatch
-    # This test will pass once we implement RagPolicySearch correctly
-    pass
+    # Create RagPolicySearch
+    search = RagPolicySearch(mock_service)
+
+    # Assert no simulated attribute (getattr returns False as default)
+    assert getattr(search, "simulated", False) is False
+    assert not hasattr(search, "simulated")
+
+    # Assert results pass through unchanged
+    query = SearchQuery(text="test query")
+    result = search.search(query)
+
+    assert result is expected_result  # Same object reference
+    mock_service.search.assert_called_once_with(query)

@@ -27,6 +27,9 @@ python main.py
 UI. No additional framework or infrastructure dependencies are needed to inspect
 or extend the scaffold.
 
+Local knowledge base: to build and query the local RAG index over Raiffeisen's public
+credit documentation, follow [docs/runbooks/rag-local.md](docs/runbooks/rag-local.md).
+
 ## Where to start
 
 - `apps/customer/`, `apps/staff/`: planned Next.js/React/TypeScript interfaces.

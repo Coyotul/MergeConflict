@@ -29,14 +29,21 @@ def parse_document(doc_kind: DocKind, data: bytes, url: str, cfg: SourceConfig) 
     if doc_kind in html_kinds:
         return parse_html_page(data, url, cfg)
 
-    # PDF kinds (not yet implemented)
+    # PDF kinds
+    if doc_kind == DocKind.fee_list:
+        from src.services.document_ingestion.parsers.fee_list import parse_fee_list
+        return parse_fee_list(data)
+
+    if doc_kind == DocKind.general_terms:
+        from src.services.document_ingestion.parsers.general_terms import parse_general_terms
+        return parse_general_terms(data)
+
+    # PDF kinds not yet implemented
     pdf_kinds = {
-        DocKind.fee_list,
-        DocKind.general_terms,
         DocKind.cost_sheet,
         DocKind.pdf_generic,
     }
     if doc_kind in pdf_kinds:
-        raise NotImplementedError(f"PDF parsing for {doc_kind} comes in Tasks 5-6")
+        raise NotImplementedError(f"PDF parsing for {doc_kind} comes in Task 6")
 
     raise ValueError(f"Unknown doc_kind: {doc_kind}")

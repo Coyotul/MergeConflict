@@ -3,6 +3,7 @@ import logging
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -54,6 +55,15 @@ def create_app(
         title="Credit Assistant API",
         version="1.0.0",
         description="AI-powered credit application assistant"
+    )
+
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "X-Customer-Id"],
+        allow_credentials=False,
     )
 
     # Document storage

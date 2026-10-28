@@ -85,6 +85,20 @@ def test_system_prompt_rules_present():
     # Must never promise approval
     assert "approved" in p.lower() or "approval" in p.lower()
 
+    # Review finding 1: Tool restrictions
+    assert "CONTEXT_JSON.tools" in p
+    assert "submit_application" in p
+    assert "process_document" in p
+    assert "get_product_requirements" in p
+    assert "create_loan_application" in p
+
+    # Review finding 2: Attribution and Raiffeisen disclaimer
+    assert "publisher" in p.lower()
+    assert "never present yourself as Raiffeisen" in p or "Never present yourself as Raiffeisen" in p
+
+    # Review finding 3: Exact simulation phrase
+    assert "simulated, based on public conditions" in p
+
 
 def test_last_message_is_context_json():
     """build_messages returns list with final system message containing CONTEXT_JSON."""

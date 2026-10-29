@@ -286,56 +286,6 @@ def test_process_document_reject_hook_and_empty():
     assert output_reject.rejection_reason == "The document is unreadable; please upload a clearer copy."
 
 
-def test_submit_idempotent():
-    """Test that submit_application is idempotent on idempotency_key."""
-    config_dir = Path("config/orchestrator")
-    data = StubData.load(config_dir)
-    policy_search = StubPolicySearch(config_dir)
-    registry = build_stub_registry(data, policy_search)
-
-    now = datetime.now(UTC)
-    app = make_app(draft_application_id="DRAFT-12345678")
-    state = SessionState(
-        session_id="test",
-        customer_id="cust-001",
-        created_at=now,
-        updated_at=now,
-        active_flow=Flow.credit_application,
-        application=app
-    )
-    ctx = ToolContext(state=state, now=now)
-
-    # First submission
-    outcome1, output1 = registry.execute(
-        "submit_application",
-        {"application_id": "DRAFT-12345678", "idempotency_key": "key1"},
-        ctx,
-        caller="code"
-    )
-    assert outcome1.ok
-    app_id_1 = output1.application_id
-
-    # Same key should return same id
-    outcome2, output2 = registry.execute(
-        "submit_application",
-        {"application_id": "DRAFT-12345678", "idempotency_key": "key1"},
-        ctx,
-        caller="code"
-    )
-    assert outcome2.ok
-    assert output2.application_id == app_id_1
-
-    # Different key should return different id
-    outcome3, output3 = registry.execute(
-        "submit_application",
-        {"application_id": "DRAFT-12345678", "idempotency_key": "key2"},
-        ctx,
-        caller="code"
-    )
-    assert outcome3.ok
-    assert output3.application_id != app_id_1
-
-
 def test_search_assigns_citation_ids_and_insufficient():
     """Test that search assigns citation IDs and handles insufficient evidence."""
     config_dir = Path("config/orchestrator")

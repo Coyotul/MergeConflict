@@ -22,6 +22,7 @@ from src.services.conversations.store import (
 from src.services.conversations.postgres_store import PostgresSessionStore
 from src.services.document_processing.service import DocumentProcessingService
 from src.storage.secure_documents.store import SecureDocumentStore
+from src.services.human_review.store import ReviewStore
 
 
 def build_chat_model(settings: OrchestratorSettings) -> ChatModel:
@@ -86,6 +87,7 @@ def build_orchestrator(
     store: SessionStore | None = None,
 tracer: Tracer | None = None,
     documents: SecureDocumentStore | None = None,
+    review_store: ReviewStore | None = None,
     clock: Callable[[], datetime] = utcnow,
 ) -> Orchestrator:
     """Build an orchestrator with all dependencies.
@@ -120,6 +122,7 @@ tracer: Optional pre-built tracer (for testing)
         documents = SecureDocumentStore(settings.uploads_dir, max_file_size_bytes=settings.max_upload_bytes)
     registry = build_stub_registry(
         stub_data, policy_search, document_service=DocumentProcessingService(documents),
+        review_store=review_store or ReviewStore(settings.review_db_path),
     )
 
     return Orchestrator(

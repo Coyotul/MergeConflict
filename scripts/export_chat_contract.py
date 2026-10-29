@@ -192,7 +192,8 @@ def _scratch_dir() -> Path:
 def mock_settings(uploads_dir: Path) -> OrchestratorSettings:
     """Mock-mode settings built explicitly: the export never reads .env."""
     return OrchestratorSettings(
-        model="fake", session_store="memory", uploads_dir=uploads_dir, config_dir=REPO_ROOT / "config" / "orchestrator"
+        model="fake", session_store="memory", uploads_dir=uploads_dir, config_dir=REPO_ROOT / "config" / "orchestrator",
+        review_db_path=uploads_dir.parent / "applications.sqlite3",
     )
 
 

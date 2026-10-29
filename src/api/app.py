@@ -25,6 +25,7 @@ from src.core.settings import OrchestratorSettings, load_orchestrator_settings
 from src.models.chat import ErrorBody
 from src.services.document_processing.service import DocumentProcessingService
 from src.storage.secure_documents.store import SecureDocumentStore
+from src.services.human_review.store import ReviewStore
 
 
 logger = logging.getLogger("src.api")
@@ -63,9 +64,11 @@ def create_app(
     # Share the same owner-bound storage between uploads and OCR/verification tools.
     documents = SecureDocumentStore(settings.uploads_dir, max_file_size_bytes=settings.max_upload_bytes)
 
+    review_store = ReviewStore(settings.review_db_path)
+
     # Build orchestrator if not provided
     if orchestrator is None:
-        orchestrator = build_orchestrator(settings, documents=documents)
+        orchestrator = build_orchestrator(settings, documents=documents, review_store=review_store)
     else:
         orchestrator.configure_document_tools(
             DocumentProcessingService(documents), StubData.load(settings.config_dir).customers,
@@ -88,6 +91,7 @@ def create_app(
     )
 
     app.state.documents = documents
+    app.state.review_store = review_store
     app.state.orchestrator = orchestrator
 
     # Register chat router

@@ -87,6 +87,7 @@ class OrchestratorSettings(BaseModel):
     session_store: Literal["memory", "file", "postgres"] = "file"
     sessions_dir: Path = Path("data/local/sessions")
     uploads_dir: Path = Path("data/local/uploads")
+    review_db_path: Path = Path("data/local/applications.sqlite3")
     max_upload_bytes: int = Field(default=10485760, gt=0)
     config_dir: Path = Path("config/orchestrator")
     retrieval: Literal["stub", "rag"] = "stub"
@@ -147,7 +148,7 @@ def load_orchestrator_settings(env: Mapping[str, str] | None = None) -> Orchestr
         kwargs["json_mode"] = val in ("true", "1")
 
     # Path fields
-    for field in ["sessions_dir", "uploads_dir", "config_dir", "traces_dir"]:
+    for field in ["sessions_dir", "uploads_dir", "config_dir", "traces_dir", "review_db_path"]:
         key = f"ORCHESTRATOR_{field.upper()}"
         if key in env:
             kwargs[field] = Path(env[key])

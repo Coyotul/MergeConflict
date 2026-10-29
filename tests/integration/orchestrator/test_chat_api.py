@@ -8,6 +8,8 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
+from src.services.human_review.store import ReviewStore
 from fastapi.testclient import TestClient
 
 from src.agent.orchestration.orchestrator import Orchestrator
@@ -68,11 +70,11 @@ def store():
 
 
 @pytest.fixture
-def orchestrator(config_dir, fake_model, store):
+def orchestrator(config_dir, fake_model, store, tmp_path):
     """Create an orchestrator with in-memory store for testing."""
     stub_data = StubData.load(config_dir)
     policy_search = StubPolicySearch(config_dir)
-    registry = build_stub_registry(stub_data, policy_search)
+    registry = build_stub_registry(stub_data, policy_search, review_store=ReviewStore(tmp_path / "applications.sqlite3"))
     catalog_codes = list(stub_data.products.keys())
 
     return Orchestrator(

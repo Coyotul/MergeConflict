@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from src.api.app import create_app
 from src.core.settings import OrchestratorSettings
+from tests.fixtures.documents import document_bytes, pdf_bytes
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = REPO_ROOT / "config" / "orchestrator"
@@ -33,9 +34,16 @@ def make_settings(work_dir: Path) -> OrchestratorSettings:
     )
 
 
+def make_app(work_dir):
+    from datetime import datetime, UTC
+    app = create_app(make_settings(work_dir))
+    app.state.orchestrator._clock = lambda: datetime(2026, 10, 28, 12, tzinfo=UTC)
+    return app
+
+
 @pytest.fixture
 def client(work_dir):
-    return TestClient(create_app(make_settings(work_dir)))
+    return TestClient(make_app(work_dir))
 
 
 class Chat:
@@ -61,8 +69,8 @@ class Chat:
             f"/chat/sessions/{self.session_id}/messages", json={"text": text}, headers=self.headers
         ))
 
-    def upload(self, doc_type: str, filename: str | None = None) -> dict:
-        files = {"file": (filename or f"{doc_type}.pdf", io.BytesIO(b"%PDF-1.4 synthetic"), "application/pdf")}
+    def upload(self, doc_type: str, filename: str | None = None, *, content: bytes | None = None) -> dict:
+        files = {"file": (filename or f"{doc_type}.pdf", io.BytesIO(document_bytes(doc_type) if content is None else content), "application/pdf")}
         return self._ok(self.client.post(
             f"/chat/sessions/{self.session_id}/documents",
             data={"doc_type": doc_type}, files=files, headers=self.headers,
@@ -183,12 +191,12 @@ def test_product_question_has_citations(client):
 
 
 def test_resume_after_restart(work_dir):
-    first = TestClient(create_app(make_settings(work_dir)))
+    first = TestClient(make_app(work_dir))
     chat = Chat(first, "cust-001")
     answer_discovery(chat)
     before = chat.view()
 
-    restarted = TestClient(create_app(make_settings(work_dir)))
+    restarted = TestClient(make_app(work_dir))
     chat.client = restarted
     after = chat.view()
     assert stage(after["latest"]) == stage(before["latest"]) == "collecting_information"
@@ -216,7 +224,7 @@ def test_side_question_mid_application(client):
 def test_rejected_upload_asks_again(client):
     chat = Chat(client, "cust-001")
     answer_discovery(chat)
-    body = chat.upload("id_card", filename="reject_id.pdf")
+    body = chat.upload("id_card", filename="unreadable.pdf", content=pdf_bytes("Unreadable identity document"))
     checklist = {i["doc_type"]: i for i in block(body, "document_checklist")["items"]}
     assert checklist["id_card"]["status"] == "rejected"
     assert checklist["id_card"]["rejection_reason"] in body["messages"][-1]["text"]

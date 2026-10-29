@@ -21,6 +21,7 @@ from src.parsers.validation.document_validator import DocumentValidator
 from src.parsers.validation.iban_validator import validate_iban
 from src.services.document_processing.service import DocumentProcessingService
 from src.storage.secure_documents.store import SecureDocumentStore
+from tests.fixtures.documents import pdf_bytes
 
 
 class DocumentProcessingPipelineTests(unittest.TestCase):
@@ -159,7 +160,7 @@ class DocumentProcessingPipelineTests(unittest.TestCase):
     def test_secure_document_store_integrity_and_tampering(self) -> None:
         with TemporaryDirectory() as tmpdir:
             store = SecureDocumentStore(root_dir=Path(tmpdir))
-            sample_bytes = b"%PDF-1.4 synthetic content test"
+            sample_bytes = pdf_bytes("Synthetic storage integrity test")
 
             record = store.store_document(
                 customer_id="cust-123",
@@ -226,6 +227,7 @@ class DocumentProcessingPipelineTests(unittest.TestCase):
                 "application/pdf",
                 "alex_morgan",
                 DocumentKind.IDENTITY,
+                as_of=date(2026, 10, 28),
             )
             p_inc = svc.process_and_store(
                 folder / "adeverinta_venit_alex_morgan_demo_customer.pdf",
@@ -233,6 +235,7 @@ class DocumentProcessingPipelineTests(unittest.TestCase):
                 "application/pdf",
                 "alex_morgan",
                 DocumentKind.INCOME,
+                as_of=date(2026, 10, 28),
             )
             p_stmt = svc.process_and_store(
                 folder / "extras_cont_alex_morgan_demo_customer.pdf",
@@ -240,6 +243,7 @@ class DocumentProcessingPipelineTests(unittest.TestCase):
                 "application/pdf",
                 "alex_morgan",
                 DocumentKind.STATEMENT,
+                as_of=date(2026, 10, 28),
             )
 
             self.assertTrue(p_id.validation.valid)

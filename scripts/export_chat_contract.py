@@ -14,6 +14,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
+from datetime import datetime
 from uuid import uuid4
 
 import yaml
@@ -28,6 +29,7 @@ from src.api.app import create_app  # noqa: E402
 from src.core.composition import build_orchestrator  # noqa: E402
 from src.core.settings import OrchestratorSettings  # noqa: E402
 from src.integrations.llm.chat import FakeChatModel  # noqa: E402
+from tests.fixtures.documents import document_bytes  # noqa: E402
 
 CUSTOMER_ID = "cust-001"
 FIXED_TIME = "2026-10-28T09:00:00Z"
@@ -56,6 +58,7 @@ HAPPY_PATH: list[tuple[str, str | None]] = [
 def run_happy_path(client: TestClient, customer_id: str = CUSTOMER_ID) -> list[dict]:
     """Walk the mock-mode happy path; return every TurnResponse in order."""
     headers = {"X-Customer-Id": customer_id}
+    client.app.state.orchestrator._clock = lambda: datetime.fromisoformat(FIXED_TIME.replace("Z", "+00:00"))
 
     def ok(response, status: int = 200) -> dict:
         if response.status_code != status:
@@ -69,7 +72,7 @@ def run_happy_path(client: TestClient, customer_id: str = CUSTOMER_ID) -> list[d
         if kind == "say":
             r = client.post(f"{base}/messages", json={"text": arg}, headers=headers)
         elif kind == "upload":
-            files = {"file": (f"{arg}.pdf", io.BytesIO(b"%PDF-1.4 synthetic"), "application/pdf")}
+            files = {"file": (f"{arg}.pdf", io.BytesIO(document_bytes(arg)), "application/pdf")}
             r = client.post(f"{base}/documents", data={"doc_type": arg}, files=files, headers=headers)
         elif kind == "select_offer":
             offers = next(b for b in last["blocks"] if b["type"] == "offers")["offers"]

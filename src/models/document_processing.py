@@ -36,7 +36,7 @@ class ExtractedIdentity(BaseModel):
     expiry_date: Optional[date] = None
     mrz_line1: str = ""
     mrz_line2: str = ""
-    confidence_score: float = 1.0
+    confidence_score: float = Field(default=1.0, ge=0, le=1)
     raw_text: str = ""
 
 
@@ -54,7 +54,7 @@ class ExtractedIncome(BaseModel):
     average_net_income: float = 0.0
     salary_breakdown: List[Dict[str, Any]] = Field(default_factory=list)
     issue_date: Optional[date] = None
-    confidence_score: float = 1.0
+    confidence_score: float = Field(default=1.0, ge=0, le=1)
     raw_text: str = ""
 
 
@@ -69,9 +69,11 @@ class ExtractedStatement(BaseModel):
     closing_balance: float = 0.0
     total_credits: float = 0.0
     total_debits: float = 0.0
+    balance_fields_complete: bool = True
     transactions_count: int = 0
     detected_salary_deposit: Optional[float] = None
-    confidence_score: float = 1.0
+    existing_monthly_obligations: Optional[float] = None
+    confidence_score: float = Field(default=1.0, ge=0, le=1)
     raw_text: str = ""
 
 
@@ -100,6 +102,7 @@ class CrossDocumentValidationSummary(BaseModel):
     name_matched: bool = False
     cnp_matched: bool = False
     salary_verified_in_statement: bool = False
+    checks_performed: List[str] = Field(default_factory=list)
     reasons: List[str] = Field(default_factory=list)
 
 

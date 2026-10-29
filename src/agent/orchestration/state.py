@@ -4,11 +4,12 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.models.chat import CitationRef, ApplicationSummary
 from src.models.credit import EligibilityResult, LoanOffer, ProductRequirements
 from src.models.knowledge import Product
+from src.models.document_processing import CrossDocumentValidationSummary, DocumentValidationSummary
 
 
 class Flow(StrEnum):
@@ -74,7 +75,7 @@ class DocumentStatus(StrEnum):
 class ExtractedField(BaseModel):
     """A field extracted from a document."""
     value: str
-    confidence: float
+    confidence: float = Field(ge=0, le=1)
     location: str | None = None
 
 
@@ -87,6 +88,10 @@ class DocumentRecord(BaseModel):
     rejection_reason: str | None = None
     extracted_fields: dict[str, ExtractedField] = {}
     uploaded_at: datetime
+    human_review_required: bool = False
+    validation: DocumentValidationSummary | None = None
+    extracted_data: dict | None = None
+    sha256_hash: str | None = None
 
 
 class FieldConflict(BaseModel):
@@ -132,6 +137,8 @@ class ApplicationState(BaseModel):
     application_id: str | None = None
     submitted_at: datetime | None = None
     idempotency_key: str | None = None
+    document_verification: CrossDocumentValidationSummary | None = None
+    document_verification_complete: bool = False
 
 
 class SessionState(BaseModel):

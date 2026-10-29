@@ -83,13 +83,16 @@ def verify_single_file(
 
     print_banner(f"VERIFICARE FIȘIER: {file_path.name} ({declared_kind.value})")
     print(f"Dimensiune fișier: {file_path.stat().st_size:,} bytes")
-    print(f"Tip MIME: application/pdf")
+    mime_type = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(file_path.suffix.lower())
+    if mime_type is None:
+        raise ValueError("Only PDF, PNG, JPG and JPEG documents are supported.")
+    print(f"Tip MIME: {mime_type}")
 
     # Run processing
     result = service.process_and_store(
         content=file_path,
         filename=file_path.name,
-        mime_type="application/pdf",
+        mime_type=mime_type,
         customer_id=customer_id,
         declared_kind=declared_kind,
     )

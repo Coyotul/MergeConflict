@@ -160,7 +160,7 @@ def is_verified(app: ApplicationState, spec: FieldSpec) -> bool:
         return False
 
     doc = next((d for d in app.documents if d.document_id == field.document_id), None)
-    if doc is None or doc.status != DocumentStatus.accepted:
+    if doc is None or doc.status != DocumentStatus.accepted or doc.human_review_required:
         return False
 
     return True
@@ -178,11 +178,22 @@ def all_verified(app: ApplicationState) -> bool:
     if app.requirements is None:
         return False
 
+    if documents_require_review(app):
+        return False
+    if app.document_verification is not None and not app.document_verification_complete:
+        return False
+
     for spec in app.requirements.fields:
         if spec.required and not is_verified(app, spec):
             return False
 
     return True
+
+
+def documents_require_review(app: ApplicationState) -> bool:
+    return any(doc.human_review_required for doc in app.documents) or bool(
+        app.document_verification and app.document_verification.human_review_required
+    )
 
 
 def eligibility_current(app: ApplicationState) -> bool:
@@ -240,6 +251,10 @@ def next_needs(state: SessionState) -> list[Need]:
     if state.escalation is not None and app.application_id is None:
         needs.append(Need(kind=NeedKind.escalated))
         return needs  # Stop here per brief
+
+    if documents_require_review(app) and app.application_id is None:
+        reasons = app.document_verification.reasons if app.document_verification else []
+        return [Need(kind=NeedKind.manual_review, detail="; ".join(reasons) or "Document evidence requires human verification.")]
 
     # Group 2: Missing discovery fields
     for spec in DISCOVERY_FIELDS:
@@ -427,6 +442,9 @@ def can_run_eligibility(state: SessionState) -> str | None:
     if app.requirements is None:
         return "no product requirements"
 
+    if documents_require_review(app):
+        return "document evidence requires human review"
+
     # Check all required fields are present
     missing = []
     for spec in app.requirements.fields:
@@ -467,5 +485,15 @@ def can_calculate_offers(state: SessionState) -> str | None:
     # Must have verified inputs
     if not app.eligibility.verified_inputs:
         return "eligibility not run with verified inputs"
+
+    if documents_require_review(app):
+        return "document evidence requires human review"
+    if not all_verified(app):
+        return "document evidence is not fully verified and confirmed"
+    if app.requirements and any(
+        not any(doc.doc_type == req.doc_type and doc.status == DocumentStatus.accepted for doc in app.documents)
+        for req in app.requirements.documents
+    ):
+        return "required documents are not accepted"
 
     return None

@@ -6,12 +6,16 @@ for scanned raster PDFs and images, with auto-rotation handling for tilted/upsid
 
 import io
 from pathlib import Path
-from typing import Optional, Union
+import re
+from typing import Union
+import warnings
 import pypdf
+
+from src.storage.secure_documents.validation import MAX_PDF_PAGES, MAX_IMAGE_PIXELS
 
 
 class PdfExtractor:
-    """Extracts text content and metadata from PDF files with OCR text layer fallback."""
+    """Extract page text or OCR actual page images; metadata is never document evidence."""
 
     @classmethod
     def _ocr_image_bytes(cls, image_bytes: bytes) -> str:
@@ -19,52 +23,80 @@ class PdfExtractor:
         try:
             import winocr
             from PIL import Image
-        except ImportError:
-            return ""
+            from winrt.windows.media.ocr import OcrEngine
+        except ImportError as exc:
+            raise ValueError("Scanned documents require Windows OCR with Romanian or English language support.") from exc
 
         try:
-            img = Image.open(io.BytesIO(image_bytes))
-        except Exception:
-            return ""
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", Image.DecompressionBombWarning)
+                with Image.open(io.BytesIO(image_bytes)) as source:
+                    if source.width * source.height > MAX_IMAGE_PIXELS:
+                        raise ValueError("The scan exceeds the image processing limit.")
+                    img = source.convert("RGB")
+            max_dimension = OcrEngine.max_image_dimension
+            if max(img.size) > max_dimension:
+                img.thumbnail((max_dimension, max_dimension))
+        except Exception as exc:
+            raise ValueError("The scan could not be decoded safely.") from exc
 
         # First attempt: native orientation with Romanian OCR engine
         best_text = ""
+        def quality(text: str) -> tuple[int, int]:
+            # Upside-down OCR can produce many characters of gibberish. Banking
+            # labels are a better orientation signal than raw character count.
+            labels = re.findall(
+                r"\b(?:cnp|seria|nume|prenume|titular|venit|salariu|sold|total|iban|identity|income|statement)\b",
+                text.casefold(),
+            )
+            return len(set(labels)), len(text)
+
+        recognized = False
         for lang in ("ro-RO", "en-US"):
             try:
                 res = winocr.recognize_pil_sync(img, lang=lang)
+                recognized = True
                 lines = [l.get("text", "") for l in res.get("lines", []) if l.get("text")]
                 cand = "\n".join(lines).strip() if lines else (res.get("text") or "").strip()
-                if len(cand) > len(best_text):
+                if quality(cand) > quality(best_text):
                     best_text = cand
-                if len(best_text) > 40:
+                if quality(best_text)[0] >= 2:
                     break
             except Exception:
                 continue
 
-        # If detected text is sparse (< 120 characters), document might be rotated or taken at a diagonal angle
-        if len(best_text) < 120:
-            candidate_angles = [-15, 15, -30, 30, -45, 45, -10, 10, -5, 5, 90, 180, 270]
+        # Bounded rotation attempts, including long-but-unreadable upside-down scans.
+        if quality(best_text)[0] < 2:
+            candidate_angles = [90, 180, 270, -10, 10, -15, 15]
             for angle in candidate_angles:
                 try:
                     rotated = img.rotate(angle, expand=True, resample=Image.Resampling.BICUBIC)
-                    res = winocr.recognize_pil_sync(rotated, lang="ro-RO")
+                    if max(rotated.size) > max_dimension:
+                        rotated.thumbnail((max_dimension, max_dimension))
+                    lang = next((tag for tag in ("ro-RO", "en-US") if any(
+                        item.language_tag == tag for item in OcrEngine.available_recognizer_languages
+                    )), "en-US")
+                    res = winocr.recognize_pil_sync(rotated, lang=lang)
+                    recognized = True
                     lines = [l.get("text", "") for l in res.get("lines", []) if l.get("text")]
                     cand = "\n".join(lines).strip() if lines else (res.get("text") or "").strip()
-                    if len(cand) > len(best_text):
+                    if quality(cand) > quality(best_text):
                         best_text = cand
-                    if len(best_text) > 300:
+                    if quality(best_text)[0] >= 2:
                         break
                 except Exception:
                     continue
 
+        if not recognized:
+            raise ValueError("Windows OCR is unavailable or cannot read this scan.")
         return best_text
 
     @classmethod
     def extract_text(cls, source: Union[bytes, Path, io.BytesIO]) -> str:
         """Extract all textual content from a PDF input.
 
-        Checks vector text stream first; if page is scanned raster with no vector text,
-        runs OCR on embedded page images; falls back to embedded metadata layer.
+        Check every page independently so mixed text/scanned PDFs do not lose pages.
+        Never treat user-controlled PDF metadata as a trusted OCR transcript.
         """
         if isinstance(source, bytes):
             stream = io.BytesIO(source)
@@ -75,39 +107,22 @@ class PdfExtractor:
 
         try:
             reader = pypdf.PdfReader(stream)
+            if reader.is_encrypted or not 1 <= len(reader.pages) <= MAX_PDF_PAGES:
+                raise ValueError("Encrypted, empty or excessively long PDFs are not supported.")
             extracted_pages = []
 
             # 1. First, check native vector text stream
-            for idx, page in enumerate(reader.pages):
+            for page in reader.pages:
                 text = (page.extract_text() or "").strip()
+                if not text:
+                    if len(page.images) > 20:
+                        raise ValueError("The page exceeds the embedded-image processing limit.")
+                    text = "\n".join(cls._ocr_image_bytes(image.data) for image in page.images).strip()
                 if text:
                     extracted_pages.append(text)
-
-            combined_text = "\n\n".join(extracted_pages).strip()
-
-            # 2. If vector text is empty, run OCR on embedded page raster images (scanned / photo / diagonal)
-            if not combined_text:
-                img_texts = []
-                for page in reader.pages:
-                    if hasattr(page, "images") and len(page.images) > 0:
-                        for img in page.images:
-                            img_ocr = cls._ocr_image_bytes(img.data)
-                            if img_ocr:
-                                img_texts.append(img_ocr)
-                if img_texts:
-                    combined_text = "\n\n".join(img_texts).strip()
-
-            # 3. If OCR found no text, fallback to embedded metadata transcript layer (/Subject or /Description)
-            if not combined_text and reader.metadata:
-                subject = reader.metadata.subject or reader.metadata.get("/Subject")
-                if subject and str(subject).strip():
-                    return str(subject).strip()
-
-                desc = reader.metadata.get("/Description") or reader.metadata.get("/Keywords")
-                if desc and str(desc).strip():
-                    return str(desc).strip()
-
-            return combined_text
+                if sum(len(part) for part in extracted_pages) > 200_000:
+                    raise ValueError("The document exceeds the extracted-text processing limit.")
+            return "\n\n".join(extracted_pages).strip()
         except Exception as exc:
             raise ValueError(f"Failed to extract text from PDF: {exc}") from exc
         finally:

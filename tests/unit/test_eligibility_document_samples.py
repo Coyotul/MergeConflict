@@ -1,6 +1,7 @@
 """Unit tests verifying synthetic test documents for eligibility screening."""
 
 from pathlib import Path
+from datetime import date
 import unittest
 
 from src.models.document_processing import DocumentKind, DocumentProcessingStatus
@@ -23,6 +24,7 @@ class EligibilityDocumentSamplesTests(unittest.TestCase):
             mime_type="application/pdf",
             customer_id="victor-1830107000044",
             declared_kind=DocumentKind.INCOME,
+            as_of=date(2026, 10, 28),
         )
         self.assertEqual(res.status, DocumentProcessingStatus.REJECTED)
         self.assertFalse(res.validation.valid)
@@ -40,13 +42,14 @@ class EligibilityDocumentSamplesTests(unittest.TestCase):
             mime_type="application/pdf",
             customer_id="victor-1830107000044",
             declared_kind=DocumentKind.INCOME,
+            as_of=date(2026, 10, 28),
         )
         self.assertEqual(res.status, DocumentProcessingStatus.REJECTED)
         self.assertFalse(res.validation.valid)
         income = res.extracted_data.get("monthly_net_income", -1)
         self.assertEqual(income, 0.0)
 
-    def test_ok_income_anaf_certificate_validated(self):
+    def test_ok_income_anaf_certificate_requires_employment_seniority_review(self):
         pdf_path = self.base_dir / "02_ELIGIBIL_Venit_Optim" / "adeverinta_anaf_venit_ok.pdf"
         self.assertTrue(pdf_path.exists(), f"Fișierul lipsește: {pdf_path}")
 
@@ -56,9 +59,13 @@ class EligibilityDocumentSamplesTests(unittest.TestCase):
             mime_type="application/pdf",
             customer_id="alex-1920515410012",
             declared_kind=DocumentKind.INCOME,
+            as_of=date(2026, 10, 28),
         )
-        self.assertEqual(res.status, DocumentProcessingStatus.VALIDATED)
+        # The ANAF certificate provides income, but not an employment start date.
+        # Missing seniority evidence is not permission to invent established employment.
+        self.assertEqual(res.status, DocumentProcessingStatus.FLAGGED_FOR_HUMAN_REVIEW)
         self.assertTrue(res.validation.valid)
+        self.assertTrue(res.validation.human_review_required)
         self.assertEqual(res.validation.failed_rules_count, 0)
         income = res.extracted_data.get("monthly_net_income", 0.0)
         self.assertEqual(income, 8500.0)
@@ -73,6 +80,7 @@ class EligibilityDocumentSamplesTests(unittest.TestCase):
             mime_type="application/pdf",
             customer_id="alex-1920515410012",
             declared_kind=DocumentKind.INCOME,
+            as_of=date(2026, 10, 28),
         )
         self.assertEqual(res.status, DocumentProcessingStatus.VALIDATED)
         self.assertTrue(res.validation.valid)
@@ -89,6 +97,7 @@ class EligibilityDocumentSamplesTests(unittest.TestCase):
             mime_type="application/pdf",
             customer_id="maria-2850912000084",
             declared_kind=DocumentKind.INCOME,
+            as_of=date(2026, 10, 28),
         )
         self.assertEqual(res.status, DocumentProcessingStatus.REJECTED)
         self.assertFalse(res.validation.valid)

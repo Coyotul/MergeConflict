@@ -79,9 +79,9 @@
         {
           "field": "full_name",
           "label": "Full Name",
-          "value": "Ana Popescu",
+          "value": "ANA POPESCU",
           "source": "document",
-          "confidence": 0.95,
+          "confidence": 0.9,
           "needs_confirmation": false,
           "conflict_with": null
         },
@@ -90,7 +90,7 @@
           "label": "Age",
           "value": "34",
           "source": "document",
-          "confidence": 0.95,
+          "confidence": 0.9,
           "needs_confirmation": false,
           "conflict_with": null
         },
@@ -99,7 +99,7 @@
           "label": "Monthly Net Income",
           "value": "6200.00",
           "source": "document",
-          "confidence": 0.95,
+          "confidence": 1.0,
           "needs_confirmation": false,
           "conflict_with": null
         },
@@ -108,7 +108,7 @@
           "label": "Employer Name",
           "value": "TechCorp SRL",
           "source": "document",
-          "confidence": 0.95,
+          "confidence": 1.0,
           "needs_confirmation": false,
           "conflict_with": null
         },
@@ -117,7 +117,7 @@
           "label": "Existing Monthly Obligations",
           "value": "400.00",
           "source": "document",
-          "confidence": 0.95,
+          "confidence": 1.0,
           "needs_confirmation": false,
           "conflict_with": null
         }
@@ -142,7 +142,7 @@
       "type": "offers",
       "offers": [
         {
-          "offer_id": "personal_loan-60m-4bab7e",
+          "offer_id": "personal_loan-60m-abf629",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -175,7 +175,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-36m-4bab7e",
+          "offer_id": "personal_loan-36m-abf629",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -208,7 +208,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-48m-4bab7e",
+          "offer_id": "personal_loan-48m-abf629",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",

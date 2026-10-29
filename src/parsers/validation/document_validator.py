@@ -5,7 +5,10 @@ and cross-document reconciliation.
 """
 
 from datetime import date, timedelta
+from decimal import Decimal
+import re
 from typing import List, Optional
+import unicodedata
 
 from src.models.document_processing import (
     CrossDocumentValidationSummary,
@@ -28,6 +31,12 @@ MAX_CERTIFICATE_AGE_DAYS = 30
 MIN_EMPLOYMENT_SENIORITY_DAYS = 90  # Minim 3 luni la actualul angajator
 
 
+def normalized_name(name: str) -> tuple[str, ...]:
+    """Compare complete names, allowing accents, hyphens, spacing and reversed order."""
+    plain = "".join(c for c in unicodedata.normalize("NFKD", name.casefold()) if not unicodedata.combining(c))
+    return tuple(sorted(re.findall(r"[^\W\d_]+", plain)))
+
+
 class DocumentValidator:
     """Validates individual extracted documents and performs cross-document checks."""
 
@@ -40,7 +49,7 @@ class DocumentValidator:
     ) -> DocumentValidationSummary:
         """Validate an extracted Romanian Identity Card."""
         if as_of is None:
-            as_of = date(2026, 10, 28)
+            as_of = date.today()
 
         evaluations: List[RuleEvaluation] = []
 
@@ -140,7 +149,7 @@ class DocumentValidator:
     ) -> DocumentValidationSummary:
         """Validate an extracted Adeverință de Venit."""
         if as_of is None:
-            as_of = date(2026, 10, 28)
+            as_of = date.today()
 
         evaluations: List[RuleEvaluation] = []
 
@@ -181,15 +190,15 @@ class DocumentValidator:
             seniority_ok = seniority_days >= MIN_EMPLOYMENT_SENIORITY_DAYS
             detail = f"Seniority at employer: {seniority_days} days (~{seniority_days // 30} months)"
         else:
-            seniority_ok = True  # Warning rather than blocker if start date is implicit
-            detail = "Start date not explicitly specified; assumed established employment"
+            seniority_ok = False
+            detail = "Missing employment start date; seniority requires human verification"
 
         evaluations.append(
             RuleEvaluation(
                 code="INC_SENIORITY",
                 description=f"Minimum {MIN_EMPLOYMENT_SENIORITY_DAYS // 30} months seniority at current employer",
                 passed=seniority_ok,
-                severity="ERROR",
+                severity="ERROR" if data.employment_start_date else "WARNING",
                 detail=detail,
             )
         )
@@ -229,7 +238,7 @@ class DocumentValidator:
     ) -> DocumentValidationSummary:
         """Validate an extracted bank account statement (Extras de Cont)."""
         if as_of is None:
-            as_of = date(2026, 10, 28)
+            as_of = date.today()
 
         evaluations: List[RuleEvaluation] = []
 
@@ -246,14 +255,15 @@ class DocumentValidator:
         )
 
         # 2. Mathematical Balance Integrity
-        if data.initial_balance > 0 and (data.total_credits > 0 or data.total_debits > 0):
-            computed_final = data.initial_balance + data.total_credits - data.total_debits
-            diff = abs(computed_final - data.closing_balance)
-            integrity_ok = diff <= 1.0  # allow 1 RON rounding
-            detail = f"Initial ({data.initial_balance}) + Credits ({data.total_credits}) - Debits ({data.total_debits}) = {computed_final:.2f} (Reported: {data.closing_balance})"
-        else:
-            integrity_ok = True
-            detail = "Summary balance calculation verified"
+        evaluations.append(RuleEvaluation(
+            code="STMT_BALANCE_COMPLETENESS", description="All four balance summary amounts must be present",
+            passed=data.balance_fields_complete, severity="ERROR",
+            detail="Missing balance summary amounts must not be replaced with zero.",
+        ))
+        computed_final = Decimal(str(data.initial_balance)) + Decimal(str(data.total_credits)) - Decimal(str(data.total_debits))
+        diff = abs(computed_final - Decimal(str(data.closing_balance)))
+        integrity_ok = diff <= Decimal("1.00")
+        detail = f"Initial ({data.initial_balance}) + Credits ({data.total_credits}) - Debits ({data.total_debits}) = {computed_final:.2f} (Reported: {data.closing_balance})"
 
         evaluations.append(
             RuleEvaluation(
@@ -271,8 +281,8 @@ class DocumentValidator:
             recency_ok = 0 <= days_since <= 90
             detail = f"Statement period end: {data.period_end} ({days_since} days old)"
         else:
-            recency_ok = True
-            detail = "Period end date verified"
+            recency_ok = False
+            detail = "Missing statement period end date"
 
         evaluations.append(
             RuleEvaluation(
@@ -307,50 +317,44 @@ class DocumentValidator:
     ) -> CrossDocumentValidationSummary:
         """Cross-validate consistency across all provided applicant documents."""
         reasons: List[str] = []
-        name_matched = True
-        cnp_matched = True
-        salary_matched = True
+        checks: List[str] = []
+        names = []
+        if identity:
+            names.append(normalized_name(f"{identity.first_name} {identity.last_name}"))
+        if income:
+            names.append(normalized_name(income.employee_name))
+        if statement:
+            names.append(normalized_name(statement.account_holder))
+        name_matched = len(names) >= 2 and all(names) and len(set(names)) == 1
+        if len(names) >= 2:
+            checks.append("CROSS_NAME_MATCH")
+            if not name_matched:
+                reasons.append("Name mismatch or missing full name across the submitted documents.")
 
-        # Check Name consistency
-        if identity and income and income.employee_name:
-            id_first = identity.first_name.upper()
-            id_last = identity.last_name.upper()
-            inc_name = income.employee_name.upper()
+        cnp_matched = False
+        if identity and income:
+            checks.append("CROSS_CNP_MATCH")
+            cnp_matched = bool(identity.cnp and income.employee_cnp and identity.cnp == income.employee_cnp)
+            if not cnp_matched:
+                reasons.append("CNP mismatch or missing identifier across identity and income documents.")
 
-            if id_last not in inc_name and id_first not in inc_name:
-                name_matched = False
-                reasons.append(f"Name mismatch: ID Card states '{identity.first_name} {identity.last_name}', Income Certificate states '{income.employee_name}'.")
+        salary_matched = False
+        if income and statement:
+            checks.append("CROSS_SALARY_MATCH")
+            net = Decimal(str(income.monthly_net_income))
+            deposit = Decimal(str(statement.detected_salary_deposit or 0))
+            salary_matched = net > 0 and Decimal("0.75") * net <= deposit <= Decimal("1.25") * net
+            if not salary_matched:
+                reasons.append("Salary inflow mismatch or missing salary deposit evidence in the statement.")
 
-        if identity and statement and statement.account_holder:
-            id_last = identity.last_name.upper()
-            stmt_holder = statement.account_holder.upper()
-            if id_last not in stmt_holder:
-                name_matched = False
-                reasons.append(f"Name mismatch: ID Card states '{identity.last_name}', Bank Account Holder is '{statement.account_holder}'.")
-
-        # Check CNP consistency
-        if identity and income and income.employee_cnp:
-            if identity.cnp != income.employee_cnp:
-                cnp_matched = False
-                reasons.append(f"CNP mismatch: ID Card CNP '{identity.cnp}' != Income Certificate CNP '{income.employee_cnp}'.")
-
-        # Check Salary consistency
-        if income and statement and statement.detected_salary_deposit:
-            ratio = statement.detected_salary_deposit / (income.monthly_net_income or 1.0)
-            if not (0.75 <= ratio <= 1.25):
-                salary_matched = False
-                reasons.append(
-                    f"Salary inflow mismatch: Income certificate net ({income.monthly_net_income:,.2f} RON) "
-                    f"differs significantly from detected deposit ({statement.detected_salary_deposit:,.2f} RON)."
-                )
-
-        consistent = name_matched and cnp_matched and salary_matched
+        consistent = not reasons
         return CrossDocumentValidationSummary(
             consistent=consistent,
             human_review_required=not consistent,
             name_matched=name_matched,
             cnp_matched=cnp_matched,
             salary_verified_in_statement=salary_matched,
+            checks_performed=checks,
             reasons=reasons,
         )
 

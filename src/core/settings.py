@@ -79,7 +79,7 @@ class OrchestratorSettings(BaseModel):
     session_store: Literal["memory", "file", "postgres"] = "file"
     sessions_dir: Path = Path("data/local/sessions")
     uploads_dir: Path = Path("data/local/uploads")
-    max_upload_bytes: int = 10485760
+    max_upload_bytes: int = Field(default=10485760, gt=0)
     config_dir: Path = Path("config/orchestrator")
     retrieval: Literal["stub", "rag"] = "stub"
     database_url: str = "postgresql://rag:rag@127.0.0.1:5433/rag"

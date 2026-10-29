@@ -5,6 +5,7 @@ import re
 from typing import Optional
 
 from src.models.document_processing import ExtractedStatement
+from src.parsers.extraction.amounts import parse_document_amount
 
 
 def _parse_date_ro(d_str: str) -> Optional[date]:
@@ -18,18 +19,7 @@ def _parse_date_ro(d_str: str) -> Optional[date]:
 
 
 def _parse_money(val_str: str) -> float:
-    clean = val_str.replace(" ", "").replace("lei", "").replace("RON", "").replace("+", "").replace("-", "").strip()
-    if clean.count(".") >= 2 and "," not in clean:
-        clean = re.sub(r"\.(\d{2})$", r",\1", clean)
-    elif clean.count(".") == 1 and "," not in clean:
-        parts = clean.split(".")
-        if len(parts[1]) == 2:
-            clean = parts[0] + "," + parts[1]
-    clean = clean.replace(".", "").replace(",", ".")
-    try:
-        return float(clean)
-    except ValueError:
-        return 0.0
+    return parse_document_amount(val_str)
 
 
 class BankStatementExtractor:
@@ -76,7 +66,10 @@ class BankStatementExtractor:
             extracted.iban = raw_iban
 
         # 4. Currency
-        if "EUR" in text and "RON" not in text:
+        currency_match = re.search(r"(?:Moned[aă](?:\s+cont)?|Currency)[:\s]+([A-Z]{3})\b", text, re.IGNORECASE)
+        if currency_match:
+            extracted.currency = currency_match.group(1).upper()
+        elif "EUR" in text and "RON" not in text:
             extracted.currency = "EUR"
         else:
             extracted.currency = "RON"
@@ -103,25 +96,34 @@ class BankStatementExtractor:
         debits_match = re.search(r"(?:Total plăți|Total plati)[\s\S]{0,40}?-?([\d.,]+)\s*(?:RON|lei)?", text, re.IGNORECASE)
         if debits_match:
             extracted.total_debits = _parse_money(debits_match.group(1))
+        extracted.balance_fields_complete = all((init_match, final_match, credits_match, debits_match))
 
         # 7. Salary detection in transaction history
-        salary_match = re.search(r"(?:VIRAMENT SALARIU|salariu|drepturi salariale)[\s\S]{0,100}?\+([\d.,]+)\s*(?:lei|RON)?", text, re.IGNORECASE)
+        salary_match = re.search(
+            r"(?:VIRAMENT SALARIU|salariu|drepturi salariale)[: \t]*\+([\d.,]+)\s*(?:lei|RON)\b",
+            text, re.IGNORECASE,
+        )
         if salary_match:
             extracted.detected_salary_deposit = _parse_money(salary_match.group(1))
-        elif re.search(r"salari[u|al]|drepturi salariale|VIRAMENT", text, re.IGNORECASE):
-            pos_matches = re.findall(r"\+([\d.,]+)\s*(?:lei|RON)?", text)
-            if pos_matches:
-                sal_cands = [_parse_money(m) for m in pos_matches if _parse_money(m) >= 1500.0]
-                if sal_cands:
-                    extracted.detected_salary_deposit = sal_cands[0]
-            if not extracted.detected_salary_deposit and extracted.total_credits >= 1500.0:
-                extracted.detected_salary_deposit = extracted.total_credits
+        elif re.search(r"Tip Opera[tț]i\s*une[^\n]*\nVIRAMENT SALARIU\b", text, re.IGNORECASE):
+            # Column-oriented OCR: only the first ledger row, explicitly labelled
+            # salary, may be paired with the first amount in the amount column.
+            first_amount = re.search(r"Sum[aă]\s*\(RON\)\s*\n\+([\d.,]+)\s*(?:lei|RON)\b", text, re.IGNORECASE)
+            if first_amount:
+                extracted.detected_salary_deposit = _parse_money(first_amount.group(1))
+        # Generic transfers and total credits are not proof of a salary deposit.
 
-        # Double-entry balance reconciliation for OCR noise
-        if extracted.initial_balance > 0 and extracted.closing_balance > 0 and extracted.total_credits > 0:
-            expected_debits = round(extracted.initial_balance + extracted.total_credits - extracted.closing_balance, 2)
-            if expected_debits > 0 and abs(expected_debits - extracted.total_debits) > 1.0:
-                extracted.total_debits = expected_debits
+        # Never "repair" ledger evidence: inconsistent totals must fail validation.
+        # Only an explicit monthly debt total is evidence for the orchestrator's field.
+        # Spending totals or absence of loan rows cannot establish zero obligations.
+        obligations_match = re.search(
+            r"(?:Obliga[tț]ii lunare (?:credite existente|de credit)|"
+            r"Total rate lunare(?: credite)?|Existing monthly obligations)"
+            r"[ :\t]*([0-9][0-9., ]*)\s*(?:RON|lei)\b",
+            text, re.IGNORECASE,
+        )
+        if obligations_match:
+            extracted.existing_monthly_obligations = _parse_money(obligations_match.group(1))
 
         # 8. Transactions Count
         tx_count_match = re.search(r"Număr total operațiuni[^\d]*(\d+)", text, re.IGNORECASE)

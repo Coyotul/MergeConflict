@@ -1,10 +1,11 @@
 """Tool input and output contracts for the orchestrator."""
 from typing import Literal
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.agent.orchestration.state import ExtractedField
 from src.models.credit import CreditProduct, ProductRequirements, EligibilityResult, LoanOffer
 from src.models.knowledge import Product
+from src.models.document_processing import CrossDocumentValidationSummary, DocumentValidationSummary
 
 
 class PassageView(BaseModel):
@@ -77,10 +78,11 @@ class RunEligibilityInput(BaseModel):
 
 class ProcessDocumentInput(BaseModel):
     """Input for process_document tool."""
-    document_id: str
+    model_config = ConfigDict(extra="forbid")
+    document_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
     doc_type: str
     filename: str
-    size_bytes: int
+    size_bytes: int = Field(ge=0)
 
 
 class ProcessDocumentOutput(BaseModel):
@@ -89,6 +91,45 @@ class ProcessDocumentOutput(BaseModel):
     rejection_reason: str | None
     extracted_fields: dict[str, ExtractedField]
     simulated: bool = True
+    human_review_required: bool = False
+    validation: DocumentValidationSummary | None = None
+    extracted_data: dict | None = None
+    sha256_hash: str | None = None
+
+
+class VerifyDocumentsInput(BaseModel):
+    """Verify only documents in the caller's own application; IDs and paths are forbidden."""
+    model_config = ConfigDict(extra="forbid")
+
+
+class ReadDocumentExtractionInput(BaseModel):
+    """Inspect a document type in the current application, never a supplied file path."""
+    model_config = ConfigDict(extra="forbid")
+    doc_type: Literal["id_card", "payslip", "bank_statement"]
+
+
+class DocumentVerificationItem(BaseModel):
+    doc_type: str
+    status: Literal["accepted", "rejected", "missing"]
+    integrity_verified: bool = False
+    human_review_required: bool = False
+    rule_codes: list[str] = Field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
+    extracted_fields: dict[str, ExtractedField] = Field(default_factory=dict)
+
+
+class ReadDocumentExtractionOutput(BaseModel):
+    document: DocumentVerificationItem
+    simulated: bool = False
+
+
+class VerifyDocumentsOutput(BaseModel):
+    """Safe summaries only: no original text, file paths, CNPs or account numbers."""
+    documents: list[DocumentVerificationItem]
+    cross_validation: CrossDocumentValidationSummary
+    complete: bool
+    ready_for_application: bool
+    simulated: bool = False
 
 
 class CalculateOffersInput(BaseModel):
@@ -194,6 +235,11 @@ __all__ = [
     "EligibilityResult",
     "ProcessDocumentInput",
     "ProcessDocumentOutput",
+    "VerifyDocumentsInput",
+    "VerifyDocumentsOutput",
+    "DocumentVerificationItem",
+    "ReadDocumentExtractionInput",
+    "ReadDocumentExtractionOutput",
     "CalculateOffersInput",
     "CalculateOffersOutput",
     "CreateApplicationInput",

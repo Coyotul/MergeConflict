@@ -330,3 +330,29 @@ def test_links_normalizing_to_one_key_are_stored_once(db_conn):
     assert out is IngestOutcome.created, msgs
     rows = db_conn.execute("select target_canonical_key, anchor_text, ordinal from knowledge_chunk_links").fetchall()
     assert rows == [(folder + "/alfa", "informarea", 0)]
+
+
+def test_withdrawn_old_edition_keeps_multi_url_document_active(db_conn, tmp_path):
+    # The alias and every dated edition share one canonical key. Withdrawing the old dated URL must not
+    # hide the document while the alias and the new edition, in the same manifest, still serve it.
+    folder = DOCS + "tarife-demo/"
+    alias = DOCS + "tarife-demo.sv.pdf"
+    old_dated, new_dated = folder + "20260901-Tarife-demo.pdf", folder + "20261101-Tarife-demo.pdf"
+    sha1, path1 = save_raw(tmp_path, fee_list_pdf("1 septembrie 2026"), ".pdf")
+    sha2, path2 = save_raw(tmp_path, fee_list_pdf("1 noiembrie 2026"), ".pdf")
+    p = IngestionPipeline(db_conn, HashingEmbedder(), CFG)
+    p.ingest_entries([entry(alias, sha=sha1, raw_path=path1.name), entry(old_dated, sha=sha1, raw_path=path1.name)], tmp_path)
+    # The scraper appends withdrawn entries last.
+    rep = p.ingest_entries([
+        entry(alias, sha=sha2, raw_path=path2.name),
+        entry(new_dated, sha=sha2, raw_path=path2.name),
+        entry(old_dated, sha=sha1, raw_path=path1.name, withdrawn=True),
+    ], tmp_path)
+    assert rep.outcomes == {alias: IngestOutcome.created, new_dated: IngestOutcome.unchanged,
+                            old_dated: IngestOutcome.skipped}
+    assert committed("select canonical_key, status from knowledge_documents") == [
+        ("/content/dam/rbi/retail/eu/ro/documents/pf/tarife-demo", "active")]
+    in_force = committed(
+        "select v.effective_from from knowledge_document_versions v where v.effective_from <= %s "
+        "order by v.effective_from desc limit 1", (date(2026, 11, 15),))
+    assert in_force == [(date(2026, 11, 1),)]

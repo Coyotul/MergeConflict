@@ -72,6 +72,9 @@ class IngestionPipeline:
         """Ingest every manifest entry and record the run in index_runs."""
         self._require_idle()
         shared = shared_dated_folders([e.final_url for e in entries])
+        # One key covers an alias and every dated edition: a withdrawn URL whose key another entry
+        # still serves must not withdraw the document.
+        served_keys = {canonical_key(e.final_url, shared) for e in entries if not e.withdrawn and e.index}
         with self.conn.transaction():
             run_id = self.conn.execute(
                 "INSERT INTO index_runs (embedding_model, chunker_version, status) VALUES (%s, %s, 'running') RETURNING id",
@@ -83,7 +86,7 @@ class IngestionPipeline:
         warnings: dict[str, list[str]] = {}
         try:
             for entry in entries:
-                outcome, messages = self._ingest_entry(entry, raw_dir, shared)
+                outcome, messages = self._ingest_entry(entry, raw_dir, shared, served_keys)
                 outcomes[entry.url] = outcome
                 if outcome is IngestOutcome.failed:
                     errors[entry.url] = "; ".join(messages)
@@ -181,12 +184,15 @@ class IngestionPipeline:
             return IngestOutcome.failed, [str(exc)]
 
     def _ingest_entry(
-        self, entry: ManifestEntry, raw_dir: Path, shared: frozenset[str]
+        self, entry: ManifestEntry, raw_dir: Path, shared: frozenset[str], served_keys: set[str]
     ) -> tuple[IngestOutcome, list[str]]:
         if entry.withdrawn:
+            key = canonical_key(entry.final_url or entry.url, shared)
+            if key in served_keys:
+                return IngestOutcome.skipped, [f"withdrawal skipped: {key} is still served by another URL"]
             try:
                 with self.conn.transaction():
-                    changed = self.documents.mark_withdrawn([canonical_key(entry.final_url or entry.url, shared)])
+                    changed = self.documents.mark_withdrawn([key])
             except Exception as exc:
                 return IngestOutcome.failed, [f"{entry.url}: withdrawal failed: {exc}"]
             if changed == 0:

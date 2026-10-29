@@ -5,10 +5,16 @@ from src.core.settings import load_rag_settings
 from src.storage.application_db.migrate import apply_migrations
 
 
+def require_test_database(dbname: str) -> None:
+    """Refuse to reset any database whose name does not end with "_test" (e.g. the dev index "rag")."""
+    if not dbname.endswith("_test"):
+        raise RuntimeError(f"refusing to drop the schema of database {dbname!r}: its name must end with '_test'")
+
+
 @pytest.fixture(scope="session")
 def _session_db_setup():
     """Once per test session: connect, drop/recreate schema, apply migrations."""
-    settings = load_rag_settings()
+    load_rag_settings()  # loads .env, which may set RAG_TEST_DATABASE_URL
     test_db_url = os.getenv("RAG_TEST_DATABASE_URL", "postgresql://rag:rag@127.0.0.1:5433/rag_test")
 
     try:
@@ -17,6 +23,7 @@ def _session_db_setup():
         pytest.skip("Test database unreachable")
 
     try:
+        require_test_database(conn.info.dbname)
         # Drop and recreate public schema
         conn.execute("DROP SCHEMA IF EXISTS public CASCADE")
         conn.execute("CREATE SCHEMA public")

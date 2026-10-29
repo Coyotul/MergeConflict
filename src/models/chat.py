@@ -136,9 +136,8 @@ class ApplicationSubmittedBlock(BaseModel):
 
 
 class EscalationBlock(BaseModel):
-    """Block indicating case escalation."""
+    """The chat stopped; the customer should contact a bank representative."""
     type: Literal["escalation"] = "escalation"
-    ticket_id: str
     message: str
 
 

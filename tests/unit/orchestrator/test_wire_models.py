@@ -343,11 +343,8 @@ def test_product_requirements():
 
 def test_escalation_block():
     """EscalationBlock structure."""
-    block = EscalationBlock(
-        ticket_id="ticket_123",
-        message="Your case has been escalated"
-    )
-    assert block.ticket_id == "ticket_123"
+    block = EscalationBlock(message="Please contact a bank representative")
+    assert block.type == "escalation" and "ticket_id" not in block.model_dump()
 
 
 def test_application_submitted_block():

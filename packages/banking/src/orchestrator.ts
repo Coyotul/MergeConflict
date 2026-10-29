@@ -144,7 +144,6 @@ export interface ApplicationSubmittedBlock {
 
 export interface EscalationBlock {
   type: "escalation";
-  ticket_id: string;
   message: string;
 }
 

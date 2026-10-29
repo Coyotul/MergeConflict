@@ -226,7 +226,6 @@ class RequestHumanReviewInput(BaseModel):
 
 class RequestHumanReviewOutput(BaseModel):
     """Output for request_human_review tool."""
-    ticket_id: str
     message: str
     simulated: bool = True
 

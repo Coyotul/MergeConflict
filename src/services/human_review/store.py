@@ -93,7 +93,7 @@ class ReviewStore:
             ).fetchone()
             if existing:
                 return self._load(conn, existing["id"])
-            app_id = f"APP-{secrets.token_hex(4).upper()}"
+            app_id = f"APP-{secrets.token_hex(4)}"
             reference = f"LN-{now:%Y%m%d}-{secrets.token_hex(2).upper()}"
             conn.execute(
                 "INSERT INTO applications VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)",
@@ -122,7 +122,7 @@ class ReviewStore:
                     raise InvalidTransition("A document type is required to request information.")
                 conn.execute(
                     "INSERT INTO information_requests VALUES (?, ?, ?, ?, 'open', ?, NULL, NULL)",
-                    (f"REQ-{secrets.token_hex(4).upper()}", app_id, request_doc_type, reason, now.isoformat()),
+                    (f"REQ-{secrets.token_hex(4)}", app_id, request_doc_type, reason, now.isoformat()),
                 )
             self._set_status(conn, app_id, current, to, actor, reason, now)
             return self._load(conn, app_id)

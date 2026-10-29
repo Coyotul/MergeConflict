@@ -834,18 +834,14 @@ components:
           const: escalation
           title: Type
           default: escalation
-        ticket_id:
-          type: string
-          title: Ticket Id
         message:
           type: string
           title: Message
       type: object
       required:
-      - ticket_id
       - message
       title: EscalationBlock
-      description: Block indicating case escalation.
+      description: The chat stopped; the customer should contact a bank representative.
     ExtractedFieldView:
       properties:
         field:

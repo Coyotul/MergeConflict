@@ -594,22 +594,11 @@ def build_stub_registry(
             simulated=False,
         )
 
-    # Handler for request_human_review
+    # Handler for request_human_review: stops the chat; no ticket or review case is created.
     def handle_request_review(input: RequestHumanReviewInput, ctx: ToolContext) -> RequestHumanReviewOutput:
-        ticket_id = f"HR-{secrets.token_hex(4)}"
-
-        # Set escalation in state
-        ctx.state.escalation = EscalationRecord(
-            ticket_id=ticket_id,
-            reason=input.reason,
-            created_at=ctx.now
-        )
-
-        ctx.state.used_stubs = True
+        ctx.state.escalation = EscalationRecord(reason=input.reason, created_at=ctx.now)
         return RequestHumanReviewOutput(
-            ticket_id=ticket_id,
-            message="A human advisor will review your case and a representative will follow up with you.",
-            simulated=True
+            message="Please contact a bank representative to continue this application.", simulated=False,
         )
 
     # Register all tools

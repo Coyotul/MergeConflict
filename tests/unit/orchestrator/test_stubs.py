@@ -442,16 +442,15 @@ def test_request_human_review_sets_escalation():
     )
 
     assert outcome.ok
-    assert output.ticket_id.startswith("HR-")
+    assert "representative" in output.message
 
     # Check escalation is set
     assert state.escalation is not None
-    assert state.escalation.ticket_id == output.ticket_id
     assert state.escalation.reason == "Customer needs assistance with complex case"
     assert state.escalation.created_at == now
     # No timeline promise: a representative follows up.
     assert "business day" not in output.message
-    assert "follow up" in output.message
+    assert "representative" in output.message
 
 
 def test_synthetic_passages_are_neutral():

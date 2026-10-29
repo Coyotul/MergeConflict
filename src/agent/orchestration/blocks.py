@@ -42,8 +42,10 @@ from src.models.credit import FieldSpec, LoanOffer
 SUBMITTED_STATUS = "PENDING_HUMAN_REVIEW"
 
 ESCALATION_MESSAGE = {
-    "en": "A human advisor will review your case and contact you.",
-    "ro": "Un consultant va analiza cazul tău și te va contacta.",
+    "en": "This application needs a bank representative. Please contact your branch or call the bank, "
+          "and they will help you continue.",
+    "ro": "Această cerere are nevoie de un reprezentant al băncii. Te rog contactează sucursala sau sună la bancă, "
+          "iar ei te vor ajuta să continui.",
 }
 
 # Main stage a side stage branches from (it takes that slot in progress.steps).
@@ -170,11 +172,8 @@ def build_blocks(state: SessionState) -> list[Block]:
         if app.application_id is not None:
             blocks.append(ApplicationSubmittedBlock(application_id=app.application_id, status=SUBMITTED_STATUS))
 
-    if state.escalation is not None:
-        blocks.append(EscalationBlock(
-            ticket_id=state.escalation.ticket_id,
-            message=ESCALATION_MESSAGE[state.language],
-        ))
+    if state.escalation is not None or derive_stage(state) in (Stage.manual_review, Stage.escalated):
+        blocks.append(EscalationBlock(message=ESCALATION_MESSAGE[state.language]))
     return blocks
 
 

@@ -592,7 +592,6 @@ def test_session_state_json_round_trip():
             )
         },
         escalation=EscalationRecord(
-            ticket_id="ticket-123",
             reason="Complex case",
             created_at=now
         ),

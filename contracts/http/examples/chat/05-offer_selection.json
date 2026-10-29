@@ -95,6 +95,24 @@
           "conflict_with": null
         },
         {
+          "field": "employment_type",
+          "label": "Employment Type",
+          "value": "employed",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": false,
+          "conflict_with": null
+        },
+        {
+          "field": "employment_months",
+          "label": "Employment Duration (months)",
+          "value": "66",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": false,
+          "conflict_with": null
+        },
+        {
           "field": "monthly_net_income",
           "label": "Monthly Net Income",
           "value": "6200.00",
@@ -131,21 +149,9 @@
           {
             "code": "all_preliminary_rules_passed",
             "message": "All preliminary rules passed"
-          },
-          {
-            "code": "anaf_salary_verified",
-            "message": "Verified monthly net income from ANAF: 5000.33 RON (recurring salary)."
-          },
-          {
-            "code": "dti_within_limit",
-            "message": "Estimated DTI ratio: 20.6%, comfortably within the 40% maximum limit."
-          },
-          {
-            "code": "bureau_history_clean",
-            "message": "Credit Bureau check passed: no overdue obligations or defaults reported."
           }
         ],
-        "rule_version": "2026-10-28.1",
+        "rule_version": "stub-2026-10-28",
         "missing_fields": [],
         "simulated": true
       }
@@ -154,7 +160,7 @@
       "type": "offers",
       "offers": [
         {
-          "offer_id": "personal_loan-60m-ed8af0a62ca8a236",
+          "offer_id": "personal_loan-60m-d4c92f58d44a979a",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -198,7 +204,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-36m-a1d9b7bd42355d0f",
+          "offer_id": "personal_loan-36m-88b9d9afde6ad220",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -242,7 +248,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-48m-1c9e37fbeaa3a2c1",
+          "offer_id": "personal_loan-48m-9c04c5dc3a046ee8",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",

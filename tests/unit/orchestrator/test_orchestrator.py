@@ -563,7 +563,7 @@ def test_blocks_submitted_and_escalation(stub_data):
 
     app = make_verified_app(stub_data.requirements[Product.personal_loan])
     app.application_id = "APP-1"
-    state = make_state(app, escalation=EscalationRecord(ticket_id="HR-1", reason="r", created_at=NOW))
+    state = make_state(app, escalation=EscalationRecord(reason="r", created_at=NOW), language="en")
     resp = build_turn_response(state, [], "t1")
     assert resp.awaiting.kind == "none"
     assert resp.progress.stage == "submitted"
@@ -571,4 +571,17 @@ def test_blocks_submitted_and_escalation(stub_data):
     assert submitted.application_id == "APP-1"
     assert submitted.status == "PENDING_HUMAN_REVIEW"
     escalation = next(b for b in resp.blocks if b.type == "escalation")
-    assert escalation.ticket_id == "HR-1"
+    assert escalation.message == REPRESENTATIVE
+    assert not hasattr(escalation, "ticket_id")
+
+
+REPRESENTATIVE = ("This application needs a bank representative. Please contact your branch or call the bank, "
+                  "and they will help you continue.")
+
+
+def test_manual_review_stop_points_to_a_bank_representative(stub_data):
+    app = make_verified_app(stub_data.requirements[Product.personal_loan])
+    app.eligibility = eligibility(app, EligibilityStatus.manual_review)
+    resp = build_turn_response(make_state(app, language="en"), [], "t1")
+    assert resp.progress.stage == "manual_review"
+    assert [b.message for b in resp.blocks if b.type == "escalation"] == [REPRESENTATIVE]

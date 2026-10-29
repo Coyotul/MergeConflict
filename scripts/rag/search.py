@@ -6,21 +6,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import psycopg  # noqa: E402
-
-from scripts.rag import CONNECT_TIMEOUT_S, run_cli  # noqa: E402
-from src.core.settings import RagSettings, load_rag_settings  # noqa: E402
-from src.integrations.llm.embeddings import BgeM3Embedder, Embedder  # noqa: E402
+from scripts.rag import run_cli  # noqa: E402
+from src.core.settings import load_rag_settings  # noqa: E402
 from src.models.knowledge import SearchQuery, SearchResult, Topic  # noqa: E402
-from src.services.retrieval.service import RetrievalService  # noqa: E402
-
-
-def build_service(settings: RagSettings, embedder: Embedder | None = None) -> RetrievalService:
-    """A retrieval service over the configured database; the local BGE-M3 embedder unless one is given."""
-    embedder = embedder or BgeM3Embedder(settings.embedding_model, settings.embedding_device)
-    return RetrievalService(
-        lambda: psycopg.connect(settings.database_url, connect_timeout=CONNECT_TIMEOUT_S), embedder, settings
-    )
+from src.services.retrieval.factory import build_retrieval_service  # noqa: E402
 
 
 def print_result(result: SearchResult) -> None:
@@ -58,7 +47,7 @@ def main() -> int:
 
     query = SearchQuery(text=args.question, top_k=args.top_k, as_of=args.as_of,
                         topics=list(Topic) if args.all_topics else None)
-    print_result(build_service(settings).search(query))
+    print_result(build_retrieval_service(settings).search(query))
     return 0
 
 

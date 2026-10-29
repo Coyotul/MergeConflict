@@ -3,9 +3,9 @@ import sys
 from collections.abc import Callable
 
 from src.core.errors import EmbeddingModelUnavailable, KnowledgeStoreUnavailable
+from src.services.retrieval.factory import CONNECT_TIMEOUT_S
 
-# A refused local connection can hang instead of failing fast; bound it.
-CONNECT_TIMEOUT_S = 10
+__all__ = ["CONNECT_TIMEOUT_S", "run_cli"]
 
 
 def run_cli(main: Callable[[], int]) -> None:

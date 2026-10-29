@@ -9,11 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import psycopg  # noqa: E402
 
 from scripts.rag import CONNECT_TIMEOUT_S, run_cli  # noqa: E402
-from scripts.rag.search import build_service  # noqa: E402
 from src.core.errors import KnowledgeStoreUnavailable  # noqa: E402
 from src.core.settings import load_rag_settings  # noqa: E402
 from src.integrations.llm.embeddings import PrecomputedQueryEmbedder  # noqa: E402
 from src.services.retrieval.evaluation import EvalReport, check_labels, evaluate, load_eval_split  # noqa: E402
+from src.services.retrieval.factory import build_retrieval_service  # noqa: E402
 
 EVAL_DIR = Path("config/rag/eval")
 GATE = {"recall_at_k": 0.8, "refusal_accuracy": 0.8, "false_refusal_rate": 0.1}
@@ -73,7 +73,7 @@ def main() -> int:
         return 0
 
     embedder = PrecomputedQueryEmbedder(args.query_vectors) if args.query_vectors else None
-    report = evaluate(build_service(settings, embedder).search, questions, k=args.k, as_of=args.as_of)
+    report = evaluate(build_retrieval_service(settings, embedder).search, questions, k=args.k, as_of=args.as_of)
     print_report(report)
     if args.split == "validation":
         passed = passes_gate(report)

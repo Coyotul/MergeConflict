@@ -250,10 +250,27 @@ def _annotate(transcript: list[dict], events: list[dict]) -> None:
         item["awaiting_before"] = [
             " ".join(str(n.get(k)) for k in ("kind", "target") if n.get(k)) for n in needs if isinstance(n, dict)
         ]
-        item["tool_results"] = [
-            f"{e.get('tool')} ({e.get('caller')}) " + ("ok" if e.get("ok") else f"error {e.get('error_code')}")
-            for e in turn_events if e.get("type") == "tool_call"
-        ]
+        results: list[str] = []
+        for e in turn_events:
+            if e.get("type") != "tool_call":
+                continue
+            results.append(f"{e.get('tool')} ({e.get('caller')}) "
+                           + ("ok" if e.get("ok") else f"error {e.get('error_code')}"))
+            results.extend(_passage_excerpts(e))
+        item["tool_results"] = results
+
+
+def _passage_excerpts(event: dict, *, limit: int = 360) -> list[str]:
+    """Short excerpts of retrieved passages, so the judge can tell sourced figures from invented ones."""
+    if event.get("tool") != "search_banking_policies" or not event.get("ok"):
+        return []
+    passages = (event.get("output") or {}).get("passages") or []
+    excerpts = []
+    for p in passages if isinstance(passages, list) else []:
+        if isinstance(p, dict):
+            line = f"  {p.get('citation_id')} {p.get('header') or ''}: {' '.join(str(p.get('text') or '').split())}"
+            excerpts.append(line[:limit])
+    return excerpts
 
 
 def run_conversation(app: FastAPI, scenario: Scenario, customer, *, max_turns: int,

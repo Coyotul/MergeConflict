@@ -18,7 +18,7 @@ from src.integrations.llm.chat import ChatMessage, ChatModel
 GENERAL_RUBRIC: list[str] = [
     "Asks no more than two questions in one reply (exactly two is fine; one request to upload the required documents counts as a single request).",
     "Does not re-ask information the customer already gave.",
-    "Is written in clear, plain English; a reply in Romanian or any other language fails this criterion.",
+    "Is written in clear, plain English; a sentence written in Romanian fails this criterion, but quoting a Romanian product name or term (e.g. 'credit de nevoi personale', 'DAE') is fine.",
     "Invents no numbers or promises: amounts, rates and decisions come only from tool results in the transcript.",
 ]
 
@@ -49,7 +49,8 @@ Then grade the whole conversation once against each scenario criterion:
 
 Each turn shows what the agent was waiting for before the reply, the tool results available to it, and what was shown to the customer on screen besides the reply text (for example eligibility results or offers). Judge what the customer actually saw: offers shown on screen count as presented. Numbers, rates and decisions are only allowed if they come from those tool results or from what was shown on screen.
 
-The agent must write in English: a reply written in Romanian (or any language other than English) fails the English criterion.
+The agent must write in English: a reply whose sentences are in Romanian (or any language other than English) fails the English criterion; quoting a Romanian product name or term inside an English sentence does not.
+Figures quoted from retrieved passages (shown under the search tool result) come from tool results and are not invented.
 
 Use "pass": true or false. Use "pass": null only when the criterion's situation never occurred in this conversation (for example offers were never shown), and say so in the reason.
 

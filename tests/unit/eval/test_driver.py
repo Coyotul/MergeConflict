@@ -14,6 +14,7 @@ from scripts.eval.customer import CustomerAction
 from scripts.eval.driver import (
     ConversationResult,
     Scenario,
+    _annotate,
     build_eval_app,
     customer_documents,
     load_scenarios,
@@ -170,6 +171,20 @@ def test_driver_records_agent_error(work_dir, credit_db):
 
 ALEX_ANSWERS = ("Vreau un credit", "pentru renovare", "30000 lei", "60 luni",
                 "employed", "67", "7000", "FICTIV Employer's Studio 1", "0", "ok")
+
+
+def test_search_results_carry_passage_excerpts_for_the_judge():
+    """The judge must see what a search returned, or it reads sourced figures as invented."""
+    transcript = [{"turn": 1, "turn_id": "t1"}]
+    events = [{"type": "tool_call", "turn_id": "t1", "tool": "search_banking_policies", "caller": "model",
+               "ok": True, "error_code": None,
+               "output": {"passages": [{"citation_id": "c1", "header": "Early repayment",
+                                         "text": "A fee of 0.50% applies in the last year. " * 20}]}}]
+    _annotate(transcript, events)
+    results = transcript[0]["tool_results"]
+    assert results[0] == "search_banking_policies (model) ok"
+    assert any(r.startswith("  c1 Early repayment: A fee of 0.50%") for r in results)
+    assert all(len(r) <= 400 for r in results)
 
 
 def test_driver_stops_when_eligibility_shown(work_dir, credit_db):

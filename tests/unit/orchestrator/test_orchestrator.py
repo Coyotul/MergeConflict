@@ -118,6 +118,8 @@ def test_product_code_triggers_requirements_and_profile(orchestrator_factory):
         GREET,
         respond("Ce tip de angajare ai?", intent="credit_application",
                 updates=DISCOVERY_UPDATES + [{"field": "product_code", "value": "personal_loan"}]),
+        # Written before the product's needs existed: the model answers again for the documents.
+        respond("Te rog încarcă documentele cerute.", intent="credit_application"),
     ])
     sid = orch.start_session(CUSTOMER).session_id
     resp = orch.handle(sid, CUSTOMER, CustomerMessage("Vreau un credit pentru renovare"))
@@ -131,6 +133,7 @@ def test_product_code_triggers_requirements_and_profile(orchestrator_factory):
         assert app.fields[name].confirmed is True
         assert app.fields[name].value == value
     assert resp.progress.stage == "documents"  # documents are requested right after the product
+    assert resp.messages[-1].text == "Te rog încarcă documentele cerute."
     checklist = [b for b in resp.blocks if b.type == "document_checklist"]
     assert [i.doc_type for i in checklist[0].items] == ["id_card", "payslip", "bank_statement"]
     assert all(i.status == "requested" for i in checklist[0].items)

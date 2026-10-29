@@ -119,3 +119,22 @@ def test_model_cannot_confirm_or_set_document_values(at_documents):
                                   all_specs(app), offer_ids=set(), now=datetime.now(UTC))
     assert [r.reason for r in results] == ["review_form_only", "from_documents_only"]
     assert not app.fields["monthly_net_income"].confirmed and app.fields["monthly_net_income"].value == 8500
+
+
+def test_reply_written_before_the_product_existed_is_rewritten(orchestrator_factory):
+    """The reply that picks the product was written without its needs; the model answers again."""
+    import json
+    from tests.unit.orchestrator.factories import respond as r
+    orch, store, model = orchestrator_factory([
+        r("Bună!"),
+        r("Notat. Care este venitul tău net lunar?", "credit_application", [
+            {"field": "product_code", "value": "personal_loan"},
+            {"field": "purpose", "value": "telefon"}, {"field": "amount", "value": "5000 RON"},
+        ]),
+        r("Pe câte luni vrei creditul?", "credit_application"),
+    ])
+    sid = orch.start_session(CUSTOMER).session_id
+    resp = orch.handle(sid, CUSTOMER, CustomerMessage("Vreau un credit de 5000 lei pentru un telefon"))
+    assert resp.messages[-1].text == "Pe câte luni vrei creditul?"
+    context = json.loads(model.calls[-1][-1].content.removeprefix("CONTEXT_JSON:\n"))
+    assert [(n["kind"], n["target"]) for n in context["needs"]] == [("missing_field", "term_months")]

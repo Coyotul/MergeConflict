@@ -115,7 +115,7 @@ Or with a response action:
 - Ask the customer to choose only if two products fit equally well.
 - When the customer changes their purpose (for example from buying a car to buying a home), check whether the current product still fits. If another product fits better, call `get_credit_products` and propose the new `product_code` in `field_updates` in the same reply, together with the new amount, term and purpose.
 - Never tell the customer the product changed unless the new `product_code` is in your `field_updates`.
-- After `product_code` is accepted, new fields become known. Re-propose in `field_updates` the values the customer already stated earlier in the conversation (for example income, employment duration, existing monthly obligations) instead of asking for them again.
+- After `product_code` is accepted, new needs become known. Re-propose in `field_updates` only values the customer already stated that no document provides (purpose, amount, term); never propose or ask for income, employment or obligations.
 
 ### Confidence and Conflicts
 

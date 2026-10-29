@@ -98,6 +98,10 @@ FALLBACK_GREETING = (
     "Hi! I'm your credit assistant. How can I help?"
 )
 INVALID_ACTION_NOTICE = "INVALID_ACTION: {error}. Return exactly one JSON object matching the schema."
+PRODUCT_SELECTED_NOTICE = (
+    "PRODUCT_SELECTED: the product was set in your previous step, so its needs are now known. "
+    "Write your reply again for the current needs only; ask for nothing else."
+)
 ELIGIBILITY_UPDATED_NOTICE = (
     "ELIGIBILITY_UPDATED: your field updates completed the eligibility inputs and the check ran "
     "(see TOOL_RESULT run_eligibility_check). Write the reply again, explaining this result."
@@ -398,7 +402,10 @@ class Orchestrator(CodeEventsMixin):
 
             self._route_intent(state, action.intent)
             turn.eligibility_ran = False
+            had_product = state.application is not None and state.application.product_code is not None
             rejected = self._apply_updates(turn, action.field_updates)
+            product_now_set = (not had_product and state.application is not None
+                               and state.application.product_code is not None)
             rejection_notice = _rejection_notice(rejected) if rejected else None
 
             if isinstance(action.action, CallTool):
@@ -418,6 +425,12 @@ class Orchestrator(CodeEventsMixin):
                 reasked = True
                 pending.append(rejection_notice)
                 self._log_step(turn, step, started, "respond", None, "reask")
+                continue
+
+            if product_now_set and step < self._max_steps:
+                # The reply was written before the product's requirements (and needs) existed.
+                pending.append(PRODUCT_SELECTED_NOTICE)
+                self._log_step(turn, step, started, "respond", None, "reask_product")
                 continue
 
             if turn.eligibility_ran and not eligibility_explained and step < self._max_steps:

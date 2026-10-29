@@ -135,9 +135,11 @@ test("assistant runs on the orchestrator", async ({ page }, testInfo) => {
   await say("Vreau un credit de 30000 lei pe 60 de luni pentru renovare");
   await expect(page.getByRole("heading", { name: /Hey Alex/ })).not.toBeVisible();
   await expect(page.getByRole("region", { name: "Application progress" })).toBeVisible();
-  // The demo model collects one field per turn: same answers as the eligible happy path in
-  // tests/e2e/test_chat_scenarios.py, then "ok" runs the preliminary check and requests documents.
-  for (const text of ["pentru renovare", "30000 lei", "60 luni", "employed", "48", "7000", "TechCorp SRL", "400", "ok"]) await say(text);
+  // The demo model asks only what no document supplies (purpose, amount, term), one per turn.
+  // While it is still asking, no upload button is offered.
+  for (const text of ["pentru renovare", "30000 lei"]) await say(text);
+  await expect(page.getByRole("button", { name: /^Upload / })).toHaveCount(0);
+  await say("60 luni");
   const uploadId = page.getByRole("button", { name: "Upload ID Card" });
   await expect(uploadId).toBeVisible();
   await expect(page.getByRole("button", { name: /^Upload Payslip/ })).toBeVisible();

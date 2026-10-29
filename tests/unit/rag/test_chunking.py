@@ -220,3 +220,12 @@ def test_split_long_text_falls_back_to_words():
     pieces = split_long_text(text, max_tokens=100)
     assert len(pieces) > 1 and all(estimate_tokens(p) <= 100 for p in pieces)
     assert " ".join(pieces) == text
+
+
+def test_single_column_layout_table_is_prose_and_never_repeats_its_first_row():
+    # Some pages lay out long paragraphs as a one-column table; its first row is not a column header.
+    cell = " ".join(f"Propoziția demo {i} despre condițiile ofertei demo." for i in range(40))
+    html = _table_page([f"<tr><td>{cell} Rândul {r}.</td></tr>" for r in range(3)])
+    chunks = [c for c in parse_html_page(html, PAGE_URL, CFG).chunks if c.kind == ChunkKind.section]
+    assert chunks and all(estimate_tokens(c.text) <= MAX_TOKENS for c in chunks)
+    assert sum(c.text.count("Rândul 0.") for c in chunks) == 1

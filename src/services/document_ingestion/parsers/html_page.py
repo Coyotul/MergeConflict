@@ -21,8 +21,8 @@ from src.models.knowledge import ChunkKind, LinkKind
 class BufferedLine:
     """A line of text with associated links.
 
-    A table row is atomic (never split) and carries its table's header row, which is
-    repeated at the start of a piece that begins mid-table.
+    A row of a multi-column table is atomic (never split) and carries its table's header
+    row, which is repeated at the start of a piece that begins mid-table.
     """
     text: str
     links: list[ExtractedLink] = field(default_factory=list)
@@ -45,7 +45,7 @@ def pack_buffered_lines(lines: list[BufferedLine]) -> list[tuple[str, list[Extra
     """Pack lines greedily into pieces of at most MAX_TOKENS, keeping each line's links with its piece.
 
     A piece that starts with a table row (other than the header row) starts with the table's
-    header row. A single atomic line over the limit stays whole.
+    header row when both fit in MAX_TOKENS. A single atomic line over the limit stays whole.
     """
     pieces: list[tuple[str, list[ExtractedLink]]] = []
     current: list[str] = []
@@ -55,7 +55,8 @@ def pack_buffered_lines(lines: list[BufferedLine]) -> list[tuple[str, list[Extra
         if has_body and estimate_tokens("\n".join(current + [line.text])) > MAX_TOKENS:
             pieces.append(("\n".join(current), links))
             current, links, has_body = [], [], False
-        if not current and line.table_header is not None:
+        if (not current and line.table_header is not None
+                and estimate_tokens(line.table_header + "\n" + line.text) <= MAX_TOKENS):
             current.append(line.table_header)
         current.append(line.text)
         links = links + line.links
@@ -470,8 +471,11 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                 all_text_parts.append(text)
 
         elif elem.name == 'table':
-            # One buffered line per row ("cell | cell"), with that row's links; the first row is the header
+            # One buffered line per row ("cell | cell"), with that row's links. In a multi-column table
+            # rows are atomic and the first row is the column header; a one-column table is page
+            # layout around prose, so its rows are ordinary (splittable) lines.
             rows: list[BufferedLine] = []
+            multi_column = any(len(row.select('td, th')) > 1 for row in elem.select('tr'))
             for row in elem.select('tr'):
                 cells = row.select('td, th')
                 if not cells:
@@ -480,7 +484,7 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                 for cell in cells:
                     row_links.extend(extract_inline_links(cell))
                 rows.append(BufferedLine(
-                    text=" | ".join(extract_text(cell) for cell in cells), links=row_links, atomic=True
+                    text=" | ".join(extract_text(cell) for cell in cells), links=row_links, atomic=multi_column
                 ))
             if rows:
                 table_text = "\n".join(r.text for r in rows)
@@ -491,8 +495,9 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                     continue
                 seen_block_texts.add(table_text)
 
-                for r in rows[1:]:
-                    r.table_header = rows[0].text
+                if multi_column:
+                    for r in rows[1:]:
+                        r.table_header = rows[0].text
                 current_buffer.extend(rows)
                 all_text_parts.append(table_text)
 

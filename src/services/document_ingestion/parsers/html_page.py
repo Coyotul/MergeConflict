@@ -6,9 +6,8 @@ from src.services.document_ingestion.chunking import (
     ChunkDraft,
     ParsedDocument,
     ExtractedLink,
-    CHUNKER_VERSION,
-    pack_lines,
     estimate_tokens,
+    split_long_text,
     MAX_TOKENS,
 )
 from src.services.document_ingestion.parsers.links import absolutize, filter_chunk_links
@@ -20,9 +19,50 @@ from src.models.knowledge import ChunkKind, LinkKind
 
 @dataclass
 class BufferedLine:
-    """A line of text with associated links."""
+    """A line of text with associated links.
+
+    A table row is atomic (never split) and carries its table's header row, which is
+    repeated at the start of a piece that begins mid-table.
+    """
     text: str
     links: list[ExtractedLink] = field(default_factory=list)
+    atomic: bool = False
+    table_header: str | None = None
+
+
+def _split_line(line: BufferedLine) -> list[BufferedLine]:
+    """An over-long prose line as pieces of at most MAX_TOKENS; each link goes with the piece holding its anchor."""
+    if line.atomic or estimate_tokens(line.text) <= MAX_TOKENS:
+        return [line]
+    pieces = [BufferedLine(text=t) for t in split_long_text(line.text)]
+    for link in line.links:
+        target = next((p for p in pieces if link.anchor_text and link.anchor_text in p.text), pieces[0])
+        target.links.append(link)
+    return pieces
+
+
+def pack_buffered_lines(lines: list[BufferedLine]) -> list[tuple[str, list[ExtractedLink]]]:
+    """Pack lines greedily into pieces of at most MAX_TOKENS, keeping each line's links with its piece.
+
+    A piece that starts with a table row (other than the header row) starts with the table's
+    header row. A single atomic line over the limit stays whole.
+    """
+    pieces: list[tuple[str, list[ExtractedLink]]] = []
+    current: list[str] = []
+    links: list[ExtractedLink] = []
+    has_body = False  # current holds more than a repeated header row
+    for line in (piece for buffered in lines for piece in _split_line(buffered)):
+        if has_body and estimate_tokens("\n".join(current + [line.text])) > MAX_TOKENS:
+            pieces.append(("\n".join(current), links))
+            current, links, has_body = [], [], False
+        if not current and line.table_header is not None:
+            current.append(line.table_header)
+        current.append(line.text)
+        links = links + line.links
+        has_body = True
+    if has_body:
+        pieces.append(("\n".join(current), links))
+    return pieces
 
 
 def clean_html(data: bytes) -> BeautifulSoup:
@@ -143,31 +183,18 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
         if not current_buffer:
             return
 
-        # Normalize each line text first
         for line in current_buffer:
             line.text = normalize_text(line.text)
+            if line.table_header is not None:
+                line.table_header = normalize_text(line.table_header)
 
-        # Pack lines and split links accordingly
-        line_texts = [line.text for line in current_buffer]
-        packed = pack_lines(line_texts)
-
-        # Attach links to the correct piece
-        for piece in packed:
-            piece_lines = piece.split('\n')
-            piece_links = []
-
-            # Find which original lines are in this piece
-            for line in current_buffer:
-                if line.text in piece_lines:
-                    piece_links.extend(line.links)
-
-            chunk = ChunkDraft(
+        for piece, piece_links in pack_buffered_lines(current_buffer):
+            chunks.append(ChunkDraft(
                 kind=ChunkKind.section,
                 section_path=section_path.copy(),
                 text=piece,
                 links=piece_links
-            )
-            chunks.append(chunk)
+            ))
 
         current_buffer = []
 
@@ -443,19 +470,20 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                 all_text_parts.append(text)
 
         elif elem.name == 'table':
-            # Convert table to | -joined rows and extract links from cells
-            rows = []
-            table_links = []
+            # One buffered line per row ("cell | cell"), with that row's links; the first row is the header
+            rows: list[BufferedLine] = []
             for row in elem.select('tr'):
-                cells = [extract_text(cell) for cell in row.select('td, th')]
-                if cells:
-                    row_text = " | ".join(cells)
-                    rows.append(row_text)
-                # Extract links from all cells in this row
-                for cell in row.select('td, th'):
-                    table_links.extend(extract_inline_links(cell))
+                cells = row.select('td, th')
+                if not cells:
+                    continue
+                row_links = []
+                for cell in cells:
+                    row_links.extend(extract_inline_links(cell))
+                rows.append(BufferedLine(
+                    text=" | ".join(extract_text(cell) for cell in cells), links=row_links, atomic=True
+                ))
             if rows:
-                table_text = "\n".join(rows)
+                table_text = "\n".join(r.text for r in rows)
 
                 # Check for duplicate
                 if table_text in seen_block_texts:
@@ -463,7 +491,9 @@ def parse_html_page(data: bytes, page_url: str, cfg: SourceConfig) -> ParsedDocu
                     continue
                 seen_block_texts.add(table_text)
 
-                current_buffer.append(BufferedLine(text=table_text, links=table_links))
+                for r in rows[1:]:
+                    r.table_header = rows[0].text
+                current_buffer.extend(rows)
                 all_text_parts.append(table_text)
 
         i += 1

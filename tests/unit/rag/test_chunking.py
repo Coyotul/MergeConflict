@@ -3,9 +3,11 @@ from pathlib import Path
 from datetime import date
 
 from src.services.document_ingestion.chunking import (
+    MAX_TOKENS,
     pack_lines,
     build_header,
     estimate_tokens,
+    split_long_text,
 )
 from src.services.document_ingestion.parsers.html_page import parse_html_page
 from src.services.document_ingestion.sources import load_source_config
@@ -167,3 +169,54 @@ def test_faq_exact_section_path():
     assert faq.section_path[0] == "Credit Demo"
     assert faq.section_path[1] == "Întrebări frecvente"
     assert faq.section_path[2] == "Pot rambursa anticipat?"
+
+
+LINK_A = "/ro/persoane-fizice/produsele-noastre/credite/credite-de-nevoi-personale/conditii-credit-nevoi-personale.html"
+LINK_B = "/ro/persoane-fizice/produsele-noastre/credite/overdraft.html"
+
+
+def _table_page(rows: list[str]) -> bytes:
+    body = "".join(rows)
+    return f"<html><body><main><h1>Test</h1><h2>Fees</h2><table>{body}</table></main></body></html>".encode("utf-8")
+
+
+def test_multi_row_table_keeps_its_links():
+    html = _table_page([
+        "<tr><th>Produs</th><th>Detalii</th></tr>",
+        f'<tr><td>Credit Demo</td><td><a href="{LINK_A}">Condiții demo</a></td></tr>',
+    ])
+    chunks = [c for c in parse_html_page(html, PAGE_URL, CFG).chunks if c.kind == ChunkKind.section]
+    assert len(chunks) == 1 and "Credit Demo | Condiții demo" in chunks[0].text
+    assert [l.target_url for l in chunks[0].links] == ["https://www.raiffeisen.ro" + LINK_A]
+
+
+def test_long_table_splits_by_row_with_header_repeated_and_links_on_their_piece():
+    rows = ["<tr><th>Operațiune demo</th><th>Comision demo</th></tr>"]
+    rows += [f"<tr><td>Operațiune demo numărul {i} cu descriere lungă</td><td>{i} lei</td></tr>" for i in range(200)]
+    rows[151] = f'<tr><td><a href="{LINK_B}">Overdraft demo</a></td><td>150 lei</td></tr>'
+    chunks = [c for c in parse_html_page(_table_page(rows), PAGE_URL, CFG).chunks if c.kind == ChunkKind.section]
+    assert len(chunks) > 1 and all(estimate_tokens(c.text) <= MAX_TOKENS for c in chunks)
+    assert all(c.text.startswith("Operațiune demo | Comision demo\n") for c in chunks)
+    with_link = [c for c in chunks if c.links]
+    assert len(with_link) == 1 and "Overdraft demo | 150 lei" in with_link[0].text
+    assert [l.target_url for l in with_link[0].links] == ["https://www.raiffeisen.ro" + LINK_B]
+    joined = "\n".join(c.text for c in chunks)
+    assert all(f"Operațiune demo numărul {i} cu descriere lungă | {i} lei" in joined for i in range(200) if i != 150)
+
+
+def test_over_long_paragraph_is_split_at_sentences_keeping_its_links():
+    sentences = [f"Propoziția demo {i} descrie condițiile creditului demo pe larg." for i in range(80)]
+    sentences[60] = f'Vezi <a href="{LINK_A}">condițiile demo</a> pentru detalii.'
+    html = f"<html><body><main><h1>Test</h1><h2>Condiții</h2><p>{' '.join(sentences)}</p></main></body></html>"
+    chunks = [c for c in parse_html_page(html.encode("utf-8"), PAGE_URL, CFG).chunks if c.kind == ChunkKind.section]
+    assert len(chunks) > 1 and all(estimate_tokens(c.text) <= MAX_TOKENS for c in chunks)
+    assert all(c.text.endswith(".") for c in chunks)   # split at sentence boundaries
+    with_link = [c for c in chunks if c.links]
+    assert len(with_link) == 1 and "Vezi condițiile demo pentru detalii." in with_link[0].text
+
+
+def test_split_long_text_falls_back_to_words():
+    text = " ".join(["cuvant"] * 1000)   # one 6,999-character "sentence"
+    pieces = split_long_text(text, max_tokens=100)
+    assert len(pieces) > 1 and all(estimate_tokens(p) <= 100 for p in pieces)
+    assert " ".join(pieces) == text

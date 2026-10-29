@@ -488,11 +488,11 @@ def parse_cost_sheet(data: bytes) -> ParsedDocument:
             warnings=[f"cost sheet template mismatch: {exc}"],
         )
 
-    # Facts are packed on line boundaries, so a table row is never split.
-    chunks = [
-        ChunkDraft(kind=ChunkKind.cost_facts, section_path=list(FACTS_PATH), text=piece, page=1)
-        for piece in pack_lines(facts.splitlines())
-    ]
+    # The facts are one atomic chunk (spec §9), even over MAX_TOKENS: the footnotes and the early
+    # repayment fee belong with the variant rows they qualify. BGE-M3 embeds inputs far longer
+    # than one sheet's facts.
+    chunks = [ChunkDraft(kind=ChunkKind.cost_facts, section_path=list(FACTS_PATH), text=facts, page=1)]
+    # Each example block is atomic; several fit in one piece.
     chunks += [
         ChunkDraft(kind=ChunkKind.cost_examples, section_path=list(EXAMPLES_PATH), text=piece, page=1)
         for piece in pack_lines(example_blocks)

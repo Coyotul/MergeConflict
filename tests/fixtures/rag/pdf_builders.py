@@ -114,7 +114,7 @@ def make_pdf_from_lines(lines: list[str], fontsize: float = 6) -> bytes:
     return pdf_bytes
 
 
-def build_demo_cost_sheet(variant_name_x: float = 20, footnotes: bool = True) -> bytes:
+def build_demo_cost_sheet(variant_name_x: float = 20, footnotes: bool = True, extra_footnotes: int = 0) -> bytes:
     """Build a synthetic cost sheet that imitates the real cost sheet layout.
 
     The product, values and wording are invented. The layout mirrors the real
@@ -127,6 +127,8 @@ def build_demo_cost_sheet(variant_name_x: float = 20, footnotes: bool = True) ->
     variant_name_x moves the first line of each variant label (the product name) right;
     a real sheet centres it so that it starts just past the end of "Tip produs".
     footnotes=False drops the footnotes, as on sheets without any.
+    extra_footnotes adds that many long footnote lines (10pt apart), pushing the
+    early repayment fee and the example down, so the facts can exceed MAX_TOKENS.
     """
     font = fitz.Font(fontfile=str(FONT_FILE))
     fontsize = 9
@@ -195,7 +197,12 @@ def build_demo_cost_sheet(variant_name_x: float = 20, footnotes: bool = True) ->
             (20, 335, "1Rata dobânzii demo este fixă pe toată perioada creditului."),
             (20, 345, "*Valorile DAE demo sunt calculate pentru suma maximă."),
         ]
+    shift = 10 * extra_footnotes
     items += [
+        (20, 355 + 10 * n, f"{n + 2}Nota demo {n}: condiție demonstrativă de acordare, valabilă pentru toate variantele demo.")
+        for n in range(extra_footnotes)
+    ]
+    items += [(x, y + shift, text) for x, y, text in [
         # Early repayment: label on the left, value over two lines on the right.
         (20, 370, "Comision de plată anticipată"),
         (300, 366, "0,50 % in ultimul an de contract / 1,00%"),
@@ -209,7 +216,7 @@ def build_demo_cost_sheet(variant_name_x: float = 20, footnotes: bool = True) ->
         (330, 430, "850,00 lei"),
         (430, 430, "9,80%"),
         (20, 435, "și DAE 9,80%."),
-    ]
+    ]]
     return make_pdf([items], fontsize=fontsize)
 
 

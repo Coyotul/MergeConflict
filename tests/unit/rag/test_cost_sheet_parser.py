@@ -1,5 +1,6 @@
 """Tests for the cost sheet template parser."""
 from src.models.knowledge import ChunkKind
+from src.services.document_ingestion.chunking import MAX_TOKENS, estimate_tokens
 from src.services.document_ingestion.parsers.cost_sheet import parse_cost_sheet
 from tests.fixtures.rag.pdf_builders import build_demo_cost_sheet, build_demo_offer_cost_sheet, make_pdf
 
@@ -157,3 +158,14 @@ def test_miniature_offer_sheet_parses_like_full_size():
     doc = parse_cost_sheet(build_demo_offer_cost_sheet(scale=0.25))
     assert doc.parser_name == "cost_sheet", doc.warnings
     assert doc.chunks[0].text.splitlines() == OFFER_FACTS
+
+
+def test_cost_facts_stay_one_chunk_even_over_max_tokens():
+    """Spec §9: the facts (variants, footnotes, early repayment fee) are one atomic chunk."""
+    doc = parse_cost_sheet(build_demo_cost_sheet(extra_footnotes=30))
+    assert doc.parser_name == "cost_sheet", doc.warnings
+    facts = [c for c in doc.chunks if c.kind is ChunkKind.cost_facts]
+    assert len(facts) == 1 and estimate_tokens(facts[0].text) > MAX_TOKENS
+    assert "Nota demo 29:" in facts[0].text and "Comision de plată anticipată:" in facts[0].text
+    assert facts[0].text.startswith("Tip credit: Credit demo pentru nevoi personale")
+    assert [c.kind for c in doc.chunks] == [ChunkKind.cost_facts, ChunkKind.cost_examples]

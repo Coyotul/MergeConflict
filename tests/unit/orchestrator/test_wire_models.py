@@ -13,10 +13,10 @@ from src.models.chat import (
     CitationRef, ChatMessageView, AwaitingKind, Awaiting, StepStatus,
     ProgressStep, Progress, DocumentChecklistBlock, DocumentChecklistItem,
     ExtractedFieldsBlock, ExtractedFieldView, EligibilityResultBlock,
-    OffersBlock, ApplicationSummaryBlock, ApplicationSummary,
+    OffersBlock, ApplicationSummary,
     ApplicationSubmittedBlock, EscalationBlock, SummaryField,
     TurnResponse, SessionView, SendMessageRequest, OfferSelectionRequest,
-    ConfirmationRequest, ErrorBody, Block
+    ErrorBody, Block
 )
 from src.models.knowledge import Product
 
@@ -199,48 +199,6 @@ def test_extracted_fields_block():
     assert len(block.fields) == 1
 
 
-def test_application_summary_serialization():
-    """ApplicationSummary serializes correctly."""
-    summary = ApplicationSummary(
-        summary_version="v1",
-        application_id="app_123",
-        product_code=Product.personal_loan,
-        product_name="Personal Loan",
-        amount=Money(amount=Decimal("15000")),
-        term_months=36,
-        offer=LoanOffer(
-            offer_id="offer_1",
-            product_code=Product.personal_loan,
-            amount=Money(amount=Decimal("15000")),
-            term_months=36,
-            annual_interest_rate_percent=Decimal("9.5"),
-            monthly_installment=Money(amount=Decimal("478.12")),
-            total_repayment=Money(amount=Decimal("17212.32")),
-            total_cost=Money(amount=Decimal("2212.32")),
-            fees=Money(amount=Decimal("150")),
-            assumptions=["Income verified"],
-            indicative=True,
-            simulated=True
-        ),
-        fields=[
-            SummaryField(
-                label="Monthly income",
-                value="5000 RON",
-                source="document"
-            )
-        ],
-        documents=[
-            DocumentChecklistItem(
-                doc_type="payslip",
-                label="Payslip",
-                status="verified"
-            )
-        ]
-    )
-    dumped = summary.model_dump(mode="json")
-    assert dumped["product_code"] == "personal_loan"
-
-
 def test_session_view_structure():
     """SessionView with messages and latest turn."""
     turn = TurnResponse(
@@ -298,18 +256,6 @@ def test_offer_selection_request():
     assert req.offer_id == "offer_123"
 
 
-def test_confirmation_request_confirm():
-    """ConfirmationRequest with confirm decision."""
-    req = ConfirmationRequest(summary_version="v1", decision="confirm")
-    assert req.decision == "confirm"
-
-
-def test_confirmation_request_decline():
-    """ConfirmationRequest with decline decision."""
-    req = ConfirmationRequest(summary_version="v1", decision="decline")
-    assert req.decision == "decline"
-
-
 def test_error_body():
     """ErrorBody structure."""
     error = ErrorBody(
@@ -343,11 +289,8 @@ def test_product_requirements():
 
 def test_escalation_block():
     """EscalationBlock structure."""
-    block = EscalationBlock(
-        ticket_id="ticket_123",
-        message="Your case has been escalated"
-    )
-    assert block.ticket_id == "ticket_123"
+    block = EscalationBlock(message="Please contact a bank representative")
+    assert block.type == "escalation" and "ticket_id" not in block.model_dump()
 
 
 def test_application_submitted_block():

@@ -1,6 +1,6 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { DEMO_ACCOUNTS } from "../src/demo-accounts";
-import { CUSTOMER_ACTOR, REVIEWER_ACTOR } from "../src/seed";
+import { DEMO_ACCOUNTS, DEMO_CUSTOMERS } from "../src/demo-accounts";
+import { REVIEWER_ACTOR } from "../src/seed";
 import type { SessionInput } from "../src/schemas";
 import type { Actor, Session } from "../src/types";
 import { DomainError } from "../src/workflow";
@@ -11,7 +11,8 @@ export class DemoSessions {
   private readonly sessions = new Map<string, { actor: Actor; expiresAt: number }>();
 
   create(input: SessionInput, now = Date.now()): Session {
-    const account = DEMO_ACCOUNTS[input.role];
+    const customer = input.role === "customer" ? DEMO_CUSTOMERS.find((c) => c.email === input.email) : undefined;
+    const account = input.role === "customer" ? customer ?? DEMO_ACCOUNTS.customer : DEMO_ACCOUNTS.reviewer;
     const supplied = createHash("sha256").update(input.password).digest();
     const expected = createHash("sha256").update(account.password).digest();
     const passwordMatches = timingSafeEqual(supplied, expected);
@@ -22,7 +23,7 @@ export class DemoSessions {
     for (const [token, session] of this.sessions) {
       if (session.expiresAt <= now) this.sessions.delete(token);
     }
-    const actor = input.role === "customer" ? CUSTOMER_ACTOR : REVIEWER_ACTOR;
+    const actor: Actor = customer ? { id: customer.customerId, name: customer.name, role: "customer" } : REVIEWER_ACTOR;
     const token = randomUUID();
     const expiresAt = now + DEMO_SESSION_LIFETIME_MS;
     this.sessions.set(token, { actor, expiresAt });

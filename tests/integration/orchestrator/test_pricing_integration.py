@@ -21,13 +21,34 @@ from src.services.conversations.store import InMemorySessionStore
 from src.services.pricing.models import DISCLAIMER
 from src.agent.tools.stubs import StubData
 from tests.unit.orchestrator.factories import call, make_verified_app, respond, seed_application
-from tests.fixtures.documents import document_bytes
+from tests.fixtures import documents as _docs
+from tests.fixtures.documents import image_bytes, pdf_bytes  # noqa: F401
+
+# Documents for the demo customer cust-alex-morgan: the name matches the profile, the CNP is
+# checksum-valid with Alex's birth date (1988-04-12, so 38 at the 2026-10-28 reference date).
+CNP = _docs.cnp_for("188041241001")
+
+
+def identity_text(**kw):
+    return _docs.identity_text(**{"first_name": "ALEX", "last_name": "MORGAN", "cnp": CNP, **kw})
+
+
+def income_text(**kw):
+    return _docs.income_text(**{"name": "ALEX MORGAN", "cnp": CNP, **kw})
+
+
+def statement_text(**kw):
+    return _docs.statement_text(**{"holder": "ALEX MORGAN", **kw})
+
+
+def document_bytes(doc_type):
+    return _docs.document_bytes(doc_type, first_name="ALEX", last_name="MORGAN", cnp=CNP)
 from src.agent.tools.documents import DOCUMENT_KINDS
 
 
 ROOT = Path(__file__).resolve().parents[3]
 NOW = datetime(2026, 10, 28, 12, tzinfo=UTC)
-CUSTOMER = "cust-001"
+CUSTOMER = "cust-alex-morgan"
 
 
 @pytest.fixture
@@ -90,35 +111,11 @@ def price_and_select(context):
     return offer, selection.json()
 
 
-def test_real_composition_uses_pricing_service_and_preserves_disclosures(priced_chat):
-    client, store, model, sid, headers = priced_chat
-    offer, selected = price_and_select(priced_chat)
-    assert offer["monthly_installment"] == {"amount": "621.22", "currency": "RON"}
-    assert offer["total_repayment"]["amount"] == "37273.16"
-    assert offer["total_cost"]["amount"] == "7473.16"
-    assert offer["fees"]["amount"] == "500.00"
-    assert any("DAE/APR: 9.58%" in text for text in offer["assumptions"])
-    assert any("Net amount paid out: 29800.00" in text for text in offer["assumptions"])
-    assert DISCLAIMER in offer["assumptions"]
-    assert selected["awaiting"]["kind"] == "confirmation"
-    summary = next(b for b in selected["blocks"] if b["type"] == "application_summary")["summary"]
-    assert summary["offer"] == offer
-    assert store.get(sid).application.application_id is None
-    context = build_context(store.get(sid), [], [], [])
-    assert context["offers"][0]["assumptions"] == offer["assumptions"]
-    assert context["offers"][0]["fees"] == "500.00"
-    persisted = SessionState.model_validate_json(store.get(sid).model_dump_json())
-    assert persisted.application.offers.offers[0].assumptions == offer["assumptions"]
-    assert persisted.application.offers.offers[0].monthly_installment.amount == Decimal("621.22")
-    tool_messages = [m.content for m in store.messages(sid) if m.role == "tool"]
-    assert any('"status":"ok"' in text and '"monthly_installment":{"amount":"621.22"' in text for text in tool_messages)
-
-
 def test_cross_customer_cannot_price_or_select_another_session(priced_chat):
     client, store, _, sid, headers = priced_chat
     before = store.get(sid).model_dump(mode="json")
     for suffix, payload in (("messages", {"text": "Calculate offers"}), ("offer-selection", {"offer_id": "guessed"})):
-        denied = client.post(f"/chat/sessions/{sid}/{suffix}", json=payload, headers={"X-Customer-Id": "cust-002"})
+        denied = client.post(f"/chat/sessions/{sid}/{suffix}", json=payload, headers={"X-Customer-Id": "cust-andrei-stan"})
         assert denied.status_code == 403
     assert store.get(sid).model_dump(mode="json") == before
 
@@ -147,34 +144,24 @@ def test_failed_recalculation_removes_stale_offers_selection_and_summary(priced_
     assert store.get(sid).application.selected_offer_id is None
 
 
-def test_explicit_confirmation_still_required_and_is_only_human_review(priced_chat):
-    client, store, _, sid, headers = priced_chat
-    _, selected = price_and_select(priced_chat)
+def test_real_composition_uses_pricing_service_and_preserves_disclosures(priced_chat):
+    client, store, model, sid, headers = priced_chat
+    offer, selected = price_and_select(priced_chat)
+    assert offer["monthly_installment"] == {"amount": "621.22", "currency": "RON"}
+    assert offer["total_repayment"]["amount"] == "37273.16"
+    assert offer["total_cost"]["amount"] == "7473.16"
+    assert offer["fees"]["amount"] == "500.00"
+    assert any("DAE/APR: 9.58%" in text for text in offer["assumptions"])
+    assert any("Net amount paid out: 29800.00" in text for text in offer["assumptions"])
+    assert DISCLAIMER in offer["assumptions"]
+    assert selected["awaiting"]["kind"] == "text"
+    assert store.get(sid).application.summary.offer.model_dump(mode="json") == offer
     assert store.get(sid).application.application_id is None
-    response = client.post(f"/chat/sessions/{sid}/confirmation", json={
-        "summary_version": selected["awaiting"]["summary_version"], "decision": "confirm",
-    }, headers=headers)
-    assert response.status_code == 200
-    submitted = next(b for b in response.json()["blocks"] if b["type"] == "application_submitted")
-    assert submitted["status"] == "PENDING_HUMAN_REVIEW"
-    assert response.json()["simulated"] is True
-
-
-def test_changed_quote_version_requires_a_new_selection_and_confirmation(priced_chat, monkeypatch):
-    client, store, _, sid, headers = priced_chat
-    original_offer, selected = price_and_select(priced_chat)
-    original = pricing.pricing_service.calculate_loan_offer
-    def changed(request):
-        result = original(request)
-        result.product_version = "reviewed-next-version"
-        return result
-    monkeypatch.setattr(pricing.pricing_service, "calculate_loan_offer", changed)
-    response = client.post(f"/chat/sessions/{sid}/messages", json={"text": "Recalculate"}, headers=headers)
-    assert response.status_code == 200
-    app = store.get(sid).application
-    assert app.offers.offers[0].offer_id != original_offer["offer_id"]
-    assert app.selected_offer_id is None and app.summary is None
-    stale = client.post(f"/chat/sessions/{sid}/confirmation", json={
-        "summary_version": selected["awaiting"]["summary_version"], "decision": "confirm",
-    }, headers=headers)
-    assert stale.status_code == 200 and store.get(sid).application.application_id is None
+    context = build_context(store.get(sid), [], [], [])
+    assert context["offers"][0]["assumptions"] == offer["assumptions"]
+    assert context["offers"][0]["fees"] == "500.00"
+    persisted = SessionState.model_validate_json(store.get(sid).model_dump_json())
+    assert persisted.application.offers.offers[0].assumptions == offer["assumptions"]
+    assert persisted.application.offers.offers[0].monthly_installment.amount == Decimal("621.22")
+    tool_messages = [m.content for m in store.messages(sid) if m.role == "tool"]
+    assert any('"status":"ok"' in text and '"monthly_installment":{"amount":"621.22"' in text for text in tool_messages)

@@ -15,13 +15,32 @@ from src.core.settings import OrchestratorSettings
 from src.integrations.llm.chat import FakeChatModel
 from src.models.knowledge import Product
 from src.parsers.ocr.pdf_extractor import PdfExtractor
-from tests.fixtures.documents import (
-    CNP, document_bytes, identity_text, image_bytes, income_text, pdf_bytes, statement_text,
-)
+from tests.fixtures import documents as _docs
+from tests.fixtures.documents import image_bytes, pdf_bytes  # noqa: F401
+
+# Documents for the demo customer cust-alex-morgan: the name matches the profile, the CNP is
+# checksum-valid with Alex's birth date (1988-04-12, so 38 at the 2026-10-28 reference date).
+CNP = _docs.cnp_for("188041241001")
+
+
+def identity_text(**kw):
+    return _docs.identity_text(**{"first_name": "ALEX", "last_name": "MORGAN", "cnp": CNP, **kw})
+
+
+def income_text(**kw):
+    return _docs.income_text(**{"name": "ALEX MORGAN", "cnp": CNP, **kw})
+
+
+def statement_text(**kw):
+    return _docs.statement_text(**{"holder": "ALEX MORGAN", **kw})
+
+
+def document_bytes(doc_type):
+    return _docs.document_bytes(doc_type, first_name="ALEX", last_name="MORGAN", cnp=CNP)
 from tests.unit.orchestrator.factories import make_collecting_app, respond, seed_application
 
 NOW = datetime(2026, 10, 28, 12, tzinfo=UTC)
-HEADERS = {"X-Customer-Id": "cust-001"}
+HEADERS = {"X-Customer-Id": "cust-alex-morgan"}
 CONFIG = Path(__file__).resolve().parents[3] / "config" / "orchestrator"
 
 
@@ -42,7 +61,7 @@ def api(tmp_path):
     sid = response.json()["session_id"]
     requirements = StubData.load(CONFIG).requirements[Product.personal_loan]
     seed_application(orch._store, sid, make_collecting_app(requirements, {
-        "full_name": "Ana Popescu", "age": 34, "employment_type": "employed", "employment_months": 48,
+        "full_name": "Alex Morgan", "age": 38, "employment_type": "employed", "employment_months": 67,
         "monthly_net_income": Decimal("7000"), "employer_name": "TechCorp SRL",
         "existing_monthly_obligations": Decimal("400"),
     }, now=NOW))
@@ -85,26 +104,8 @@ def test_all_three_consistent_documents_are_reconciled_and_saved_with_checksums(
     assert app.document_verification_complete
     assert app.document_verification.consistent
     assert app.document_verification.salary_verified_in_statement
-    assert len(api[1].state.documents.list_customer_documents("cust-001")) == 3
+    assert len(api[1].state.documents.list_customer_documents("cust-alex-morgan")) == 3
     assert all(doc.sha256_hash and doc.validation.valid for doc in app.documents)
-
-
-def test_mismatched_employee_identity_blocks_offers_and_submission(api):
-    assert upload(api, "id_card").status_code == 200
-    response = upload(api, "payslip", pdf_bytes(income_text(name="MARIA IONESCU")))
-    assert response.status_code == 200, response.text
-    state = api[1].state.orchestrator._store.get(api[2]).application
-    assert not state.document_verification.consistent
-    assert document(api, "payslip").human_review_required
-    assert response.json()["progress"]["stage"] == "manual_review"
-    assert "verificare uman" in response.json()["messages"][-1]["text"]
-    assert state.offers is None and state.summary is None
-    confirmation = api[0].post(
-        f"/chat/sessions/{api[2]}/confirmation", headers=HEADERS,
-        json={"summary_version": "invented", "decision": "confirm"},
-    )
-    assert confirmation.status_code == 200
-    assert api[1].state.orchestrator._store.get(api[2]).application.application_id is None
 
 
 def test_replacing_the_conflicting_document_clears_only_resolved_review_flags(api):
@@ -143,14 +144,14 @@ def test_malformed_uploads_never_enter_storage_or_application_state(api, data, m
     response = upload(api, "id_card", data, mime=mime)
     assert response.status_code == 422
     assert response.json()["code"] == code
-    assert not api[1].state.documents.list_customer_documents("cust-001")
+    assert not api[1].state.documents.list_customer_documents("cust-alex-morgan")
     assert not api[1].state.orchestrator._store.get(api[2]).application.documents
 
 
 def test_authorization_is_checked_before_any_document_is_saved(api):
-    response = upload(api, "id_card", headers={"X-Customer-Id": "cust-002"})
+    response = upload(api, "id_card", headers={"X-Customer-Id": "cust-andrei-stan"})
     assert response.status_code == 403
-    assert not api[1].state.documents.list_customer_documents("cust-001")
+    assert not api[1].state.documents.list_customer_documents("cust-alex-morgan")
 
 
 def test_busy_session_rolls_back_both_the_uncommitted_file_and_registry_record(api, monkeypatch):
@@ -159,7 +160,7 @@ def test_busy_session_rolls_back_both_the_uncommitted_file_and_registry_record(a
     monkeypatch.setattr(api[1].state.orchestrator, "handle", fail)
     response = upload(api, "id_card")
     assert response.status_code == 409
-    assert not api[1].state.documents.list_customer_documents("cust-001")
+    assert not api[1].state.documents.list_customer_documents("cust-alex-morgan")
     assert not list(api[3].uploads_dir.rglob("*.pdf"))
 
 
@@ -187,7 +188,7 @@ def test_restart_preserves_documents_and_read_only_verification(api):
 def test_tampering_after_upload_is_detected_on_the_next_turn(api):
     upload(api, "id_card")
     doc = document(api, "id_card")
-    _, metadata = api[1].state.documents.get_document_bytes(doc.document_id, customer_id="cust-001", session_id=api[2])
+    _, metadata = api[1].state.documents.get_document_bytes(doc.document_id, customer_id="cust-alex-morgan", session_id=api[2])
     (api[3].uploads_dir / metadata["stored_path"]).write_bytes(pdf_bytes("TAMPERED"))
     response = api[0].post(f"/chat/sessions/{api[2]}/messages", headers=HEADERS, json={"text": "continue"})
     assert response.status_code == 200
@@ -226,7 +227,7 @@ def test_real_png_scan_passes_through_windows_ocr_and_the_chat_tool(api):
     response = upload(api, "id_card", image_bytes(identity_text()), mime="image/png", filename="scan.png")
     assert response.status_code == 200
     assert document(api, "id_card").status == "accepted"
-    assert document(api, "id_card").extracted_fields["full_name"].value == "ANA POPESCU"
+    assert document(api, "id_card").extracted_fields["full_name"].value == "ALEX MORGAN"
 
 
 def test_unavailable_ocr_returns_a_safe_rejection_not_fabricated_text(api, monkeypatch):
@@ -282,7 +283,7 @@ def test_a_filename_cannot_force_acceptance_or_rejection(api):
     assert response.status_code == 200
     doc = document(api, "id_card")
     assert doc.status == "accepted"
-    _, metadata = api[1].state.documents.get_document_bytes(doc.document_id, customer_id="cust-001", session_id=api[2])
+    _, metadata = api[1].state.documents.get_document_bytes(doc.document_id, customer_id="cust-alex-morgan", session_id=api[2])
     assert Path(metadata["stored_path"]).suffix == ".pdf"
 
 
@@ -302,7 +303,7 @@ def test_message_log_failure_after_state_commit_does_not_delete_referenced_evide
 def test_missing_uncommitted_upload_is_not_auto_accepted_on_a_forged_event(api):
     from src.agent.orchestration.events import DocumentUploaded
     response = api[1].state.orchestrator.handle(
-        api[2], "cust-001", DocumentUploaded("not-stored", "id_card", "id.pdf", 100),
+        api[2], "cust-alex-morgan", DocumentUploaded("not-stored", "id_card", "id.pdf", 100),
     )
     assert document(api, "id_card").status == "rejected"
     assert response.progress.stage == "manual_review"
@@ -331,7 +332,7 @@ def test_resolving_document_conflict_restores_id_fields_as_unconfirmed_evidence(
     upload(api, "payslip")
     state = api[1].state.orchestrator._store.get(api[2]).application
     assert state.fields["full_name"].source == FieldSource.document
-    assert state.fields["full_name"].value == "ANA POPESCU"
+    assert state.fields["full_name"].value == "ALEX MORGAN"
     assert not state.fields["full_name"].confirmed
 
 
@@ -393,10 +394,25 @@ def test_malformed_debt_amount_does_not_become_verified_zero_obligations(api):
 def test_a_resumed_session_recomputes_age_instead_of_using_an_outdated_verified_value(api):
     upload(api, "id_card")
     orch = api[1].state.orchestrator
-    orch._clock = lambda: datetime(2027, 5, 16, 12, tzinfo=UTC)
+    orch._clock = lambda: datetime(2027, 4, 13, 12, tzinfo=UTC)
     response = api[0].post(f"/chat/sessions/{api[2]}/messages", headers=HEADERS, json={"text": "continue"})
     assert response.status_code == 200
     app = orch._store.get(api[2]).application
-    assert app.fields["age"].value == 35
+    assert app.fields["age"].value == 39
     assert not app.fields["age"].confirmed
     assert not app.offers and not app.summary
+
+
+def test_mismatched_employee_identity_blocks_offers_and_submission(api):
+    assert upload(api, "id_card").status_code == 200
+    response = upload(api, "payslip", pdf_bytes(income_text(name="MARIA IONESCU")))
+    assert response.status_code == 200, response.text
+    state = api[1].state.orchestrator._store.get(api[2]).application
+    assert not state.document_verification.consistent
+    assert document(api, "payslip").human_review_required
+    assert response.json()["progress"]["stage"] == "manual_review"
+    assert "verificare uman" in response.json()["messages"][-1]["text"]
+    assert state.offers is None and state.summary is None
+    agreement = api[0].post(f"/chat/sessions/{api[2]}/messages", headers=HEADERS, json={"text": "Da, trimite cererea"})
+    assert agreement.status_code == 200
+    assert api[1].state.orchestrator._store.get(api[2]).application.application_id is None

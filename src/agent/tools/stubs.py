@@ -4,6 +4,7 @@ import math
 
 logger = logging.getLogger("src.agent.tools.stubs")
 import secrets
+import sqlite3
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -16,6 +17,7 @@ from src.agent.orchestration.state import (
     ExtractedField,
     FieldSource,
     EscalationRecord,
+    DocumentStatus,
 )
 from src.agent.tools.contracts import (
     PassageView,
@@ -56,57 +58,14 @@ from src.models.credit import (
     ReasonItem,
 )
 from src.models.knowledge import Product, SearchQuery, SearchStatus, PassageFlag
+from src.services.human_review.models import NotFound, ReviewDocument
+from src.services.human_review.store import ReviewStore
 
 if TYPE_CHECKING:
     from src.services.document_processing.service import DocumentProcessingService
 
 
-def annuity_installment(principal: Decimal, annual_rate_percent: Decimal, months: int) -> Decimal:
-    """Calculate monthly annuity installment.
-
-    Args:
-        principal: Loan principal amount
-        annual_rate_percent: Annual interest rate as percentage (e.g., 9.5)
-        months: Number of months
-
-    Returns:
-        Monthly installment quantized to 0.01 with ROUND_HALF_UP
-    """
-    if annual_rate_percent == Decimal("0"):
-        # Zero interest: simple division
-        result = principal / Decimal(months)
-    else:
-        # Standard annuity formula
-        monthly_rate = annual_rate_percent / Decimal("100") / Decimal("12")
-        # payment = P * r / (1 - (1 + r)^(-n))
-        one_plus_r = Decimal("1") + monthly_rate
-        # Use Python's built-in pow for Decimal exponentiation
-        denominator = Decimal("1") - (one_plus_r ** (-months))
-        result = principal * monthly_rate / denominator
-
-    return result.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
-@dataclass
-class EligibilityRule:
-    """Eligibility rules for a product."""
-    product_code: Product
-    min_age: int
-    max_age_at_maturity: int
-    min_monthly_income: Decimal
-    max_dti: Decimal
-    min_employment_months: int
-    manual_review_employment_types: list[str]
-    rule_version: str
-
-    def make_satisfied_result(self) -> EligibilityResult:
-        """Create a satisfied eligibility result."""
-        return EligibilityResult(
-            status=EligibilityStatus.satisfied,
-            reasons=[ReasonItem(code="all_preliminary_rules_passed", message="All preliminary rules passed")],
-            rule_version=self.rule_version,
-            simulated=True
-        )
+from src.rules.eligibility.credit_check import EligibilityRule, annuity_installment  # noqa: F401 (re-exported)
 
 
 @dataclass
@@ -196,7 +155,11 @@ class StubData:
                 max_dti=Decimal(str(rules["max_dti"])),
                 min_employment_months=rules["min_employment_months"],
                 manual_review_employment_types=rules["manual_review_employment_types"],
-                rule_version=rules["rule_version"]
+                rule_version=rules["rule_version"],
+                reject_dpd=rules.get("reject_dpd", 90),
+                review_dpd=rules.get("review_dpd", 31),
+                min_score=rules.get("min_score", 500),
+                income_gap_ratio=Decimal(str(rules.get("income_gap_ratio", "0.10"))),
             )
 
         # Load customers
@@ -215,6 +178,7 @@ class StubData:
 
 def build_stub_registry(
     data: StubData, policy_search: PolicySearch, *, document_service: "DocumentProcessingService | None" = None,
+    review_store: ReviewStore | None = None,
 ) -> ToolRegistry:
     """Build a tool registry with stub implementations.
 
@@ -226,9 +190,6 @@ def build_stub_registry(
         Configured ToolRegistry
     """
     registry = ToolRegistry()
-
-    # Shared state for submit_application idempotency
-    submission_cache: dict[str, str] = {}
 
     # Handler for search_banking_policies
     def handle_search_policies(input: SearchPoliciesInput, ctx: ToolContext) -> SearchPoliciesOutput:
@@ -538,172 +499,68 @@ def build_stub_registry(
         ctx.state.used_stubs = True
         return CreateApplicationOutput(draft_application_id=draft_id, simulated=True)
 
-    # Handler for submit_application
+    # Handler for submit_application: the review store is the only record of a submission.
     def handle_submit_application(input: SubmitApplicationInput, ctx: ToolContext) -> SubmitApplicationOutput:
-        # Check in-memory idempotency cache first
-        if input.idempotency_key in submission_cache:
-            app_id = submission_cache[input.idempotency_key]
-        else:
-            app = ctx.state.application
-            customer_id = ctx.state.customer_id
-            session_id = ctx.state.session_id
-
-            amount = 30000.0
-            term_months = 60
-            monthly_installment = 621.22
-            total_repayment = 37273.16
-            total_cost = 7273.16
-            nominal_rate = 8.90
-            dae = 9.58
-            product_code = "personal_loan"
-            customer_name = None
-            employer_name = None
-            monthly_net_income = None
-            documents = []
-
-            if app is not None:
-                if app.product_code is not None:
-                    product_code = getattr(app.product_code, "value", str(app.product_code))
-                if "amount" in app.fields and app.fields["amount"].value is not None:
-                    try:
-                        amount = float(app.fields["amount"].value)
-                    except (ValueError, TypeError):
-                        pass
-                if "term_months" in app.fields and app.fields["term_months"].value is not None:
-                    try:
-                        term_months = int(app.fields["term_months"].value)
-                    except (ValueError, TypeError):
-                        pass
-                if "full_name" in app.fields and app.fields["full_name"].value:
-                    customer_name = str(app.fields["full_name"].value)
-                if "employer_name" in app.fields and app.fields["employer_name"].value:
-                    employer_name = str(app.fields["employer_name"].value)
-                if "monthly_net_income" in app.fields and app.fields["monthly_net_income"].value is not None:
-                    try:
-                        monthly_net_income = float(app.fields["monthly_net_income"].value)
-                    except (ValueError, TypeError):
-                        pass
-
-                selected_offer = None
-                if app.offers and app.selected_offer_id:
-                    selected_offer = next((o for o in app.offers.offers if o.offer_id == app.selected_offer_id), None)
-                if selected_offer is None and app.summary and app.summary.offer:
-                    selected_offer = app.summary.offer
-
-                if selected_offer:
-                    if hasattr(selected_offer, "monthly_installment"):
-                        monthly_installment = float(selected_offer.monthly_installment.amount)
-                    if hasattr(selected_offer, "total_repayment"):
-                        total_repayment = float(selected_offer.total_repayment.amount)
-                    if hasattr(selected_offer, "total_cost"):
-                        total_cost = float(selected_offer.total_cost.amount)
-                    if hasattr(selected_offer, "nominal_rate") and selected_offer.nominal_rate is not None:
-                        nominal_rate = float(selected_offer.nominal_rate)
-                    if hasattr(selected_offer, "dae") and selected_offer.dae is not None:
-                        dae = float(selected_offer.dae)
-
-                for doc in app.documents:
-                    documents.append({
-                        "doc_type": doc.doc_type,
-                        "filename": doc.filename,
-                        "document_id": doc.document_id,
-                        "status": getattr(doc.status, "value", str(doc.status)),
-                    })
-
-            try:
-                from src.storage.application_db.repository import SqliteApplicationRepository
-                repo = SqliteApplicationRepository()
-                app_id = repo.save_application(
-                    idempotency_key=input.idempotency_key,
-                    customer_id=customer_id,
-                    session_id=session_id,
-                    product_code=product_code,
-                    amount=amount,
-                    term_months=term_months,
-                    monthly_installment=monthly_installment,
-                    total_repayment=total_repayment,
-                    total_cost=total_cost,
-                    nominal_rate=nominal_rate,
-                    dae=dae,
-                    status="PENDING_HUMAN_REVIEW",
-                    customer_name=customer_name,
-                    employer_name=employer_name,
-                    monthly_net_income=monthly_net_income,
-                    documents=documents,
-                )
-            except Exception as exc:
-                logger.warning("Application persistence fallback: %s", exc)
-                app_id = f"APP-{secrets.token_hex(4)}"
-
-            submission_cache[input.idempotency_key] = app_id
-
-        ctx.state.used_stubs = True
-        return SubmitApplicationOutput(
-            application_id=app_id,
-            status="PENDING_HUMAN_REVIEW",
-            simulated=True
-        )
+        if review_store is None:
+            raise ToolUnavailable("Application storage is not configured.")
+        if not input.idempotency_key:
+            raise ToolUnavailable("Submission must go through the orchestrator's agreement checks.")
+        app = ctx.state.application
+        if app is None or app.product_code is None:
+            raise ToolUnavailable("There is no complete application to submit.")
+        documents = [
+            ReviewDocument(
+                document_id=doc.document_id, doc_type=doc.doc_type, origin="chat",
+                status=getattr(doc.status, "value", str(doc.status)), filename=doc.filename,
+                extracted_fields={name: f.value for name, f in doc.extracted_fields.items()},
+                validation=doc.validation.model_dump(mode="json") if doc.validation else None,
+                sha256=doc.sha256_hash, uploaded_at=doc.uploaded_at,
+            )
+            for doc in app.documents if doc.status == DocumentStatus.accepted
+        ]
+        snapshot = {
+            "customer_id": ctx.state.customer_id,
+            "profile": data.customers.get(ctx.state.customer_id, {}).get("profile", {}),
+            "application": app.model_dump(mode="json"),
+            "customer_agreement": input.customer_agreement,
+        }
+        try:
+            saved = review_store.create(
+                idempotency_key=input.idempotency_key, customer_id=ctx.state.customer_id,
+                session_id=ctx.state.session_id, product_code=app.product_code.value,
+                snapshot=snapshot, documents=documents, now=ctx.now,
+            )
+        except sqlite3.Error as exc:
+            raise ToolUnavailable("The application could not be saved; please try again.") from exc
+        return SubmitApplicationOutput(application_id=saved.id, status="PENDING_HUMAN_REVIEW", simulated=False)
 
     # Handler for get_application_status
     def handle_get_status(input: GetApplicationStatusInput, ctx: ToolContext) -> ApplicationStatusOutput:
         app = ctx.state.application
-        target_id = input.application_id or (app.application_id if app else None)
-
+        target_id = app.application_id if app else None
         if not target_id:
-            ctx.state.used_stubs = True
-            return ApplicationStatusOutput(
-                application_id=None,
-                status="NO_APPLICATION",
-                history=[],
-                simulated=True
-            )
-
-        status = "PENDING_HUMAN_REVIEW"
-        history = []
+            return ApplicationStatusOutput(application_id=None, status="NO_APPLICATION", history=[], simulated=False)
+        if review_store is None:
+            raise ToolUnavailable("Application storage is not configured.")
         try:
-            from src.storage.application_db.repository import SqliteApplicationRepository
-            repo = SqliteApplicationRepository()
-            persisted = repo.get_application(target_id)
-            if persisted:
-                status = persisted.get("status", "PENDING_HUMAN_REVIEW")
-                for h in persisted.get("history", []):
-                    history.append(StatusEntry(
-                        status=h.get("status", "SUBMITTED"),
-                        at=h.get("at", ctx.now.isoformat())
-                    ))
-        except Exception as exc:
-            logger.warning("Error fetching application status from DB: %s", exc)
-
-        if not history:
-            if app and app.submitted_at:
-                history.append(StatusEntry(status="SUBMITTED", at=app.submitted_at.isoformat()))
-            if app and app.draft_application_id:
-                history.append(StatusEntry(status="DRAFT", at=ctx.state.updated_at.isoformat()))
-
-        ctx.state.used_stubs = True
+            saved = review_store.get(target_id)
+        except NotFound:
+            return ApplicationStatusOutput(application_id=target_id, status="NOT_FOUND", history=[], simulated=False)
+        except sqlite3.Error as exc:
+            raise ToolUnavailable("Application status is temporarily unavailable.") from exc
+        if saved.customer_id != ctx.state.customer_id:
+            return ApplicationStatusOutput(application_id=target_id, status="NOT_FOUND", history=[], simulated=False)
         return ApplicationStatusOutput(
-            application_id=target_id,
-            status=status,
-            history=history,
-            simulated=True
+            application_id=saved.id, status=saved.status.value,
+            history=[StatusEntry(status=h.to_status.value, at=h.at.isoformat()) for h in saved.history],
+            simulated=False,
         )
 
-    # Handler for request_human_review
+    # Handler for request_human_review: stops the chat; no ticket or review case is created.
     def handle_request_review(input: RequestHumanReviewInput, ctx: ToolContext) -> RequestHumanReviewOutput:
-        ticket_id = f"HR-{secrets.token_hex(4)}"
-
-        # Set escalation in state
-        ctx.state.escalation = EscalationRecord(
-            ticket_id=ticket_id,
-            reason=input.reason,
-            created_at=ctx.now
-        )
-
-        ctx.state.used_stubs = True
+        ctx.state.escalation = EscalationRecord(reason=input.reason, created_at=ctx.now)
         return RequestHumanReviewOutput(
-            ticket_id=ticket_id,
-            message="A human advisor will review your case and a representative will follow up with you.",
-            simulated=True
+            message="Please contact a bank representative to continue this application.", simulated=False,
         )
 
     # Register all tools
@@ -782,10 +639,11 @@ def build_stub_registry(
 
     registry.register(ToolSpec(
         name="submit_application",
-        description="Submit loan application",
+        description=("Submit the application for human review. Call only after showing the final terms and the "
+                     "customer explicitly agreeing in their latest message; quote their words in customer_agreement."),
         input_model=SubmitApplicationInput,
         output_model=SubmitApplicationOutput,
-        model_callable=False,
+        model_callable=True,
         flows=frozenset([Flow.credit_application]),
         handler=handle_submit_application
     ))

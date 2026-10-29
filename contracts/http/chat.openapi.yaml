@@ -159,48 +159,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /chat/sessions/{session_id}/confirmation:
-    post:
-      tags:
-      - chat
-      summary: Confirm Application
-      description: "Confirm or decline the application summary.\n\nReturns:\n    200\
-        \ with TurnResponse"
-      operationId: confirm_application_chat_sessions__session_id__confirmation_post
-      parameters:
-      - name: session_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Session Id
-      - name: x-customer-id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Customer-Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConfirmationRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TurnResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /chat/sessions/{session_id}:
     get:
       tags:
@@ -231,6 +189,257 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /applications:
+    get:
+      tags:
+      - reviews
+      summary: List Mine
+      operationId: list_mine_applications_get
+      parameters:
+      - name: x-customer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Customer-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /applications/{app_id}:
+    get:
+      tags:
+      - reviews
+      summary: Get Mine
+      operationId: get_mine_applications__app_id__get
+      parameters:
+      - name: app_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: App Id
+      - name: x-customer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Customer-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /applications/{app_id}/requests/{request_id}/document:
+    post:
+      tags:
+      - reviews
+      summary: Upload
+      operationId: upload_applications__app_id__requests__request_id__document_post
+      parameters:
+      - name: app_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: App Id
+      - name: request_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Request Id
+      - name: x-customer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Customer-Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_applications__app_id__requests__request_id__document_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /review/applications:
+    get:
+      tags:
+      - reviews
+      summary: Queue
+      operationId: queue_review_applications_get
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/ReviewStatus'
+          - type: 'null'
+          title: Status
+      - name: x-reviewer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Reviewer-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /review/applications/{app_id}:
+    get:
+      tags:
+      - reviews
+      summary: Detail
+      operationId: detail_review_applications__app_id__get
+      parameters:
+      - name: app_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: App Id
+      - name: x-reviewer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Reviewer-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /review/applications/{app_id}/decision:
+    post:
+      tags:
+      - reviews
+      summary: Decision
+      operationId: decision_review_applications__app_id__decision_post
+      parameters:
+      - name: app_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: App Id
+      - name: x-reviewer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Reviewer-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /review/applications/{app_id}/documents/{document_id}:
+    get:
+      tags:
+      - reviews
+      summary: Document File
+      operationId: document_file_review_applications__app_id__documents__document_id__get
+      parameters:
+      - name: app_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: App Id
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Document Id
+      - name: x-reviewer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Reviewer-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -269,63 +478,6 @@ components:
       - status
       title: ApplicationSubmittedBlock
       description: Block confirming application submission.
-    ApplicationSummary:
-      properties:
-        summary_version:
-          type: string
-          title: Summary Version
-        application_id:
-          type: string
-          title: Application Id
-        product_code:
-          $ref: '#/components/schemas/Product'
-        product_name:
-          type: string
-          title: Product Name
-        amount:
-          $ref: '#/components/schemas/Money'
-        term_months:
-          type: integer
-          title: Term Months
-        offer:
-          $ref: '#/components/schemas/LoanOffer'
-        fields:
-          items:
-            $ref: '#/components/schemas/SummaryField'
-          type: array
-          title: Fields
-        documents:
-          items:
-            $ref: '#/components/schemas/DocumentChecklistItem'
-          type: array
-          title: Documents
-      type: object
-      required:
-      - summary_version
-      - application_id
-      - product_code
-      - product_name
-      - amount
-      - term_months
-      - offer
-      - fields
-      - documents
-      title: ApplicationSummary
-      description: Complete application summary for confirmation.
-    ApplicationSummaryBlock:
-      properties:
-        type:
-          type: string
-          const: application_summary
-          title: Type
-          default: application_summary
-        summary:
-          $ref: '#/components/schemas/ApplicationSummary'
-      type: object
-      required:
-      - summary
-      title: ApplicationSummaryBlock
-      description: Block showing application summary.
     Awaiting:
       properties:
         kind:
@@ -356,6 +508,16 @@ components:
       - none
       title: AwaitingKind
       description: What the assistant is waiting for from the customer.
+    Body_upload_applications__app_id__requests__request_id__document_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_upload_applications__app_id__requests__request_id__document_post
     Body_upload_document_chat_sessions__session_id__documents_post:
       properties:
         doc_type:
@@ -431,23 +593,32 @@ components:
       - url
       title: CitationRef
       description: Citation reference for assistant messages.
-    ConfirmationRequest:
+    DecisionRequest:
       properties:
-        summary_version:
-          type: string
-          title: Summary Version
-        decision:
+        action:
           type: string
           enum:
-          - confirm
-          - decline
-          title: Decision
+          - approve
+          - reject
+          - request_document
+          title: Action
+        reason:
+          type: string
+          title: Reason
+        version:
+          type: integer
+          title: Version
+        doc_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Doc Type
       type: object
       required:
-      - summary_version
-      - decision
-      title: ConfirmationRequest
-      description: Request to confirm or decline the application summary.
+      - action
+      - reason
+      - version
+      title: DecisionRequest
     DocumentChecklistBlock:
       properties:
         type:
@@ -547,18 +718,14 @@ components:
           const: escalation
           title: Type
           default: escalation
-        ticket_id:
-          type: string
-          title: Ticket Id
         message:
           type: string
           title: Message
       type: object
       required:
-      - ticket_id
       - message
       title: EscalationBlock
-      description: Block indicating case escalation.
+      description: The chat stopped; the customer should contact a bank representative.
     ExtractedFieldView:
       properties:
         field:
@@ -793,6 +960,14 @@ components:
       - message
       title: ReasonItem
       description: A reason code with message.
+    ReviewStatus:
+      type: string
+      enum:
+      - PENDING_HUMAN_REVIEW
+      - MORE_INFORMATION_REQUIRED
+      - APPROVED
+      - REJECTED
+      title: ReviewStatus
     SendMessageRequest:
       properties:
         text:
@@ -827,24 +1002,6 @@ components:
       - latest
       title: SessionView
       description: Complete view of a session.
-    SummaryField:
-      properties:
-        label:
-          type: string
-          title: Label
-        value:
-          type: string
-          title: Value
-        source:
-          type: string
-          title: Source
-      type: object
-      required:
-      - label
-      - value
-      - source
-      title: SummaryField
-      description: A field in the application summary.
     TurnResponse:
       properties:
         session_id:
@@ -872,14 +1029,12 @@ components:
             - $ref: '#/components/schemas/ExtractedFieldsBlock'
             - $ref: '#/components/schemas/EligibilityResultBlock'
             - $ref: '#/components/schemas/OffersBlock'
-            - $ref: '#/components/schemas/ApplicationSummaryBlock'
             - $ref: '#/components/schemas/ApplicationSubmittedBlock'
             - $ref: '#/components/schemas/EscalationBlock'
             discriminator:
               propertyName: type
               mapping:
                 application_submitted: '#/components/schemas/ApplicationSubmittedBlock'
-                application_summary: '#/components/schemas/ApplicationSummaryBlock'
                 document_checklist: '#/components/schemas/DocumentChecklistBlock'
                 eligibility_result: '#/components/schemas/EligibilityResultBlock'
                 escalation: '#/components/schemas/EscalationBlock'

@@ -376,10 +376,38 @@ def test_verified_rerun_required_before_offers():
     # Need run_eligibility (group 10)
     assert needs[0].kind == NeedKind.run_eligibility
 
-    # can_calculate_offers is blocked
+    # can_calculate_offers is blocked by the unverified evidence; re-running eligibility
+    # cannot unblock it, so the reason must not tell the model to do that.
     reason = can_calculate_offers(state)
-    assert reason is not None
-    assert "verified" in reason.lower()
+    assert reason == "document evidence is not fully verified and confirmed"
+
+
+def test_stale_eligibility_rejection_names_the_tool_to_call():
+    """A changed input makes eligibility stale; the rejection must say to re-run it."""
+    specs = make_specs()
+    app = make_app(product_code=Product.personal_loan, requirements=ProductRequirements(
+        product_code=Product.personal_loan, fields=[specs["dependents"]], documents=[]))
+    add_field(app, "dependents", 0)
+    app.eligibility = EligibilityRecord(
+        result=EligibilityResult(status=EligibilityStatus.satisfied, reasons=[], rule_version="v1"),
+        input_fingerprint="stale",
+        verified_inputs=True,
+    )
+    reason = can_calculate_offers(make_session(app))
+    assert reason == "eligibility not current; call run_eligibility_check first"
+
+
+def test_stale_eligibility_without_runnable_inputs_gives_no_hint():
+    """If the check itself cannot run (missing fields), pointing at it would loop."""
+    specs = make_specs()
+    app = make_app(product_code=Product.personal_loan, requirements=ProductRequirements(
+        product_code=Product.personal_loan, fields=[specs["dependents"]], documents=[]))
+    app.eligibility = EligibilityRecord(
+        result=EligibilityResult(status=EligibilityStatus.satisfied, reasons=[], rule_version="v1"),
+        input_fingerprint="stale",
+        verified_inputs=True,
+    )
+    assert can_calculate_offers(make_session(app)) == "eligibility not current"
 
 
 def test_offer_then_confirmation_then_submitted():
@@ -472,7 +500,6 @@ def test_escalation_overrides_stage():
     state = make_session(
         app,
         escalation=EscalationRecord(
-            ticket_id="ESC123",
             reason="Customer request",
             created_at=datetime.now(UTC)
         )

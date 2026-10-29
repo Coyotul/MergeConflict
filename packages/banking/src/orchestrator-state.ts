@@ -7,25 +7,6 @@ import type {
   ChatMessageView,
 } from "./orchestrator";
 
-export const DEFAULT_CUSTOMERS = [
-  "cust-001",
-  "cust-002",
-  "cust-003",
-] as const;
-
-export const SYNTHETIC_CUSTOMERS = [
-  "cust-001",
-  "cust-002",
-  "cust-003",
-  "customer-alex",
-  "alex_morgan",
-] as const;
-
-export function pickCustomer(random: () => number = Math.random): string {
-  const index = Math.floor(random() * DEFAULT_CUSTOMERS.length);
-  return DEFAULT_CUSTOMERS[index];
-}
-
 export interface ChatEntry {
   id: string;
   role: "customer" | "assistant";
@@ -37,7 +18,6 @@ export type PendingAction =
   | { kind: "message"; text: string }
   | { kind: "upload"; docType: string; file: File; filename: string }
   | { kind: "offer"; offerId: string }
-  | { kind: "confirm"; summaryVersion: string; decision: "confirm" | "decline" }
   | { kind: "start" };
 
 export interface ChatState {
@@ -178,18 +158,6 @@ export function canSend(state: ChatState): boolean {
   return !state.pending && state.sessionId !== null;
 }
 
-export function canConfirm(
-  state: ChatState,
-  summary: ApplicationSummary
-): boolean {
-  if (!state.latest) return false;
-  const { awaiting } = state.latest;
-  return (
-    awaiting.kind === "confirmation" &&
-    awaiting.summary_version === summary.summary_version
-  );
-}
-
 export function hasCustomerMessages(state: ChatState): boolean {
   return state.entries.some((entry) => entry.role === "customer");
 }
@@ -211,7 +179,7 @@ export function shouldStartFresh(error: OrchestratorError): boolean {
 }
 
 export function isValidCustomerId(customerId: string): boolean {
-  return (SYNTHETIC_CUSTOMERS as readonly string[]).includes(customerId);
+  return /^cust-[a-z0-9-]+$/.test(customerId);
 }
 
 export function getRetryAction(state: ChatState): PendingAction | null {
@@ -220,21 +188,6 @@ export function getRetryAction(state: ChatState): PendingAction | null {
     return { kind: "start" };
   }
 
-  // Can't retry confirm actions
-  if (state.lastAction?.kind === "confirm") {
-    return null;
-  }
-
   return state.lastAction;
 }
 
-export const CONFIRM_RETRY_NOTICE =
-  "Nothing was submitted. Review the summary and press Confirm again.";
-
-/**
- * Guidance shown instead of a Retry button when the failed action cannot be
- * replayed automatically (a confirmation must be re-pressed explicitly).
- */
-export function retryNotice(state: ChatState): string | null {
-  return state.lastAction?.kind === "confirm" ? CONFIRM_RETRY_NOTICE : null;
-}

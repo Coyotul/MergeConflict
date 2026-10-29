@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from src.services.human_review.store import ReviewStore
+
 from src.agent.orchestration.orchestrator import Orchestrator
 from src.agent.tools.retrieval import StubPolicySearch
 from src.agent.tools.stubs import StubData, build_stub_registry
@@ -21,13 +23,15 @@ def stub_data() -> StubData:
 
 
 @pytest.fixture
-def orchestrator_factory(stub_data):
+def orchestrator_factory(stub_data, tmp_path):
     """Return make(responses, **orchestrator_kwargs) -> (orch, store, model)."""
 
     def make(responses, **kwargs):
         store = InMemorySessionStore()
         model = FakeChatModel(responses)
-        registry = build_stub_registry(stub_data, StubPolicySearch(CONFIG_DIR))
+        registry = build_stub_registry(
+            stub_data, StubPolicySearch(CONFIG_DIR), review_store=ReviewStore(tmp_path / "applications.sqlite3"),
+        )
         orch = Orchestrator(store, model, registry, list(CATALOG_CODES), **kwargs)
         return orch, store, model
 

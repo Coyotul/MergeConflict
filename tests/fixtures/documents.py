@@ -1,5 +1,6 @@
 """Small, readable synthetic documents with real PDF/image bytes (not mocked files)."""
 from datetime import date
+from decimal import Decimal
 from io import BytesIO
 
 from PIL import Image, ImageDraw, ImageFont
@@ -24,12 +25,13 @@ def identity_text(*, first_name="ANA", last_name="POPESCU", cnp=CNP,
 
 
 def income_text(*, name="ANA POPESCU", cnp=CNP, net="6.200,00",
-                issued=REFERENCE_DATE, contract="NEDETERMINATA") -> str:
+                issued=REFERENCE_DATE, contract="NEDETERMINATA",
+                employer: str = "TechCorp SRL", employment_start: date = date(2021, 4, 1)) -> str:
     return (
-        "TechCorp SRL\nCUI: 18318261\nADEVERINTA DE VENIT - SYNTHETIC TEST\n"
+        f"{employer}\nCUI: 18318261\nADEVERINTA DE VENIT - SYNTHETIC TEST\n"
         f"salariatul {name}, avand CNP: {cnp}\n"
         f"Contract pe perioada {contract}\n"
-        "Angajat din data de 01.04.2021\n"
+        f"Angajat din data de {employment_start:%d.%m.%Y}\n"
         f"Data emiterii: {issued:%d.%m.%Y}\n"
         f"Media venitului net: {net} RON\n"
     )
@@ -58,6 +60,8 @@ def pdf_bytes(*texts: str, metadata: dict[str, str] | None = None) -> bytes:
             NameObject("/Type"): NameObject("/Font"),
             NameObject("/Subtype"): NameObject("/Type1"),
             NameObject("/BaseFont"): NameObject("/Helvetica"),
+            # WinAnsi keeps ASCII as typed (StandardEncoding would turn ' into a curly quote).
+            NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
         })
         page[NameObject("/Resources")] = DictionaryObject({
             NameObject("/Font"): DictionaryObject({NameObject("/F1"): writer._add_object(font)})
@@ -93,6 +97,29 @@ def image_bytes(text: str = "", *, image_format="PNG", rotation=0) -> bytes:
     return output.getvalue()
 
 
-def document_bytes(doc_type: str) -> bytes:
-    texts = {"id_card": identity_text(), "payslip": income_text(), "bank_statement": statement_text()}
+def cnp_for(body: str) -> str:
+    """A checksum-valid synthetic CNP from its first twelve digits."""
+    return body + str(compute_cnp_checksum(body))
+
+
+def _ro_decimal(text: str) -> Decimal:
+    return Decimal(text.replace(".", "").replace(",", "."))
+
+
+def _ro_text(value: Decimal) -> str:
+    return f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def document_bytes(doc_type: str, *, first_name="ANA", last_name="POPESCU", cnp=CNP,
+                   net: str = "6.200,00", employer: str = "TechCorp SRL",
+                   employment_start: date = date(2021, 4, 1), obligations: str = "400,00") -> bytes:
+    name = f"{first_name} {last_name}"
+    # The statement ledger must balance: opening 1.000,00 + salary - payments 400,00 = closing.
+    closing = _ro_text(Decimal("1000") + _ro_decimal(net) - Decimal("400"))
+    texts = {
+        "id_card": identity_text(first_name=first_name, last_name=last_name, cnp=cnp),
+        "payslip": income_text(name=name, cnp=cnp, net=net, employer=employer,
+                               employment_start=employment_start),
+        "bank_statement": statement_text(holder=name, salary=net, closing=closing, obligations=obligations),
+    }
     return pdf_bytes(texts[doc_type])

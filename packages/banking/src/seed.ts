@@ -1,11 +1,21 @@
-import type { Actor, DemoStore, LoanApplication } from "./types";
+import type { Actor, Customer, DemoStore, LoanApplication } from "./types";
 import { assessAffordability, calculateLoan, sumMoney } from "./finance";
+import { DEMO_CUSTOMERS } from "./demo-accounts";
 
-export const CUSTOMER_ACTOR: Actor = { id: "customer-alex", name: "Alex Morgan", role: "customer" };
+export const CUSTOMER_ACTOR: Actor = { id: "cust-alex-morgan", name: "Alex Morgan", role: "customer" };
 export const REVIEWER_ACTOR: Actor = { id: "reviewer-jamie", name: "Jamie Carter", role: "reviewer" };
+
+/** One synthetic customer profile per demo sign-in; Alex keeps the original rich fixture. */
+export function seedCustomers(): Customer[] {
+  return DEMO_CUSTOMERS.map((account) => account.customerId === CUSTOMER_ACTOR.id
+    ? { id: CUSTOMER_ACTOR.id, name: "Alex Morgan", email: "alex@example.test", initials: "AM", monthlyIncome: "8500.00", monthlyExpenses: "3200.00", balance: "12480.50", employer: "Northstar Studio · fictional" }
+    : { id: account.customerId, name: account.name, email: account.email, initials: account.name.split(" ").map((part) => part[0]).join("").toUpperCase(), monthlyIncome: account.monthlyIncome, monthlyExpenses: "2000.00", balance: "5000.00", employer: "Synthetic employer · fictional" });
+}
+
 export function seedStore(): DemoStore {
   const now = new Date().toISOString();
-  const customer = { id: CUSTOMER_ACTOR.id, name: "Alex Morgan", email: "alex@example.test", initials: "AM", monthlyIncome: "8500.00", monthlyExpenses: "3200.00", balance: "12480.50", employer: "Northstar Studio · fictional" };
+  const customers = seedCustomers();
+  const customer = customers[0];
   const products = [
     { id: "personal", name: "Personal loan", description: "A little room for your next big idea.", annualRate: "8.90", fee: "150.00", monthlyInsurance: "0.00", minAmount: "5000.00", maxAmount: "100000.00", minMonths: 6, maxMonths: 60, policyId: "personal-policy" },
     { id: "mortgage", name: "Mortgage", description: "Make yourself at home, one clear step at a time.", annualRate: "6.50", fee: "1000.00", monthlyInsurance: "35.00", minAmount: "100000.00", maxAmount: "1500000.00", minMonths: 60, maxMonths: 360, policyId: "mortgage-policy" },
@@ -27,5 +37,5 @@ export function seedStore(): DemoStore {
     documents: [{ kind: "identity", status: "FORMAT_ACCEPTED", name: "synthetic-identity.pdf", mimeType: "application/pdf", size: 14800, uploadedAt: now }, { kind: "income", status: "FORMAT_ACCEPTED", name: "synthetic-income.pdf", mimeType: "application/pdf", size: 22400, uploadedAt: now }, { kind: "statement", status: "MISSING" }],
     history: [{ id: crypto.randomUUID(), status: "DRAFT", at: now, actor: "Demo fixture", description: "Synthetic application created for the reviewer walkthrough." }, { id: crypto.randomUUID(), status: "PENDING_HUMAN_REVIEW", at: now, actor: customer.name, description: "Seeded demo submission. No real application or bank inquiry." }], notes: [],
   };
-  return { version: 1, customers: [customer], products, policies, loans, applications: [application], messages: { [customer.id]: [] }, notifications: [{ id: crypto.randomUUID(), customerId: customer.id, title: "Your demo application is in review", text: "An independent reviewer will inspect your synthetic evidence. No real credit decision is being made.", at: now, read: false, applicationId: application.id }], audit: [], consents: { [customer.id]: { financialInsights: false, notifications: true } }, idempotency: [] };
+  return { version: 1, customers, products, policies, loans, applications: [application], messages: Object.fromEntries(customers.map((c) => [c.id, []])), notifications:[{ id: crypto.randomUUID(), customerId: customer.id, title: "Your demo application is in review", text: "An independent reviewer will inspect your synthetic evidence. No real credit decision is being made.", at: now, read: false, applicationId: application.id }], audit: [], consents: Object.fromEntries(customers.map((c) => [c.id, { financialInsights: false, notifications: true }])),idempotency: [] };
 }

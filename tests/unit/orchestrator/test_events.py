@@ -9,7 +9,6 @@ import pytest
 
 from src.agent.orchestration.orchestrator import (
     EVENT_TEXTS,
-    ConfirmationDecision,
     CustomerMessage,
     DocumentUploaded,
     OfferSelected,
@@ -28,7 +27,7 @@ from tests.unit.orchestrator.factories import (
     spy_tool,
 )
 
-CUSTOMER = "cust-001"
+CUSTOMER = "cust-alex-morgan"
 GREET = respond("Bună! Cu ce te pot ajuta?")
 PAYSLIP_LABEL = "Payslip (last 3 months)"
 
@@ -69,10 +68,10 @@ def collecting(orchestrator_factory, requirements):
         sid = orch.start_session(CUSTOMER).session_id
         seed_application(store, sid, make_collecting_app(requirements, {
             "employment_type": "employed",
-            "employment_months": 48,
+            "employment_months": 67,
             "monthly_net_income": Decimal("7000"),
-            "employer_name": "TechCorp SRL",
-            "existing_monthly_obligations": Decimal("400"),
+            "employer_name": "FICTIV Employer's Studio 1",
+            "existing_monthly_obligations": Decimal("0"),
         }))
         return orch, store, model, sid
     return make
@@ -125,7 +124,7 @@ def test_check_upload_rejects_unrequested(orchestrator_factory, requirements):
     orch.check_upload(sid, CUSTOMER, "payslip")  # requested: no error
 
     with pytest.raises(SessionAccessDenied):
-        orch.check_upload(sid, "cust-002", "payslip")
+        orch.check_upload(sid, "cust-andrei-stan", "payslip")
     # handle() re-checks under the lock and records nothing.
     before = store.get(sid)
     with pytest.raises(InvalidUpload):
@@ -141,7 +140,7 @@ def test_upload_accepted_merges_fields_and_conflict(collecting):
     [record] = app.documents
     assert record.status == DocumentStatus.accepted
     assert record.document_id == "up-payslip"
-    assert app.fields["monthly_net_income"].value == Decimal("6200")
+    assert app.fields["monthly_net_income"].value == Decimal("8500")
     assert app.fields["monthly_net_income"].document_id == "up-payslip"
     [conflict] = app.conflicts
     assert conflict.field == "monthly_net_income"
@@ -214,24 +213,6 @@ def test_upload_tool_failure_marks_rejected(collecting):
 
 # ---- offer selection ----------------------------------------------------------
 
-def test_offer_selection_valid_and_invalid(at_offers):
-    orch, store, model, sid = at_offers([respond("Nu există."), respond("Confirmi?")])
-
-    resp = orch.handle(sid, CUSTOMER, OfferSelected("no-such-offer"))
-    app = store.get(sid).application
-    assert app.selected_offer_id is None
-    assert events(store, sid)[-1] == "OFFER_SELECTION_REJECTED"
-    assert resp.awaiting.kind == "offer_choice"
-
-    chosen = app.offers.offers[1]
-    resp = orch.handle(sid, CUSTOMER, OfferSelected(chosen.offer_id))
-    app = store.get(sid).application
-    assert app.selected_offer_id == chosen.offer_id
-    assert events(store, sid)[-1] == f"OFFER_SELECTED {chosen.offer_id}"
-    assert resp.awaiting.kind == "confirmation"
-    assert resp.awaiting.summary_version == app.summary.summary_version
-    assert block(resp, "application_summary").summary.offer.offer_id == chosen.offer_id
-
 
 def test_offer_fallback_on_invalid_output(at_offers):
     orch, store, _, sid = at_offers(["garbage", "garbage"])
@@ -252,179 +233,19 @@ def test_offer_fallback_romanian_month_phrase(at_offers):
 
 # ---- confirmation ---------------------------------------------------------------
 
-def test_confirmation_submits_once(at_confirmation):
-    orch, store, model, sid, version = at_confirmation([respond("Trimisă."), respond("Deja trimisă.")])
-    submits = spy_tool(orch._registry, "submit_application")
-    draft = store.get(sid).application.draft_application_id
-
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-    app = store.get(sid).application
-    assert app.application_id is not None
-    assert app.submitted_at is not None
-    assert app.idempotency_key == f"{sid}:{version}"
-    assert [(s.application_id, s.idempotency_key) for s in submits] == [(draft, f"{sid}:{version}")]
-    assert events(store, sid)[-1] == f"APPLICATION_SUBMITTED {app.application_id} PENDING_HUMAN_REVIEW"
-    submitted = block(resp, "application_submitted")
-    assert submitted.application_id == app.application_id
-    assert submitted.status == "PENDING_HUMAN_REVIEW"
-    assert resp.awaiting.kind == "none"
-    assert resp.progress.stage == "submitted"
-
-    again = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-    assert store.get(sid).application.application_id == app.application_id
-    assert len(submits) == 1
-    assert events(store, sid)[-1] == f"ALREADY_SUBMITTED {app.application_id}"
-    assert block(again, "application_submitted").application_id == app.application_id
-    # Nothing is requested once submitted.
-    with pytest.raises(InvalidUpload):
-        orch.check_upload(sid, CUSTOMER, "payslip")
-
-
-def test_confirmation_with_stale_version(at_confirmation):
-    orch, store, _, sid, version = at_confirmation([respond("Rezumatul s-a schimbat.")])
-    submits = spy_tool(orch._registry, "submit_application")
-
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision("0" * 16, "confirm"))
-    app = store.get(sid).application
-    assert app.application_id is None
-    assert submits == []
-    assert events(store, sid)[-1] == "SUMMARY_CHANGED"
-    assert block(resp, "application_summary").summary.summary_version == version
-    assert resp.awaiting.kind == "confirmation" and resp.awaiting.summary_version == version
-
-
-def test_confirm_after_other_offer_selected_gives_summary_changed(at_confirmation):
-    """Summary shown with version V; a different offer is chosen; confirming V submits nothing."""
-    orch, store, _, sid, version = at_confirmation([respond("Confirmi noua ofertă?"), respond("S-a schimbat.")])
-    submits = spy_tool(orch._registry, "submit_application")
-    other = store.get(sid).application.offers.offers[1]
-
-    changed = orch.handle(sid, CUSTOMER, OfferSelected(other.offer_id))
-    assert changed.awaiting.kind == "confirmation"
-    assert changed.awaiting.summary_version != version
-
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-    assert store.get(sid).application.application_id is None
-    assert submits == []
-    assert events(store, sid)[-1] == "SUMMARY_CHANGED"
-    assert block(resp, "application_submitted") is None
-
-
-def test_confirm_after_amount_update_gives_summary_changed(at_confirmation):
-    """Summary shown with version V; the customer changes the amount; confirming V submits nothing."""
-    orch, store, _, sid, version = at_confirmation([
-        respond("Am actualizat suma.", intent="credit_application",
-                updates=[{"field": "amount", "value": "25000"}]),
-        respond("S-a schimbat."),
-    ])
-    submits = spy_tool(orch._registry, "submit_application")
-
-    orch.handle(sid, CUSTOMER, CustomerMessage("De fapt vreau 25000 lei"))
-    assert store.get(sid).application.fields["amount"].value == Decimal("25000")
-
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-    assert store.get(sid).application.application_id is None
-    assert submits == []
-    assert events(store, sid)[-1] == "SUMMARY_CHANGED"
-    assert block(resp, "application_submitted") is None
-
-
-def test_submitted_reply_is_fixed_text_never_model(at_confirmation):
-    """After submission the reply is the fixed submitted text; the model is never asked."""
-    orch, store, model, sid, version = at_confirmation()
-    model.responses = lambda messages: respond("Your loan is approved!")
-    calls_before = len(model.calls)
-
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-    app_id = store.get(sid).application.application_id
-    assert app_id is not None
-    assert [m.text for m in resp.messages] == [EVENT_TEXTS["submitted"]["ro"].format(id=app_id)]
-
-    set_language(store, sid, "en")
-    again = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-    assert [m.text for m in again.messages] == [EVENT_TEXTS["submitted"]["en"].format(id=app_id)]
-
-    assert len(model.calls) == calls_before
-    assert all("approved" not in m.content for m in store.messages(sid))
-
-
-def test_confirmation_before_summary_is_rejected(at_offers):
-    orch, store, _, sid = at_offers([respond("Alege o ofertă.")])
-    submits = spy_tool(orch._registry, "submit_application")
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision("0" * 16, "confirm"))
-    assert submits == [] and store.get(sid).application.application_id is None
-    assert events(store, sid)[-1] == "SUMMARY_CHANGED"
-    assert resp.awaiting.kind == "offer_choice"
-
-
-def test_decline_returns_to_offer_selection(at_confirmation):
-    orch, store, _, sid, version = at_confirmation(["!unavailable"])
-    set_language(store, sid, "en")
-    submits = spy_tool(orch._registry, "submit_application")
-
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "decline"))
-    app = store.get(sid).application
-    assert app.summary is None and app.selected_offer_id is None and app.application_id is None
-    assert submits == []
-    assert events(store, sid)[-1] == "SUBMISSION_DECLINED"
-    assert resp.progress.stage == "offer_selection"
-    assert resp.awaiting.kind == "offer_choice"
-    assert [m.text for m in resp.messages] == ["OK, nothing was submitted. You can change any detail."]
-
-
-def test_confirmation_persists_when_model_unavailable(at_confirmation):
-    orch, store, _, sid, version = at_confirmation(["!unavailable"])
-
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))  # no exception
-    app = store.get(sid).application
-    assert app.application_id is not None
-    expected = EVENT_TEXTS["submitted"]["ro"].format(id=app.application_id)
-    assert [m.text for m in resp.messages] == [expected]
-    assert app.application_id in expected
-    assert resp.session_version == store.get(sid).version
-    assert block(resp, "application_submitted").application_id == app.application_id
-    assert store.messages(sid)[-1].content == expected
-
-
-def test_confirmation_saved_without_model_call(at_confirmation):
-    """The submission is persisted and answered without asking the model at all."""
-    orch, store, model, sid, version = at_confirmation()
-
-    def explain(messages):
-        raise AssertionError("the model must not be called for a submission")
-
-    model.responses = explain
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-    app_id = store.get(sid).application.application_id
-    assert app_id is not None
-    assert resp.session_version == store.get(sid).version
-    assert store.messages(sid)[-1].content == EVENT_TEXTS["submitted"]["ro"].format(id=app_id)
-
-
-def test_submit_failure_does_not_submit(at_confirmation):
-    orch, store, _, sid, version = at_confirmation(["!unavailable", respond("Încearcă din nou.")])
-    set_language(store, sid, "en")
-    spy_tool(orch._registry, "submit_application", fail=ToolUnavailable("core banking down"))
-
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-    app = store.get(sid).application
-    assert app.application_id is None and app.idempotency_key is None
-    assert app.summary.summary_version == version
-    assert resp.awaiting.kind == "confirmation"
-    assert events(store, sid)[-1] == "SUBMISSION_FAILED tool_unavailable"
-    assert [m.text for m in resp.messages] == [EVENT_TEXTS["not_submitted"]["en"]]
-    assert block(resp, "application_submitted") is None
-
 
 # ---- happy path ------------------------------------------------------------------
 
 STATED = [
     {"field": "employment_type", "value": "employed"},
-    {"field": "employment_months", "value": 48},
-    {"field": "monthly_net_income", "value": "6200 lei"},
-    {"field": "employer_name", "value": "TechCorp SRL"},
-    {"field": "existing_monthly_obligations", "value": "400"},
+    {"field": "employment_months", "value": 67},
+    {"field": "monthly_net_income", "value": "8500 lei"},
+    {"field": "employer_name", "value": "FICTIV Employer's Studio 1"},
+    {"field": "existing_monthly_obligations", "value": "0"},
 ]
+
+
+AGREEMENT_OVERRIDE: dict[str, str] = {}
 
 
 def scripted_model(messages):
@@ -451,6 +272,9 @@ def scripted_model(messages):
         return call("run_eligibility_check")
     if first == "run_offers":
         return call("calculate_loan_offer", {"term_options_months": [36, 60]})
+    if first == "confirm_submission" and from_customer and last.startswith(("Da", "Yes")):
+        agreement = AGREEMENT_OVERRIDE.get("text") or last
+        return call("submit_application", {"customer_agreement": agreement})
     if first == "confirm_extracted" and from_customer:
         return respond("Confirmat.", "credit_application",
                        [{"field": n["target"], "confirm": True} for n in needs if n["kind"] == "confirm_extracted"])
@@ -471,14 +295,13 @@ def test_full_happy_path_with_scripted_model(orchestrator_factory):
 
     resp = say("Un credit de nevoi personale")
     assert (resp.progress.stage, resp.awaiting.kind) == ("collecting_information", "text")
-    assert store.get(sid).application.fields["full_name"].value == "Ana Popescu"
+    assert store.get(sid).application.fields["full_name"].value == "Alex Morgan"
 
-    resp = say("Sunt angajată de 4 ani la TechCorp SRL, câștig 6200 lei, rate 400 lei")
-    assert (resp.progress.stage, resp.awaiting.kind) == ("eligibility", "text")
-
-    resp = say("Verifică eligibilitatea")
+    # The last stated field completes the inputs: code runs eligibility in the same turn.
+    resp = say("Sunt angajată de 4 ani la FICTIV Employer's Studio 1, câștig 8500 lei, fără rate")
     assert (resp.progress.stage, resp.awaiting.kind) == ("documents", "document")
     assert resp.awaiting.document_types == ["id_card", "payslip", "bank_statement"]
+    assert store.get(sid).application.eligibility is not None
 
     resp = orch.handle(sid, CUSTOMER, upload("id_card"))
     assert resp.awaiting.document_types == ["payslip", "bank_statement"]
@@ -488,21 +311,18 @@ def test_full_happy_path_with_scripted_model(orchestrator_factory):
     assert (resp.progress.stage, resp.awaiting.kind) == ("documents", "text")
     assert store.get(sid).application.conflicts == []
 
+    # Confirming makes eligibility stale; code re-runs it on verified inputs, then the model prices.
     resp = say("Datele sunt corecte")
-    assert (resp.progress.stage, resp.awaiting.kind) == ("eligibility", "text")
-
-    resp = say("Vreau ofertele")
     assert (resp.progress.stage, resp.awaiting.kind) == ("offer_selection", "offer_choice")
     app = store.get(sid).application
     assert app.eligibility.verified_inputs is True
     assert len(app.offers.offers) == 3
 
     resp = orch.handle(sid, CUSTOMER, OfferSelected(app.offers.offers[0].offer_id))
-    assert (resp.progress.stage, resp.awaiting.kind) == ("awaiting_confirmation", "confirmation")
-    version = resp.awaiting.summary_version
-    assert block(resp, "application_summary").summary.summary_version == version
+    assert (resp.progress.stage, resp.awaiting.kind) == ("awaiting_confirmation", "text")
+    assert not [b for b in resp.blocks if b.type == "application_summary"]
 
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
+    resp = say("Da, trimite cererea")
     assert (resp.progress.stage, resp.awaiting.kind) == ("submitted", "none")
     app = store.get(sid).application
     assert block(resp, "application_submitted").application_id == app.application_id
@@ -544,3 +364,88 @@ def test_local_storage_rejects_unsafe_ids(tmp_dir, session_id, document_id):
     with pytest.raises(ValueError):
         storage.save(session_id, document_id, "f.pdf", b"x")
     assert list(tmp_dir.iterdir()) == []
+
+
+# ---- submission by explicit agreement in chat ---------------------------------
+
+def to_confirmation(orchestrator_factory):
+    orch, store, model = orchestrator_factory(scripted_model)
+    sid = orch.start_session(CUSTOMER).session_id
+    say = lambda text: orch.handle(sid, CUSTOMER, CustomerMessage(text))
+    for text in ("Vreau un credit de 30.000 lei pe 48 de luni pentru renovare", "Un credit de nevoi personale",
+                 "Sunt angajată de 4 ani la TechCorp SRL, câștig 6200 lei, rate 400 lei", "Verifică eligibilitatea"):
+        say(text)
+    for doc in ("id_card", "payslip", "bank_statement"):
+        orch.handle(sid, CUSTOMER, upload(doc))
+    say("Datele sunt corecte")
+    resp = say("Vreau ofertele")
+    resp = orch.handle(sid, CUSTOMER, OfferSelected(resp.blocks[[b.type for b in resp.blocks].index("offers")].offers[0].offer_id))
+    assert resp.progress.stage == "awaiting_confirmation"
+    return orch, store, sid, say
+
+
+def test_explicit_agreement_submits_with_fixed_reply(orchestrator_factory):
+    orch, store, sid, say = to_confirmation(orchestrator_factory)
+    resp = say("Da, trimite cererea")
+    app = store.get(sid).application
+    assert app.application_id and resp.progress.stage == "submitted"
+    assert app.application_id in resp.messages[-1].text
+    # The model quoted the customer's words; the code-side submission ran once.
+    assert any('"customer_agreement": "Da, trimite cererea"' in m.content
+               for m in store.messages(sid) if m.role == "action")
+
+
+def test_agreement_not_in_customer_message_is_refused(orchestrator_factory):
+    orch, store, sid, say = to_confirmation(orchestrator_factory)
+    AGREEMENT_OVERRIDE["text"] = "I agree to submit"
+    try:
+        resp = say("Da, dar am o întrebare")
+    finally:
+        AGREEMENT_OVERRIDE.clear()
+    assert store.get(sid).application.application_id is None
+    assert resp.progress.stage == "awaiting_confirmation"
+
+
+def test_tool_refused_on_non_customer_turn(orchestrator_factory):
+    orch, store, sid, say = to_confirmation(orchestrator_factory)
+    state = store.get(sid)
+    turn = orch._begin_turn(state, upload("id_card"))
+    outcome = orch._submit_from_model(turn, {"customer_agreement": "Da"})
+    assert not outcome.ok and outcome.error_code == "precondition_failed"
+    assert state.application.application_id is None
+
+
+def test_tool_refused_when_not_at_confirmation(orchestrator_factory):
+    orch, store, model = orchestrator_factory(scripted_model)
+    sid = orch.start_session(CUSTOMER).session_id
+    state = store.get(sid)
+    turn = orch._begin_turn(state, CustomerMessage("Da"))
+    turn.customer_text = "Da"
+    outcome = orch._submit_from_model(turn, {"customer_agreement": "Da"})
+    assert not outcome.ok and outcome.error_code == "precondition_failed"
+
+
+def test_second_call_does_not_duplicate(orchestrator_factory):
+    orch, store, sid, say = to_confirmation(orchestrator_factory)
+    say("Da, trimite cererea")
+    first = store.get(sid).application.application_id
+    say("Da, trimite cererea")
+    assert store.get(sid).application.application_id == first
+
+
+def test_offer_selection_valid_and_invalid(at_offers):
+    orch, store, model, sid = at_offers([respond("Nu există."), respond("Confirmi?")])
+
+    resp = orch.handle(sid, CUSTOMER, OfferSelected("no-such-offer"))
+    app = store.get(sid).application
+    assert app.selected_offer_id is None
+    assert events(store, sid)[-1] == "OFFER_SELECTION_REJECTED"
+    assert resp.awaiting.kind == "offer_choice"
+
+    chosen = app.offers.offers[1]
+    resp = orch.handle(sid, CUSTOMER, OfferSelected(chosen.offer_id))
+    app = store.get(sid).application
+    assert app.selected_offer_id == chosen.offer_id
+    assert events(store, sid)[-1] == f"OFFER_SELECTED {chosen.offer_id}"
+    assert resp.awaiting.kind == "text"
+    assert app.summary.offer.offer_id == chosen.offer_id

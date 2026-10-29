@@ -116,8 +116,7 @@ class OffersRecord(BaseModel):
 
 
 class EscalationRecord(BaseModel):
-    """Record of an escalation to human review."""
-    ticket_id: str
+    """The chat stopped and the customer was sent to a bank representative."""
     reason: str
     created_at: datetime
 

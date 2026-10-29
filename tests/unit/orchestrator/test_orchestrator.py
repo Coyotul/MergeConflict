@@ -37,7 +37,7 @@ from src.models.credit import EligibilityResult, EligibilityStatus, ReasonItem
 from src.models.knowledge import Product
 from tests.unit.orchestrator.factories import call, make_verified_app, respond, seed_application
 
-CUSTOMER = "cust-001"
+CUSTOMER = "cust-alex-morgan"
 NOW = datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
 
 
@@ -126,7 +126,7 @@ def test_product_code_triggers_requirements_and_profile(orchestrator_factory):
     assert app.product_code == Product.personal_loan
     assert app.requirements is not None
     assert app.requirements.product_code == Product.personal_loan
-    for name, value in (("full_name", "Ana Popescu"), ("age", 34)):
+    for name, value in (("full_name", "Alex Morgan"), ("age", 38)):
         assert app.fields[name].source == FieldSource.profile
         assert app.fields[name].confirmed is True
         assert app.fields[name].value == value
@@ -205,7 +205,7 @@ def test_model_cannot_submit(orchestrator_factory):
     sid = orch.start_session(CUSTOMER).session_id
     orch.handle(sid, CUSTOMER, CustomerMessage("trimite cererea"))
 
-    assert "TOOL_REJECTED submit_application: not_model_callable" in joined(model.calls[-1])
+    assert "TOOL_REJECTED submit_application: precondition_failed" in joined(model.calls[-1])
     assert store.get(sid).application.application_id is None
 
 
@@ -341,66 +341,14 @@ def test_side_question_keeps_application(orchestrator_factory):
     assert second.progress.stage == first.progress.stage == "discovery"
 
 
-def test_full_offer_path_builds_summary(orchestrator_factory, stub_data):
-    orch, store, model = orchestrator_factory([
-        GREET,
-        call("run_eligibility_check"),
-        call("calculate_loan_offer", {"term_options_months": [36, 60]}),
-        respond("Iată ofertele.", intent="credit_application"),
-    ])
-    sid = orch.start_session(CUSTOMER).session_id
-    seed_application(store, sid, make_verified_app(stub_data.requirements[Product.personal_loan]))
-
-    resp = orch.handle(sid, CUSTOMER, CustomerMessage("Vreau ofertele"))
-    app = store.get(sid).application
-    assert app.eligibility.result.status == EligibilityStatus.satisfied
-    assert app.eligibility.verified_inputs is True
-    assert app.eligibility.input_fingerprint == fingerprint(app, eligibility_input_names(app))
-    assert len(app.offers.offers) == 3
-    assert resp.progress.stage == "offer_selection"
-    assert resp.awaiting.kind == "offer_choice"
-    types = [b.type for b in resp.blocks]
-    assert "eligibility_result" in types and "offers" in types
-    assert "application_summary" not in types
-
-    chosen = app.offers.offers[1].offer_id
-    model.responses.append(respond("Confirmi?", intent="credit_application",
-                                   updates=[{"field": "selected_offer_id", "value": chosen}]))
-    resp = orch.handle(sid, CUSTOMER, CustomerMessage("Aleg varianta a doua"))
-
-    app = store.get(sid).application
-    assert app.selected_offer_id == chosen
-    assert app.draft_application_id is not None
-    summary = app.summary
-    assert summary.offer.offer_id == chosen
-    assert summary.application_id == app.draft_application_id
-    assert summary.term_months == app.offers.offers[1].term_months
-    payload = json.dumps(summary.model_dump(mode="json", exclude={"summary_version"}),
-                         sort_keys=True, separators=(",", ":"))
-    assert summary.summary_version == hashlib.sha256(payload.encode()).hexdigest()[:16]
-    assert resp.progress.stage == "awaiting_confirmation"
-    assert resp.awaiting.kind == "confirmation"
-    assert resp.awaiting.summary_version == summary.summary_version
-    summary_blocks = [b for b in resp.blocks if b.type == "application_summary"]
-    assert summary_blocks[0].summary == summary
-    assert app.application_id is None
-
-    # A later turn with nothing changed keeps the same draft and summary.
-    model.responses.append(respond("Aștept confirmarea."))
-    orch.handle(sid, CUSTOMER, CustomerMessage("ok"))
-    again = store.get(sid).application
-    assert again.draft_application_id == app.draft_application_id
-    assert again.summary.summary_version == summary.summary_version
-
-
 def test_access_denied_and_busy(orchestrator_factory):
     orch, _, _ = orchestrator_factory([GREET])
     sid = orch.start_session(CUSTOMER).session_id
 
     with pytest.raises(SessionAccessDenied):
-        orch.handle(sid, "cust-002", CustomerMessage("hi"))
+        orch.handle(sid, "cust-andrei-stan", CustomerMessage("hi"))
     with pytest.raises(SessionAccessDenied):
-        orch.view(sid, "cust-002")
+        orch.view(sid, "cust-andrei-stan")
     with pytest.raises(SessionNotFound):
         orch.handle("0" * 32, CUSTOMER, CustomerMessage("hi"))
 
@@ -481,7 +429,7 @@ def test_view_returns_chat_messages_and_latest(orchestrator_factory):
 def test_step_logging(orchestrator_factory, caplog):
     orch, _, _ = orchestrator_factory([GREET, call("get_credit_products", intent="product_info"), respond("Avem")])
     sid = orch.start_session(CUSTOMER).session_id
-    caplog.clear()
+    caplog.clear()  # create_app elsewhere in the run may already have the src logger at INFO
     with caplog.at_level(logging.INFO, logger="src.agent.orchestration"):
         orch.handle(sid, CUSTOMER, CustomerMessage("Ce credite aveți?"))
     lines = [json.loads(r.getMessage().split(" ", 1)[1]) for r in caplog.records
@@ -529,9 +477,11 @@ def test_blocks_for_document_stage(stub_data):
     assert statuses["offer_selection"] == statuses["submitted"] == "todo"
     extracted = next(b for b in resp.blocks if b.type == "extracted_fields")
     by_field = {f.field: f for f in extracted.fields}
-    assert set(by_field) == {"monthly_net_income", "employer_name", "existing_monthly_obligations"}
+    assert set(by_field) == {
+        "monthly_net_income", "employer_name", "employment_type", "employment_months", "existing_monthly_obligations",
+    }
     assert by_field["monthly_net_income"].needs_confirmation is True
-    assert by_field["monthly_net_income"].value == "6200"
+    assert by_field["monthly_net_income"].value == "8500"
     assert by_field["employer_name"].needs_confirmation is False
     assert any(b.type == "eligibility_result" for b in resp.blocks)
 
@@ -561,7 +511,7 @@ def test_blocks_submitted_and_escalation(stub_data):
 
     app = make_verified_app(stub_data.requirements[Product.personal_loan])
     app.application_id = "APP-1"
-    state = make_state(app, escalation=EscalationRecord(ticket_id="HR-1", reason="r", created_at=NOW))
+    state = make_state(app, escalation=EscalationRecord(reason="r", created_at=NOW), language="en")
     resp = build_turn_response(state, [], "t1")
     assert resp.awaiting.kind == "none"
     assert resp.progress.stage == "submitted"
@@ -569,4 +519,17 @@ def test_blocks_submitted_and_escalation(stub_data):
     assert submitted.application_id == "APP-1"
     assert submitted.status == "PENDING_HUMAN_REVIEW"
     escalation = next(b for b in resp.blocks if b.type == "escalation")
-    assert escalation.ticket_id == "HR-1"
+    assert escalation.message == REPRESENTATIVE
+    assert not hasattr(escalation, "ticket_id")
+
+
+REPRESENTATIVE = ("This application needs a bank representative. Please contact your branch or call the bank, "
+                  "and they will help you continue.")
+
+
+def test_manual_review_stop_points_to_a_bank_representative(stub_data):
+    app = make_verified_app(stub_data.requirements[Product.personal_loan])
+    app.eligibility = eligibility(app, EligibilityStatus.manual_review)
+    resp = build_turn_response(make_state(app, language="en"), [], "t1")
+    assert resp.progress.stage == "manual_review"
+    assert [b.message for b in resp.blocks if b.type == "escalation"] == [REPRESENTATIVE]

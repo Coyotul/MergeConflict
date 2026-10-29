@@ -56,7 +56,7 @@ class DummyOutput(BaseModel):
 
 def test_prompt_version():
     """PROMPT_VERSION constant is defined."""
-    assert PROMPT_VERSION == "orchestrator-v2-pricing"
+    assert PROMPT_VERSION == "orchestrator-v5-merged-chat-submission"
 
 
 def test_load_system_prompt():
@@ -98,6 +98,30 @@ def test_system_prompt_rules_present():
 
     # Review finding 3: Exact simulation phrase
     assert "simulated, based on public conditions" in p
+
+
+def test_system_prompt_maps_needs_to_tools():
+    """Each tool-driven need names its tool, and a rejected call must not be repeated."""
+    p = load_system_prompt()
+    assert "`run_eligibility` → call `run_eligibility_check`" in p
+    assert "`run_offers` → call `calculate_loan_offer`" in p
+    assert "`choose_product` → call `get_credit_products`" in p
+    assert "Never repeat a call that was just rejected" in p
+
+
+def test_system_prompt_switches_product_when_purpose_changes():
+    """A changed purpose that another product fits must change product_code, not just the reply."""
+    p = load_system_prompt()
+    assert "When the customer changes their purpose" in p
+    assert "propose the new `product_code` in `field_updates` in the same reply" in p
+    assert "Never tell the customer the product changed unless" in p
+
+
+def test_system_prompt_searches_for_every_new_question():
+    """Earlier passages answer earlier questions; each new question gets its own search."""
+    p = load_system_prompt()
+    assert "call `search_banking_policies` for every new product or policy question" in p
+    assert "Only say the information is unavailable after a search for that question" in p
 
 
 def test_system_prompt_product_choice_and_value_formats():

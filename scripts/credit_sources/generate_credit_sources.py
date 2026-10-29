@@ -140,11 +140,11 @@ class FixtureBuilder:
         placeholders = ", ".join("?" for _ in values)
         return self.db.execute(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", tuple(values.values())).lastrowid
 
-    def person(self, tag, description, birth=None, curated=True):
+    def person(self, tag, description, birth=None, curated=True, first_name=None, last_name=None, sex=None):
         number = len(self.people) + 1
         if tag in self.people or number > 99999:
             raise ValueError("Duplicate scenario tag or too many fictional identities")
-        sex = self.rng.choice(("M", "F"))
+        sex = sex or self.rng.choice(("M", "F"))
         birth = birth or date(self.rng.randint(1965, 1990), self.rng.randint(1, 12), self.rng.randint(1, 28)).isoformat()
         prefix = (1 if birth[:4] < "2000" else 5) + (sex == "F")
         first_twelve = str(prefix) + birth[2:4] + birth[5:7] + birth[8:10] + f"{number:05d}"
@@ -152,9 +152,12 @@ class FixtureBuilder:
         checksum = 1 if checksum == 10 else checksum
         # Deliberately wrong checksum: date/sex-consistent, NOT an official CNP.
         cnp = first_twelve + str((checksum + 1) % 10)
-        first_name = self.rng.choice(("Andrei", "Mihai", "Radu", "Victor") if sex == "M" else ("Ana", "Elena", "Ioana", "Maria"))
+        explicit_name = last_name is not None
+        first_name = first_name or self.rng.choice(("Andrei", "Mihai", "Radu", "Victor") if sex == "M" else ("Ana", "Elena", "Ioana", "Maria"))
 
-        if tag == "DSTI_39":
+        if explicit_name:
+            pass
+        elif tag == "DSTI_39":
             first_name, last_name = "Dan", "Ionescu"
         elif tag == "INCOME_NO_DEBT":
             first_name, last_name = "Elena", "Popa"
@@ -459,6 +462,58 @@ class FixtureBuilder:
         p = self.product(c, "YOUNG_ADULT", opened="2026-01-15", amount=15000)
         self.timeline(p)
 
+    def demo_cases(self):
+        """Nine named demo customers (fictional names) bound to frontend customer IDs."""
+        def demo(tag, first, last, sex, birth, description, monthly=None, clean=True):
+            c = self.person(tag, f"Demo customer {first} {last}: {description}", birth=birth,
+                            first_name=first, last_name=last, sex=sex)
+            if monthly is not None:
+                self.employment(c, start="2021-03-01")
+                self.salary(c, 2025, 12 * monthly)
+                self.salary(c, 2026, 12 * monthly)
+            if clean:
+                self.score(c, 750)
+            return c
+
+        demo("DEMO_ALEX_MORGAN", "Alex", "Morgan", "M", "1988-04-12", "salary 8,500 RON/month, no credit history.", 8500)
+        demo("DEMO_ELENA_POPA", "Elena", "Popa", "F", "1991-09-03", "salary 4,500 RON/month, no credit history.", 4500)
+        c = demo("DEMO_RADU_MIHAI", "Radu", "Mihai", "M", "1985-02-20",
+                 "two employers (3,000 + 2,000 RON/month), two consumer loans with 150 RON instalments.")
+        for employer, monthly in ((1, 3000), (2, 2000)):
+            self.employment(c, employer=employer, start="2021-03-01")
+            self.salary(c, 2025, 12 * monthly, employer=employer)
+            self.salary(c, 2026, 12 * monthly, employer=employer)
+        for number in (1, 2):
+            p = self.product(c, f"DEMO_RADU_MIHAI_LOAN_{number}", amount=5000, opened="2025-12-15")
+            for index, month in enumerate(months_between("2026-01-01", "2026-10-01")):
+                self.history(p, month, owed=5000 - (index + 1) * 120, instalment=150)
+        c = demo("DEMO_DAN_IONESCU", "Dan", "Ionescu", "M", "1983-11-07",
+                 "salary 5,996.25 RON/month, consumer loan 80,000 RON with 2,340 RON instalment (DSTI 39%).", 5996.25)
+        p = self.product(c, "DEMO_DAN_IONESCU", amount=80000, opened="2026-06-15")
+        for index, month in enumerate(months_between("2026-06-01", "2026-10-01")):
+            self.history(p, month, owed=80000 - index * 1800, instalment=2340)
+        demo("DEMO_ANDREI_STAN", "Andrei", "Stan", "M", "1996-06-25", "salary 2,300 RON/month (below minimum income).", 2300)
+        c = demo("DEMO_LATE_91", "Ioana", "Marin", "F", "1987-03-14",
+                 "salary 6,000 RON/month, consumer loan 91 days past due in 2026-10.", 6000, clean=False)
+        p = self.product(c, "DEMO_LATE_91", amount=20000, opened="2025-12-15")
+        for index, month in enumerate(months_between("2026-01-01", "2026-10-01")):
+            self.history(p, month, owed=20000 - index * 400, instalment=500, dpd=91 if month == "2026-10-01" else 0)
+        c = demo("DEMO_INSOLVENCY", "Victor", "Dobre", "M", "1979-08-30",
+                 "salary 5,500 RON/month, open debt repayment plan insolvency since 2025-01-01.", 5500, clean=False)
+        self.insert("insolvency_records", cnp=c, procedure_type="DEBT_REPAYMENT_PLAN", opened_on="2025-01-01",
+                    closed_on=None, source="FICTIV registry for prototype only")
+        c = demo("DEMO_RESTRUCTURED", "Maria", "Stoica", "F", "1990-12-01",
+                 "salary 6,500 RON/month, consumer loan restructured on 2026-08-28.", 6500, clean=False)
+        p = self.product(c, "DEMO_RESTRUCTURED", amount=20000, opened="2025-12-15")
+        for index, month in enumerate(months_between("2026-01-01", "2026-10-01")):
+            self.history(p, month, owed=20000 - index * 400, instalment=500)
+        self.event(p, "RESTRUCTURING", "2026-08-28")
+        c = demo("DEMO_SELF_EMPLOYED", "Mihai", "Ilie", "M", "1986-05-18",
+                 "self-employed (active PFA since 2022-01-15), 84,000 RON independent-activity income in 2025.")
+        self.insert("income_activity_forms", cnp=c, form_type="PFA", name="FICTIV PFA Mihai Ilie",
+                    fiscal_code="TEST-ACT-DEMO", address="Adresa fictiva", start_date="2022-01-15", end_date=None)
+        self.income(c, kind="INDEPENDENT_ACTIVITY", net=84000, year=2025, source="FICTIV PFA Mihai Ilie")
+
     def random_cases(self, count):
         population = [self.person(f"RANDOM_{i:04d}", "Seeded-random fictional background person.", curated=False)
                       for i in range(1, count + 1)]
@@ -506,6 +561,7 @@ def build_fixture(db, seed=DEFAULT_SEED, random_people=DEFAULT_RANDOM_PEOPLE):
         builder = FixtureBuilder(db, seed)
         builder.curated_cases()
         builder.random_cases(random_people)
+        builder.demo_cases()
     return {
         "seed": seed, "as_of_date": AS_OF_DATE, "random_people": random_people,
         "fictional_only": True, "cnp_policy": "Synthetic date/sex-consistent digits with deliberately invalid checksums; never official IDs",

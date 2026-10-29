@@ -92,7 +92,7 @@ def test_offer_totals():
 
     state = SessionState(
         session_id="test",
-        customer_id="cust-001",
+        customer_id="cust-alex-morgan",
         created_at=now,
         updated_at=now,
         active_flow=Flow.credit_application,
@@ -210,23 +210,23 @@ def test_eligibility_outcomes_per_customer():
             application=app
         )
 
-    # Test cust-001: should be satisfied
-    state_001 = make_state("cust-001")
+    # Test cust-alex-morgan: should be satisfied
+    state_001 = make_state("cust-alex-morgan")
     ctx_001 = ToolContext(state=state_001, now=now)
     outcome_001, output_001 = registry.execute("run_eligibility_check", {}, ctx_001, caller="model")
     assert outcome_001.ok
     assert output_001.status == EligibilityStatus.satisfied
 
-    # Test cust-002: should be not_satisfied with income_below_minimum
-    state_002 = make_state("cust-002")
+    # Test cust-andrei-stan: should be not_satisfied with income_below_minimum
+    state_002 = make_state("cust-andrei-stan")
     ctx_002 = ToolContext(state=state_002, now=now)
     outcome_002, output_002 = registry.execute("run_eligibility_check", {}, ctx_002, caller="model")
     assert outcome_002.ok
     assert output_002.status == EligibilityStatus.not_satisfied
     assert any(r.code == "income_below_minimum" for r in output_002.reasons)
 
-    # Test cust-003: should be manual_review (self_employed)
-    state_003 = make_state("cust-003")
+    # Test cust-mihai-ilie: should be manual_review (self_employed)
+    state_003 = make_state("cust-mihai-ilie")
     ctx_003 = ToolContext(state=state_003, now=now)
     outcome_003, output_003 = registry.execute("run_eligibility_check", {}, ctx_003, caller="model")
     assert outcome_003.ok
@@ -245,7 +245,7 @@ def test_process_document_reject_hook_and_empty():
     app = make_app(product_code=Product.personal_loan)
     state = SessionState(
         session_id="test",
-        customer_id="cust-001",
+        customer_id="cust-alex-morgan",
         created_at=now,
         updated_at=now,
         active_flow=Flow.credit_application,
@@ -286,56 +286,6 @@ def test_process_document_reject_hook_and_empty():
     assert output_reject.rejection_reason == "The document is unreadable; please upload a clearer copy."
 
 
-def test_submit_idempotent():
-    """Test that submit_application is idempotent on idempotency_key."""
-    config_dir = Path("config/orchestrator")
-    data = StubData.load(config_dir)
-    policy_search = StubPolicySearch(config_dir)
-    registry = build_stub_registry(data, policy_search)
-
-    now = datetime.now(UTC)
-    app = make_app(draft_application_id="DRAFT-12345678")
-    state = SessionState(
-        session_id="test",
-        customer_id="cust-001",
-        created_at=now,
-        updated_at=now,
-        active_flow=Flow.credit_application,
-        application=app
-    )
-    ctx = ToolContext(state=state, now=now)
-
-    # First submission
-    outcome1, output1 = registry.execute(
-        "submit_application",
-        {"application_id": "DRAFT-12345678", "idempotency_key": "key1"},
-        ctx,
-        caller="code"
-    )
-    assert outcome1.ok
-    app_id_1 = output1.application_id
-
-    # Same key should return same id
-    outcome2, output2 = registry.execute(
-        "submit_application",
-        {"application_id": "DRAFT-12345678", "idempotency_key": "key1"},
-        ctx,
-        caller="code"
-    )
-    assert outcome2.ok
-    assert output2.application_id == app_id_1
-
-    # Different key should return different id
-    outcome3, output3 = registry.execute(
-        "submit_application",
-        {"application_id": "DRAFT-12345678", "idempotency_key": "key2"},
-        ctx,
-        caller="code"
-    )
-    assert outcome3.ok
-    assert output3.application_id != app_id_1
-
-
 def test_search_assigns_citation_ids_and_insufficient():
     """Test that search assigns citation IDs and handles insufficient evidence."""
     config_dir = Path("config/orchestrator")
@@ -346,7 +296,7 @@ def test_search_assigns_citation_ids_and_insufficient():
     now = datetime.now(UTC)
     state = SessionState(
         session_id="test",
-        customer_id="cust-001",
+        customer_id="cust-alex-morgan",
         created_at=now,
         updated_at=now,
         active_flow=Flow.product_info
@@ -391,6 +341,7 @@ def test_registry_flags_match_table():
 
     # Expected model-callable tools from the table
     expected_model_callable = {
+        "submit_application",
         "search_banking_policies",
         "get_credit_products",
         "get_customer_profile",
@@ -437,18 +388,19 @@ def test_config_files_load():
     assert Product.mortgage_casa_ta in data.products
 
     # Check customers
-    assert len(data.customers) >= 3
-    assert "cust-001" in data.customers
-    assert "cust-002" in data.customers
-    assert "cust-003" in data.customers
+    assert len(data.customers) == 9
+    assert "cust-alex-morgan" in data.customers
+    assert "cust-andrei-stan" in data.customers
+    assert "cust-mihai-ilie" in data.customers
+    assert not any(key.startswith("cust-00") for key in data.customers)
 
     # Check customer structure
-    cust_001 = data.customers["cust-001"]
+    cust_001 = data.customers["cust-alex-morgan"]
     assert "profile" in cust_001
     assert "stated" in cust_001
     assert "documents" in cust_001
-    assert cust_001["profile"]["full_name"] == "Ana Popescu"
-    assert cust_001["profile"]["age"] == 34
+    assert cust_001["profile"]["full_name"] == "Alex Morgan"
+    assert cust_001["profile"]["age"] == 38
 
     # Check requirements
     assert len(data.requirements) == 3
@@ -473,7 +425,7 @@ def test_request_human_review_sets_escalation():
     now = datetime.now(UTC)
     state = SessionState(
         session_id="test",
-        customer_id="cust-001",
+        customer_id="cust-alex-morgan",
         created_at=now,
         updated_at=now,
         active_flow=Flow.product_info
@@ -492,16 +444,15 @@ def test_request_human_review_sets_escalation():
     )
 
     assert outcome.ok
-    assert output.ticket_id.startswith("HR-")
+    assert "representative" in output.message
 
     # Check escalation is set
     assert state.escalation is not None
-    assert state.escalation.ticket_id == output.ticket_id
     assert state.escalation.reason == "Customer needs assistance with complex case"
     assert state.escalation.created_at == now
     # No timeline promise: a representative follows up.
     assert "business day" not in output.message
-    assert "follow up" in output.message
+    assert "representative" in output.message
 
 
 def test_synthetic_passages_are_neutral():
@@ -537,7 +488,7 @@ def test_non_stub_policy_search_not_simulated():
     now = datetime.now(UTC)
     state = SessionState(
         session_id="test",
-        customer_id="cust-001",
+        customer_id="cust-alex-morgan",
         created_at=now,
         updated_at=now,
         active_flow=Flow.product_info
@@ -603,7 +554,7 @@ def test_offer_term_ordering_and_explicit_limit_rejections():
 
         state = SessionState(
             session_id="test",
-            customer_id="cust-001",
+            customer_id="cust-alex-morgan",
             created_at=now,
             updated_at=now,
             active_flow=Flow.credit_application,

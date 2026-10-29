@@ -327,7 +327,16 @@
     "2720717003204": "F",
     "1690411003214": "M",
     "2720126003221": "F",
-    "1720122003237": "M"
+    "1720122003237": "M",
+    "1880412003246": "M",
+    "2910903003252": "F",
+    "1850220003262": "M",
+    "1831107003278": "M",
+    "1960625003280": "M",
+    "2870314003292": "F",
+    "1790830003301": "M",
+    "2901201003316": "F",
+    "1860518003320": "M"
   },
   "amortizing_products": [
     1,
@@ -771,6 +780,51 @@
       "tag": "YOUNG_ADULT",
       "cnp": "6040229000737",
       "description": "Post-2000 CNP century prefix and leap-day birth; credit opens after adulthood."
+    },
+    {
+      "tag": "DEMO_ALEX_MORGAN",
+      "cnp": "1880412003246",
+      "description": "Demo customer Alex Morgan: salary 8,500 RON/month, no credit history."
+    },
+    {
+      "tag": "DEMO_ELENA_POPA",
+      "cnp": "2910903003252",
+      "description": "Demo customer Elena Popa: salary 4,500 RON/month, no credit history."
+    },
+    {
+      "tag": "DEMO_RADU_MIHAI",
+      "cnp": "1850220003262",
+      "description": "Demo customer Radu Mihai: two employers (3,000 + 2,000 RON/month), two consumer loans with 150 RON instalments."
+    },
+    {
+      "tag": "DEMO_DAN_IONESCU",
+      "cnp": "1831107003278",
+      "description": "Demo customer Dan Ionescu: salary 5,996.25 RON/month, consumer loan 80,000 RON with 2,340 RON instalment (DSTI 39%)."
+    },
+    {
+      "tag": "DEMO_ANDREI_STAN",
+      "cnp": "1960625003280",
+      "description": "Demo customer Andrei Stan: salary 2,300 RON/month (below minimum income)."
+    },
+    {
+      "tag": "DEMO_LATE_91",
+      "cnp": "2870314003292",
+      "description": "Demo customer Ioana Marin: salary 6,000 RON/month, consumer loan 91 days past due in 2026-10."
+    },
+    {
+      "tag": "DEMO_INSOLVENCY",
+      "cnp": "1790830003301",
+      "description": "Demo customer Victor Dobre: salary 5,500 RON/month, open debt repayment plan insolvency since 2025-01-01."
+    },
+    {
+      "tag": "DEMO_RESTRUCTURED",
+      "cnp": "2901201003316",
+      "description": "Demo customer Maria Stoica: salary 6,500 RON/month, consumer loan restructured on 2026-08-28."
+    },
+    {
+      "tag": "DEMO_SELF_EMPLOYED",
+      "cnp": "1860518003320",
+      "description": "Demo customer Mihai Ilie: self-employed (active PFA since 2022-01-15), 84,000 RON independent-activity income in 2025."
     }
   ],
   "products": {
@@ -1195,39 +1249,44 @@
     "RANDOM_0249_LOAN_2": 419,
     "RANDOM_0249_LOAN_3": 420,
     "RANDOM_0250_LOAN_1": 421,
-    "RANDOM_0250_LOAN_2": 422
+    "RANDOM_0250_LOAN_2": 422,
+    "DEMO_RADU_MIHAI_LOAN_1": 423,
+    "DEMO_RADU_MIHAI_LOAN_2": 424,
+    "DEMO_DAN_IONESCU": 425,
+    "DEMO_LATE_91": 426,
+    "DEMO_RESTRUCTURED": 427
   },
   "table_counts": {
     "report_params": 1,
-    "persons": 323,
+    "persons": 332,
     "employers": 6,
     "lenders": 5,
-    "employments": 171,
-    "income_activity_forms": 5,
-    "income_records": 597,
-    "monthly_salary_declarations": 5866,
-    "credit_products": 422,
-    "product_participants": 491,
-    "payment_history": 10615,
-    "credit_events": 12,
+    "employments": 180,
+    "income_activity_forms": 6,
+    "income_records": 616,
+    "monthly_salary_declarations": 6082,
+    "credit_products": 427,
+    "product_participants": 496,
+    "payment_history": 10660,
+    "credit_events": 13,
     "bureau_inquiries": 378,
-    "fico_scores": 257,
-    "fico_reason_codes": 875,
-    "insolvency_records": 4,
+    "fico_scores": 263,
+    "fico_reason_codes": 905,
+    "insolvency_records": 5,
     "card_fraud_records": 4
   },
   "view_counts_at_default_date": {
-    "v_anaf_activity_form": 3,
-    "v_anaf_income": 593,
-    "v_anaf_income_by_year": 551,
-    "v_bureau_events": 10,
+    "v_anaf_activity_form": 4,
+    "v_anaf_income": 603,
+    "v_anaf_income_by_year": 560,
+    "v_bureau_events": 11,
     "v_bureau_inquiries_6m": 123,
-    "v_bureau_insolvency": 2,
-    "v_bureau_latest_score": 254,
-    "v_bureau_products": 485,
-    "v_bureau_summary": 323,
-    "v_crc_exposures": 425,
+    "v_bureau_insolvency": 3,
+    "v_bureau_latest_score": 260,
+    "v_bureau_products": 490,
+    "v_bureau_summary": 332,
+    "v_crc_exposures": 428,
     "v_crc_fraud": 2,
-    "v_dsti_inputs": 323
+    "v_dsti_inputs": 332
   }
 }

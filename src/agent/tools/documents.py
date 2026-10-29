@@ -1,4 +1,5 @@
 """Real, owner-scoped OCR/extraction tools; the model cannot accept or store evidence."""
+from datetime import date
 from decimal import Decimal
 from typing import Mapping
 
@@ -25,6 +26,83 @@ DOCUMENT_KINDS = {
     "bank_statement": DocumentKind.STATEMENT,
 }
 MIN_EXTRACTION_CONFIDENCE = 0.85
+
+
+def completed_months(start: date, today: date) -> int:
+    """Whole months worked; the current month counts only once its start day is reached."""
+    return (today.year - start.year) * 12 + today.month - start.month - (today.day < start.day)
+
+
+def assess_processed_document(
+    doc_type: str, result: ProcessedDocumentResponse, *, profile: Mapping, required_fields: list, today: date,
+) -> ProcessDocumentOutput:
+    """Accept or reject one processed document; shared by chat uploads and reviewer-requested uploads."""
+    data = dict(result.extracted_data or {})
+    data.pop("raw_text", None)
+    validation = result.validation
+    reason = None
+    review = validation.status == DocumentProcessingStatus.FLAGGED_FOR_HUMAN_REVIEW
+    values: dict[str, str] = {}
+    if not validation.valid or review:
+        reason = "; ".join(rule.description for rule in validation.rules_evaluated if not rule.passed)
+        reason = reason or "Document validation failed; please upload a clear, current copy."
+    elif doc_type == "id_card":
+        identity = ExtractedIdentity.model_validate(data)
+        name = f"{identity.first_name} {identity.last_name}".strip()
+        expected_name = profile.get("full_name")
+        if not expected_name or normalized_name(name) != normalized_name(expected_name):
+            reason, review = "The identity document does not match the customer profile; human identity verification is required.", True
+        meta = parse_cnp(identity.cnp, as_of=today)
+        values = {"full_name": name, "age": str(meta.age_years)}
+    elif doc_type == "payslip":
+        income = ExtractedIncome.model_validate(data)
+        cnp = parse_cnp(income.employee_cnp, as_of=today)
+        if not income.employee_name or not (cnp.is_valid_format and cnp.is_valid_date and cnp.is_valid_checksum):
+            reason = "The income document is missing a complete employee name or valid CNP."
+        values = {
+            "employer_name": income.employer_name,
+            "monthly_net_income": str(Decimal(str(income.monthly_net_income)).quantize(Decimal("0.01"))),
+        }
+        # Only indefinite contracts pass validation, so an accepted payslip proves employment.
+        if income.contract_type:
+            values["employment_type"] = "employed"
+        if income.employment_start_date:
+            values["employment_months"] = str(completed_months(income.employment_start_date, today))
+    elif doc_type == "bank_statement":
+        statement = ExtractedStatement.model_validate(data)
+        if not statement.account_holder:
+            reason = "The statement must identify its account holder."
+        elif statement.currency != "RON":
+            reason, review = "Foreign-currency statements require authorized human review; amounts are not converted or guessed.", True
+        elif statement.existing_monthly_obligations is None:
+            reason, review = "The statement does not explicitly verify the monthly debt total; human debt verification is required.", True
+        else:
+            values["existing_monthly_obligations"] = str(
+                Decimal(str(statement.existing_monthly_obligations)).quantize(Decimal("0.01"))
+            )
+
+    confidence = float(data.get("confidence_score", 0))
+    fields = {}
+    specs = required_fields
+    if reason is None:
+        for spec in specs:
+            try:
+                parse_field_value(spec, values.get(spec.name))
+            except FieldValueError:
+                reason = "The document does not contain all required fields in a usable format."
+                break
+        if confidence < MIN_EXTRACTION_CONFIDENCE:
+            reason, review = "The extracted fields have low confidence and require human review.", True
+        if reason is None:
+            fields = {
+                name: ExtractedField(value=value, confidence=confidence, location=f"{doc_type} extraction")
+                for name, value in values.items()
+            }
+    return ProcessDocumentOutput(
+        status="rejected" if reason else "accepted", rejection_reason=reason,
+        extracted_fields=fields, simulated=False, human_review_required=review,
+        validation=validation, extracted_data=data, sha256_hash=result.sha256_hash,
+    )
 
 
 class DocumentTools:
@@ -64,68 +142,11 @@ class DocumentTools:
         return self._output(input.doc_type, result, ctx)
 
     def _output(self, doc_type: str, result: ProcessedDocumentResponse, ctx: ToolContext) -> ProcessDocumentOutput:
-        data = dict(result.extracted_data or {})
-        data.pop("raw_text", None)
-        validation = result.validation
-        reason = None
-        review = validation.status == DocumentProcessingStatus.FLAGGED_FOR_HUMAN_REVIEW
-        values: dict[str, str] = {}
-        if not validation.valid or review:
-            reason = "; ".join(rule.description for rule in validation.rules_evaluated if not rule.passed)
-            reason = reason or "Document validation failed; please upload a clear, current copy."
-        elif doc_type == "id_card":
-            identity = ExtractedIdentity.model_validate(data)
-            name = f"{identity.first_name} {identity.last_name}".strip()
-            profile = self.profiles.get(ctx.state.customer_id, {}).get("profile", {})
-            expected_name = profile.get("full_name")
-            if not expected_name or normalized_name(name) != normalized_name(expected_name):
-                reason, review = "The identity document does not match the customer profile; human identity verification is required.", True
-            meta = parse_cnp(identity.cnp, as_of=ctx.now.date())
-            values = {"full_name": name, "age": str(meta.age_years)}
-        elif doc_type == "payslip":
-            income = ExtractedIncome.model_validate(data)
-            cnp = parse_cnp(income.employee_cnp, as_of=ctx.now.date())
-            if not income.employee_name or not (cnp.is_valid_format and cnp.is_valid_date and cnp.is_valid_checksum):
-                reason = "The income document is missing a complete employee name or valid CNP."
-            values = {
-                "employer_name": income.employer_name,
-                "monthly_net_income": str(Decimal(str(income.monthly_net_income)).quantize(Decimal("0.01"))),
-            }
-        elif doc_type == "bank_statement":
-            statement = ExtractedStatement.model_validate(data)
-            if not statement.account_holder:
-                reason = "The statement must identify its account holder."
-            elif statement.currency != "RON":
-                reason, review = "Foreign-currency statements require authorized human review; amounts are not converted or guessed.", True
-            elif statement.existing_monthly_obligations is None:
-                reason, review = "The statement does not explicitly verify the monthly debt total; human debt verification is required.", True
-            else:
-                values["existing_monthly_obligations"] = str(
-                    Decimal(str(statement.existing_monthly_obligations)).quantize(Decimal("0.01"))
-                )
-
-        confidence = float(data.get("confidence_score", 0))
-        fields = {}
         app = ctx.state.application
         specs = [s for s in app.requirements.fields if s.required and s.verified_by == doc_type] if app and app.requirements else []
-        if reason is None:
-            for spec in specs:
-                try:
-                    parse_field_value(spec, values.get(spec.name))
-                except FieldValueError:
-                    reason = "The document does not contain all required fields in a usable format."
-                    break
-            if confidence < MIN_EXTRACTION_CONFIDENCE:
-                reason, review = "The extracted fields have low confidence and require human review.", True
-            if reason is None:
-                fields = {
-                    name: ExtractedField(value=value, confidence=confidence, location=f"{doc_type} extraction")
-                    for name, value in values.items()
-                }
-        return ProcessDocumentOutput(
-            status="rejected" if reason else "accepted", rejection_reason=reason,
-            extracted_fields=fields, simulated=False, human_review_required=review,
-            validation=validation, extracted_data=data, sha256_hash=result.sha256_hash,
+        return assess_processed_document(
+            doc_type, result, profile=self.profiles.get(ctx.state.customer_id, {}).get("profile", {}),
+            required_fields=specs, today=ctx.now.date(),
         )
 
     def verify(self, input: VerifyDocumentsInput, ctx: ToolContext) -> VerifyDocumentsOutput:

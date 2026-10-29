@@ -8,9 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from src.agent.orchestration.orchestrator import Orchestrator
+from src.agent.orchestration.orchestrator import Orchestrator, utcnow
 from src.api.application.chat import create_chat_router
-from src.core.composition import build_orchestrator
+from src.core.composition import build_orchestrator, build_registry
 from src.agent.tools.stubs import StubData
 from src.core.errors import (
     InvalidUpload,
@@ -25,6 +25,9 @@ from src.core.settings import OrchestratorSettings, load_orchestrator_settings
 from src.models.chat import ErrorBody
 from src.services.document_processing.service import DocumentProcessingService
 from src.storage.secure_documents.store import SecureDocumentStore
+from src.services.human_review.store import ReviewStore
+from src.services.human_review.service import NoPolicySearch, ReviewService
+from src.api.application.reviews import create_review_router
 
 
 logger = logging.getLogger("src.api")
@@ -63,9 +66,11 @@ def create_app(
     # Share the same owner-bound storage between uploads and OCR/verification tools.
     documents = SecureDocumentStore(settings.uploads_dir, max_file_size_bytes=settings.max_upload_bytes)
 
+    review_store = ReviewStore(settings.review_db_path)
+
     # Build orchestrator if not provided
     if orchestrator is None:
-        orchestrator = build_orchestrator(settings, documents=documents)
+        orchestrator = build_orchestrator(settings, documents=documents, review_store=review_store)
     else:
         orchestrator.configure_document_tools(
             DocumentProcessingService(documents), StubData.load(settings.config_dir).customers,
@@ -83,11 +88,20 @@ def create_app(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type", "X-Customer-Id"],
+        allow_headers=["Content-Type", "X-Customer-Id", "X-Reviewer-Id"],
         allow_credentials=False,
     )
 
     app.state.documents = documents
+    app.state.review_store = review_store
+    stub_data = StubData.load(settings.config_dir)
+    review_documents = DocumentProcessingService(documents)
+    review_service = ReviewService(
+        review_store, review_documents, stub_data, clock=utcnow,
+        # Reassessment after a requested upload uses the chat's tools, including the credit check.
+        registry=build_registry(settings, stub_data, NoPolicySearch(), review_documents, review_store=review_store),
+    )
+    app.state.review_service = review_service
     app.state.orchestrator = orchestrator
 
     # Register chat router
@@ -97,6 +111,7 @@ def create_app(
         max_upload_bytes=settings.max_upload_bytes
     )
     app.include_router(chat_router)
+    app.include_router(create_review_router(review_service, max_upload_bytes=settings.max_upload_bytes))
 
     # Health endpoint
     @app.get("/health")

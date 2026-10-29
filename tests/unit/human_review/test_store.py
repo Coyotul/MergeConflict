@@ -95,3 +95,38 @@ def test_list_filters_by_customer(store):
     assert [a.customer_id for a in store.list(customer_id="customer-alex")] == ["customer-alex"]
     with pytest.raises(NotFound):
         store.get("APP-MISSING")
+
+
+def test_concurrent_reviewer_actions_cannot_both_succeed(store, monkeypatch):
+    """Both reviewers read version 1; only the first write may win, the second gets StaleVersion."""
+    import threading
+    app = make(store)
+    barrier = threading.Barrier(2)
+    original = ReviewStore._row
+
+    def slow_row(self, conn, app_id):
+        row = original(self, conn, app_id)
+        try:
+            barrier.wait(timeout=1)
+        except threading.BrokenBarrierError:
+            pass
+        return row
+
+    monkeypatch.setattr(ReviewStore, "_row", slow_row)
+    results = []
+
+    def act(to):
+        try:
+            store.transition(app.id, to=to, actor="reviewer", reason="r", expected_version=1, now=NOW)
+            results.append("ok")
+        except (StaleVersion, InvalidTransition):
+            results.append("conflict")
+
+    threads = [threading.Thread(target=act, args=(s,)) for s in (ReviewStatus.APPROVED, ReviewStatus.REJECTED)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    monkeypatch.setattr(ReviewStore, "_row", original)
+    assert sorted(results) == ["conflict", "ok"]
+    assert len(store.get(app.id).history) == 2

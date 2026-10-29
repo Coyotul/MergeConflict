@@ -68,16 +68,26 @@ class ReviewStore:
     def __init__(self, db_path: Path):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connection() as conn:
+        conn = sqlite3.connect(self.db_path, timeout=5)
+        try:
             conn.executescript(SCHEMA)
+        finally:
+            conn.close()
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(self.db_path, timeout=5)
+        # Autocommit mode plus an explicit BEGIN IMMEDIATE: the write lock is taken before the
+        # version/status check, so two reviewers acting on the same version cannot both win.
+        conn = sqlite3.connect(self.db_path, timeout=5, isolation_level=None)
         conn.row_factory = sqlite3.Row
         try:
-            with conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
                 yield conn
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
+            conn.execute("COMMIT")
         finally:
             conn.close()
 

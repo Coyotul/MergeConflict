@@ -26,17 +26,31 @@ def service(tmp_path):
     return ReviewService(store, documents, data, clock=lambda: NOW)
 
 
-def submitted(service):
+def submitted(service, *, selected_term=None):
     app = make_verified_app(service.stub_data.requirements[Product.personal_loan])
     app.product_code = Product.personal_loan
+    if selected_term is not None:
+        app.offers = price(service, app, selected_term)
+        app.selected_offer_id = next(o.offer_id for o in app.offers.offers if o.term_months == selected_term)
     snapshot = {"customer_id": "cust-001", "profile": service.stub_data.customers["cust-001"]["profile"],
                 "application": app.model_dump(mode="json")}
     return service.store.create(idempotency_key="k", customer_id="cust-001", session_id="session-1",
                                 product_code="personal_loan", snapshot=snapshot, documents=[], now=NOW)
 
 
-def with_payslip_request(service):
-    app = submitted(service)
+def price(service, app, term):
+    from src.agent.orchestration.state import Flow, OffersRecord, SessionState
+    from src.agent.tools.contracts import CalculateOffersInput
+    from src.agent.tools.pricing import calculate_offers
+    from src.agent.tools.registry import ToolContext
+    state = SessionState(session_id="s", customer_id="cust-001", created_at=NOW, updated_at=NOW,
+                         active_flow=Flow.credit_application, application=app)
+    output = calculate_offers(CalculateOffersInput(term_options_months=[term]), ToolContext(state, NOW))
+    return OffersRecord(offers=output.offers, input_fingerprint="test")
+
+
+def with_payslip_request(service, **kwargs):
+    app = submitted(service, **kwargs)
     return service.request_document(app.id, doc_type="payslip", reason="Please send a newer payslip", version=app.version)
 
 
@@ -59,7 +73,24 @@ def test_accepted_upload_recalculates_eligibility_and_offer(service):
     assert outcome.accepted, outcome.reasons
     assert app.current["eligibility"] is not None
     assert app.current["eligibility"]["status"] != "satisfied"
-    assert app.current["offer"] is None or app.current["offer"]["term_months"] == 48
+    assert app.current["offer"]["term_months"] == 48
+
+
+def test_recalculation_keeps_the_term_the_customer_selected(service):
+    app, outcome = upload(service, with_payslip_request(service, selected_term=36), income_text(net="7.500,00"))
+    assert outcome.accepted, outcome.reasons
+    assert app.current["offer"]["term_months"] == 36
+
+
+def test_failed_processing_after_storing_leaves_no_file(service, monkeypatch):
+    app = with_payslip_request(service)
+    def boom(*args, **kwargs):
+        raise ValueError("Missing field: employment_type")
+    monkeypatch.setattr(service, "_recalculate", boom)
+    with pytest.raises(ValueError):
+        upload(service, app, income_text(net="7.500,00"))
+    storage = service.documents.storage
+    assert not [p for p in storage.root_dir.rglob("*") if p.is_file() and p.suffix in (".pdf", ".bin")]
 
 
 def test_id_card_uploaded_for_payslip_request_is_rejected(service):

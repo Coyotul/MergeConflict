@@ -79,6 +79,14 @@ class ReviewService:
             customer_id=customer_id, filename=filename, content_bytes=content, mime_type=mime_type,
             doc_kind=doc_type, application_id=app_id,
         )
+        try:
+            return self._process_requested(app, request_id, doc_type, stored, customer_id, now)
+        except BaseException:
+            self.documents.storage.delete_document(stored["document_id"], customer_id=customer_id)
+            raise
+
+    def _process_requested(self, app, request_id, doc_type, stored, customer_id, now):
+        app_id = app.id
         result = self.documents.process_stored_document(
             stored["document_id"], customer_id, DOCUMENT_KINDS[doc_type], as_of=now.date(), allow_synthetic_cnp=False,
         )
@@ -147,8 +155,12 @@ class ReviewService:
         ctx = ToolContext(state, now)
         registry = build_stub_registry(self.stub_data, _NoSearch())
         eligibility = registry.get("run_eligibility_check").handler(RunEligibilityInput(), ctx)
-        priced = registry.get("calculate_loan_offer").handler(CalculateOffersInput(), ctx)
-        offer = priced.offers[0] if priced.offers else None
+        term = _selected_term(app)
+        priced = registry.get("calculate_loan_offer").handler(
+            CalculateOffersInput(term_options_months=[term] if term else None), ctx,
+        )
+        offer = next((o for o in priced.offers if o.term_months == term), None) if term else None
+        offer = offer or (priced.offers[0] if priced.offers and not term else None)
         return {
             "application": application.model_dump(mode="json"),
             "eligibility": eligibility.model_dump(mode="json") if eligibility else None,
@@ -164,6 +176,14 @@ class _NoSearch:
 
 def _application(app: ReviewApplication) -> ApplicationState:
     return ApplicationState.model_validate(app.current["application"])
+
+
+def _selected_term(app: ReviewApplication) -> int | None:
+    """Term of the offer the customer chose in the chat; recalculation must keep it."""
+    application = app.snapshot.get("application", {})
+    offers = (application.get("offers") or {}).get("offers") or []
+    selected = next((o for o in offers if o.get("offer_id") == application.get("selected_offer_id")), None)
+    return selected["term_months"] if selected else None
 
 
 def _required_doc_types(app: ReviewApplication) -> set[str]:

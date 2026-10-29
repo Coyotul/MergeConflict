@@ -16,7 +16,7 @@ export interface ChatMessageView {
   created_at: string;
 }
 
-export type AwaitingKind = "text" | "document" | "offer_choice" | "confirmation" | "none";
+export type AwaitingKind = "text" | "document" | "offer_choice" | "none";
 
 export interface Awaiting {
   kind: AwaitingKind;
@@ -131,11 +131,6 @@ export interface OffersBlock {
   selected_offer_id?: string | null;
 }
 
-export interface ApplicationSummaryBlock {
-  type: "application_summary";
-  summary: ApplicationSummary;
-}
-
 export interface ApplicationSubmittedBlock {
   type: "application_submitted";
   application_id: string;
@@ -152,7 +147,6 @@ export type KnownBlock =
   | ExtractedFieldsBlock
   | EligibilityResultBlock
   | OffersBlock
-  | ApplicationSummaryBlock
   | ApplicationSubmittedBlock
   | EscalationBlock;
 
@@ -206,7 +200,6 @@ export function isKnownBlock(block: Block): block is KnownBlock {
     "extracted_fields",
     "eligibility_result",
     "offers",
-    "application_summary",
     "application_submitted",
     "escalation",
   ].includes(block.type);
@@ -315,18 +308,6 @@ export function createOrchestratorClient(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ offer_id: offerId }),
-      });
-    },
-
-    async confirm(
-      sessionId: string,
-      summaryVersion: string,
-      decision: "confirm" | "decline"
-    ): Promise<TurnResponse> {
-      return request<TurnResponse>(`/chat/sessions/${sessionId}/confirmation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ summary_version: summaryVersion, decision }),
       });
     },
 

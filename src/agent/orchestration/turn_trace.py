@@ -15,7 +15,6 @@ from pydantic import BaseModel
 from src.agent.orchestration.actions import ModelAction
 from src.agent.orchestration.blocks import build_awaiting
 from src.agent.orchestration.events import (
-    ConfirmationDecision,
     CustomerMessage,
     DocumentUploaded,
     OfferSelected,
@@ -80,8 +79,6 @@ def describe_event(event: object) -> dict[str, Any]:
                 "filename": event.filename, "size_bytes": event.size_bytes}
     if isinstance(event, OfferSelected):
         return {"kind": "offer_selected", "offer_id": event.offer_id}
-    if isinstance(event, ConfirmationDecision):
-        return {"kind": "confirmation", "summary_version": event.summary_version, "decision": event.decision}
     if isinstance(event, SessionStarted):
         return {"kind": "session_started"}
     return {"kind": type(event).__name__}

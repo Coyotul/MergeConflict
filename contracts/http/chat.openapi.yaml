@@ -159,48 +159,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /chat/sessions/{session_id}/confirmation:
-    post:
-      tags:
-      - chat
-      summary: Confirm Application
-      description: "Confirm or decline the application summary.\n\nReturns:\n    200\
-        \ with TurnResponse"
-      operationId: confirm_application_chat_sessions__session_id__confirmation_post
-      parameters:
-      - name: session_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Session Id
-      - name: x-customer-id
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Customer-Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConfirmationRequest'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TurnResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /chat/sessions/{session_id}:
     get:
       tags:
@@ -520,63 +478,6 @@ components:
       - status
       title: ApplicationSubmittedBlock
       description: Block confirming application submission.
-    ApplicationSummary:
-      properties:
-        summary_version:
-          type: string
-          title: Summary Version
-        application_id:
-          type: string
-          title: Application Id
-        product_code:
-          $ref: '#/components/schemas/Product'
-        product_name:
-          type: string
-          title: Product Name
-        amount:
-          $ref: '#/components/schemas/Money'
-        term_months:
-          type: integer
-          title: Term Months
-        offer:
-          $ref: '#/components/schemas/LoanOffer'
-        fields:
-          items:
-            $ref: '#/components/schemas/SummaryField'
-          type: array
-          title: Fields
-        documents:
-          items:
-            $ref: '#/components/schemas/DocumentChecklistItem'
-          type: array
-          title: Documents
-      type: object
-      required:
-      - summary_version
-      - application_id
-      - product_code
-      - product_name
-      - amount
-      - term_months
-      - offer
-      - fields
-      - documents
-      title: ApplicationSummary
-      description: Complete application summary for confirmation.
-    ApplicationSummaryBlock:
-      properties:
-        type:
-          type: string
-          const: application_summary
-          title: Type
-          default: application_summary
-        summary:
-          $ref: '#/components/schemas/ApplicationSummary'
-      type: object
-      required:
-      - summary
-      title: ApplicationSummaryBlock
-      description: Block showing application summary.
     Awaiting:
       properties:
         kind:
@@ -692,23 +593,6 @@ components:
       - url
       title: CitationRef
       description: Citation reference for assistant messages.
-    ConfirmationRequest:
-      properties:
-        summary_version:
-          type: string
-          title: Summary Version
-        decision:
-          type: string
-          enum:
-          - confirm
-          - decline
-          title: Decision
-      type: object
-      required:
-      - summary_version
-      - decision
-      title: ConfirmationRequest
-      description: Request to confirm or decline the application summary.
     DecisionRequest:
       properties:
         action:
@@ -1118,24 +1002,6 @@ components:
       - latest
       title: SessionView
       description: Complete view of a session.
-    SummaryField:
-      properties:
-        label:
-          type: string
-          title: Label
-        value:
-          type: string
-          title: Value
-        source:
-          type: string
-          title: Source
-      type: object
-      required:
-      - label
-      - value
-      - source
-      title: SummaryField
-      description: A field in the application summary.
     TurnResponse:
       properties:
         session_id:
@@ -1163,14 +1029,12 @@ components:
             - $ref: '#/components/schemas/ExtractedFieldsBlock'
             - $ref: '#/components/schemas/EligibilityResultBlock'
             - $ref: '#/components/schemas/OffersBlock'
-            - $ref: '#/components/schemas/ApplicationSummaryBlock'
             - $ref: '#/components/schemas/ApplicationSubmittedBlock'
             - $ref: '#/components/schemas/EscalationBlock'
             discriminator:
               propertyName: type
               mapping:
                 application_submitted: '#/components/schemas/ApplicationSubmittedBlock'
-                application_summary: '#/components/schemas/ApplicationSummaryBlock'
                 document_checklist: '#/components/schemas/DocumentChecklistBlock'
                 eligibility_result: '#/components/schemas/EligibilityResultBlock'
                 escalation: '#/components/schemas/EscalationBlock'

@@ -179,9 +179,10 @@ class CreateApplicationOutput(BaseModel):
 
 
 class SubmitApplicationInput(BaseModel):
-    """Input for submit_application tool."""
-    application_id: str
-    idempotency_key: str
+    """Input for submit_application tool. The model supplies only the customer's agreeing words."""
+    customer_agreement: str
+    application_id: str | None = None  # server-filled
+    idempotency_key: str | None = None  # server-filled
 
 
 class SubmitApplicationOutput(BaseModel):

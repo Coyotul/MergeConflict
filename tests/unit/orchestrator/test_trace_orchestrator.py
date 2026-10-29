@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.agent.orchestration.orchestrator import ConfirmationDecision, CustomerMessage, OfferSelected
+from src.agent.orchestration.orchestrator import CustomerMessage, OfferSelected
 from src.agent.orchestration.prompting import PROMPT_VERSION, load_system_prompt
 from src.agent.orchestration.trace import FileTracer, InMemoryTracer, NullTracer
 from src.core.errors import ModelUnavailable
@@ -209,47 +209,6 @@ def test_offer_selection_traces_code_event(at_confirmation):
     assert "create_loan_application" in code_tools
 
 
-def test_confirmation_traces_code_tool_and_event(at_confirmation):
-    orch, store, tracer, sid, version = at_confirmation()
-    orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-
-    events = last_turn(tracer)
-    assert events[0]["event"] == {"kind": "confirmation", "summary_version": version, "decision": "confirm"}
-    [submit] = [e for e in of_type(events, "tool_call") if e["tool"] == "submit_application"]
-    assert submit["caller"] == "code" and submit["ok"] is True
-    [event] = of_type(events, "code_event")
-    application_id = store.get(sid).application.application_id
-    assert (event["kind"], event["outcome"]) == ("confirmation", "submitted")
-    assert event["detail"]["application_id"] == application_id
-    finished = events[-1]
-    assert finished["outcome"] == "replied" and finished["saved"] is True
-    assert finished["stage_after"] == "submitted" and finished["awaiting_kind"] == "none"
-
-    orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-    [again] = of_type(last_turn(tracer), "code_event")
-    assert (again["kind"], again["outcome"]) == ("confirmation", "already_submitted")
-
-
-def test_confirmation_stale_version_traced(at_confirmation):
-    orch, _, tracer, sid, _ = at_confirmation([respond("S-a schimbat.")])
-    orch.handle(sid, CUSTOMER, ConfirmationDecision("stale", "confirm"))
-    [event] = of_type(last_turn(tracer), "code_event")
-    assert (event["kind"], event["outcome"]) == ("confirmation", "summary_changed")
-
-
-def test_code_event_traced_when_model_then_fails(at_confirmation):
-    orch, _, tracer, sid, _ = at_confirmation(["!unavailable"])
-    resp = orch.handle(sid, CUSTOMER, ConfirmationDecision("stale", "confirm"))
-
-    events = last_turn(tracer)
-    assert of_type(events, "code_event")[0]["outcome"] == "summary_changed"
-    assert of_type(events, "model_call")[0]["error"]["code"] == "model_unavailable"
-    finished = events[-1]
-    assert finished["outcome"] == "model_unavailable"
-    assert finished["reply"] == resp.messages[-1].text
-    assert finished["error"]["type"] == "ModelUnavailable"  # handled: fixed text replied
-
-
 def test_model_unavailable_traced(orchestrator_factory):
     tracer = InMemoryTracer()
     orch, _, _ = orchestrator_factory([GREET, "!unavailable"], tracer=tracer)
@@ -356,14 +315,3 @@ def trace_dir():
     shutil.rmtree(path, ignore_errors=True)
 
 
-def test_file_tracer_full_flow_is_valid_jsonl(at_confirmation, trace_dir):
-    orch, _, _, sid, version = at_confirmation(tracer=FileTracer(trace_dir))
-    orch.handle(sid, CUSTOMER, ConfirmationDecision(version, "confirm"))
-
-    lines = (trace_dir / f"{sid}.jsonl").read_text(encoding="utf-8").splitlines()
-    events = [json.loads(line) for line in lines]
-    kinds = [e["type"] for e in events]
-    assert kinds[0] == "session_started" and kinds.count("session_started") == 1
-    assert kinds.count("turn_finished") == 4
-    assert "tool_call" in kinds and "code_event" in kinds
-    assert all(e["session_id"] == sid and e["ts"] for e in events)

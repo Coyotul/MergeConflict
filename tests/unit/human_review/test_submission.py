@@ -36,7 +36,7 @@ def ctx_for(data):
 
 
 def submit(registry, ctx, key="session-1:v1"):
-    return registry.execute("submit_application", {"application_id": "DRAFT-1", "idempotency_key": key}, ctx, caller="code")
+    return registry.execute("submit_application", {"application_id": "DRAFT-1", "idempotency_key": key, "customer_agreement": "Da"}, ctx, caller="code")
 
 
 def test_submit_writes_real_application(data, store):

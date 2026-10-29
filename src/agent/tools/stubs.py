@@ -544,6 +544,8 @@ def build_stub_registry(
     def handle_submit_application(input: SubmitApplicationInput, ctx: ToolContext) -> SubmitApplicationOutput:
         if review_store is None:
             raise ToolUnavailable("Application storage is not configured.")
+        if not input.idempotency_key:
+            raise ToolUnavailable("Submission must go through the orchestrator's agreement checks.")
         app = ctx.state.application
         if app is None or app.product_code is None:
             raise ToolUnavailable("There is no complete application to submit.")
@@ -561,6 +563,7 @@ def build_stub_registry(
             "customer_id": ctx.state.customer_id,
             "profile": data.customers.get(ctx.state.customer_id, {}).get("profile", {}),
             "application": app.model_dump(mode="json"),
+            "customer_agreement": input.customer_agreement,
         }
         try:
             saved = review_store.create(
@@ -677,10 +680,11 @@ def build_stub_registry(
 
     registry.register(ToolSpec(
         name="submit_application",
-        description="Submit loan application",
+        description=("Submit the application for human review. Call only after showing the final terms and the "
+                     "customer explicitly agreeing in their latest message; quote their words in customer_agreement."),
         input_model=SubmitApplicationInput,
         output_model=SubmitApplicationOutput,
-        model_callable=False,
+        model_callable=True,
         flows=frozenset([Flow.credit_application]),
         handler=handle_submit_application
     ))

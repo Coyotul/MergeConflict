@@ -1,4 +1,4 @@
-"""Code-handled turn events: document upload, offer selection, confirmation.
+"""Code-handled turn events: document upload and offer selection.
 
 Each event's tool runs before any model call; the model then only explains
 the result. If the model is unavailable, or gives no usable reply within the
@@ -47,13 +47,7 @@ class OfferSelected:
     offer_id: str
 
 
-@dataclass(frozen=True)
-class ConfirmationDecision:
-    summary_version: str
-    decision: Literal["confirm", "decline"]
-
-
-TurnEvent = Union[SessionStarted, CustomerMessage, DocumentUploaded, OfferSelected, ConfirmationDecision]
+TurnEvent = Union[SessionStarted, CustomerMessage, DocumentUploaded, OfferSelected]
 
 
 # ---- fixed texts (used when the model can't explain the event) -------------
@@ -258,62 +252,6 @@ class CodeEventsMixin:
         self._add_message(turn, "event", f"OFFER_SELECTED {offer.offer_id}")
         turn.trace.code_event("offer", "selected", offer_id=offer.offer_id)
         return self._explain(turn, loaded, event_text("offer_selected", state.language, term=offer.term_months))
-
-    def _handle_confirmation(self, turn: "_Turn", event: ConfirmationDecision) -> TurnResponse:
-        state = turn.state
-        loaded = state.model_copy(deep=True)
-        app = state.application
-        language = state.language
-
-        if app is not None and app.application_id is not None:
-            self._add_message(turn, "event", f"ALREADY_SUBMITTED {app.application_id}")
-            turn.trace.code_event("confirmation", "already_submitted", application_id=app.application_id)
-            return self._fixed_reply(turn, loaded, event_text("submitted", language, id=app.application_id))
-
-        self._sync_application(turn)  # make sure the summary reflects the current state
-        needs = [n.kind for n in next_needs(state)]
-        if (
-            app is None
-            or needs[:1] != [NeedKind.confirm_submission]
-            or app.summary is None
-            or app.summary.summary_version != event.summary_version
-        ):
-            self._add_message(turn, "event", "SUMMARY_CHANGED")
-            turn.trace.code_event("confirmation", "summary_changed", summary_version=event.summary_version)
-            return self._explain(turn, loaded, event_text("summary_changed", language))
-
-        if event.decision == "decline":
-            app.summary = None
-            app.selected_offer_id = None
-            self._add_message(turn, "event", "SUBMISSION_DECLINED")
-            turn.trace.code_event("confirmation", "declined", summary_version=event.summary_version)
-            return self._explain(turn, loaded, event_text("declined", language))
-
-        key = f"{state.session_id}:{app.summary.summary_version}"
-        outcome, output = self._run_code_tool(
-            turn, "submit_application", {"application_id": app.draft_application_id, "idempotency_key": key}
-        )
-        if output is None:
-            self._add_message(turn, "event", f"SUBMISSION_FAILED {outcome.error_code}")
-            turn.trace.code_event("confirmation", "not_submitted", error_code=outcome.error_code)
-            return self._explain(turn, loaded, event_text("not_submitted", language))
-
-        app.application_id = output.application_id
-        app.submitted_at = self._clock()
-        app.idempotency_key = key
-        # Persist the submission before any model call: it must survive a provider failure.
-        state.updated_at = self._clock()
-        saved = self._store.save(state, expected_version=loaded.version)
-        turn.trace.saved = True
-        state.version = saved.version
-        loaded = state.model_copy(deep=True)
-
-        self._add_message(turn, "tool", outcome.as_message())
-        self._add_message(turn, "event", f"APPLICATION_SUBMITTED {app.application_id} {output.status}")
-        turn.trace.code_event(
-            "confirmation", "submitted", application_id=app.application_id, status=output.status
-        )
-        return self._fixed_reply(turn, loaded, event_text("submitted", language, id=app.application_id))
 
     def _fixed_reply(self, turn: "_Turn", loaded: SessionState, text: str) -> TurnResponse:
         """Reply with a fixed text, no model call (submission must never be paraphrased)."""

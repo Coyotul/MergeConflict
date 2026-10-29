@@ -341,6 +341,7 @@ def test_registry_flags_match_table():
 
     # Expected model-callable tools from the table
     expected_model_callable = {
+        "submit_application",
         "search_banking_policies",
         "get_credit_products",
         "get_customer_profile",

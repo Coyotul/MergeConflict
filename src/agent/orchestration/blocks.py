@@ -20,7 +20,6 @@ from src.agent.orchestration.state import (
 from src.models.chat import (
     ApplicationSubmittedBlock,
     ApplicationSummary,
-    ApplicationSummaryBlock,
     Awaiting,
     AwaitingKind,
     Block,
@@ -117,9 +116,6 @@ def build_awaiting(state: SessionState) -> Awaiting:
         return Awaiting(kind=AwaitingKind.document, document_types=types)
     if first.kind == NeedKind.choose_offer:
         return Awaiting(kind=AwaitingKind.offer_choice)
-    if first.kind == NeedKind.confirm_submission:
-        version = app.summary.summary_version if app.summary is not None else None
-        return Awaiting(kind=AwaitingKind.confirmation, summary_version=version)
     return Awaiting(kind=AwaitingKind.text)
 
 
@@ -165,9 +161,6 @@ def build_blocks(state: SessionState) -> list[Block]:
 
         if app.offers is not None:
             blocks.append(OffersBlock(offers=app.offers.offers, selected_offer_id=app.selected_offer_id))
-
-        if app.summary is not None and derive_stage(state) == Stage.awaiting_confirmation:
-            blocks.append(ApplicationSummaryBlock(summary=app.summary))
 
         if app.application_id is not None:
             blocks.append(ApplicationSubmittedBlock(application_id=app.application_id, status=SUBMITTED_STATUS))

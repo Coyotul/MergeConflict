@@ -9,12 +9,10 @@ from src.agent.orchestration.events import (
     CustomerMessage,
     DocumentUploaded,
     OfferSelected,
-    ConfirmationDecision,
 )
 from src.agent.orchestration.orchestrator import Orchestrator
 from src.core.errors import InvalidUpload
 from src.models.chat import (
-    ConfirmationRequest,
     OfferSelectionRequest,
     SendMessageRequest,
     SessionView,
@@ -164,23 +162,6 @@ def create_chat_router(
             200 with TurnResponse
         """
         event = OfferSelected(offer_id=request.offer_id)
-        return orchestrator.handle(session_id, customer_id, event)
-
-    @router.post("/sessions/{session_id}/confirmation", response_model=TurnResponse)
-    def confirm_application(
-        session_id: str,
-        request: ConfirmationRequest,
-        customer_id: Annotated[str, Depends(get_customer_id)]
-    ) -> TurnResponse:
-        """Confirm or decline the application summary.
-
-        Returns:
-            200 with TurnResponse
-        """
-        event = ConfirmationDecision(
-            summary_version=request.summary_version,
-            decision=request.decision
-        )
         return orchestrator.handle(session_id, customer_id, event)
 
     @router.get("/sessions/{session_id}", response_model=SessionView)

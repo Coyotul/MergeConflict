@@ -378,30 +378,6 @@ def test_upload_accepted_returns_checklist(client, customer_id, orchestrator, st
     assert identity_items[0]["doc_type"] == "identity_card"
 
 
-def test_confirmation_flow_over_http(client, customer_id):
-    """Test confirmation endpoint exists and handles requests."""
-    # Create a session
-    create_response = client.post(
-        "/chat/sessions",
-        json={},
-        headers={"X-Customer-Id": customer_id}
-    )
-    session_id = create_response.json()["session_id"]
-
-    # POST confirmation (will fail business logic but endpoint should respond)
-    response = client.post(
-        f"/chat/sessions/{session_id}/confirmation",
-        json={"summary_version": "v1", "decision": "confirm"},
-        headers={"X-Customer-Id": customer_id}
-    )
-
-    # Endpoint exists and returns a response (may be 409/422 due to invalid state)
-    assert response.status_code in [200, 409, 422]
-    data = response.json()
-    # Either success with blocks or error with code
-    assert "blocks" in data or "code" in data
-
-
 def test_get_session_view_rebuilds_screen(client, customer_id, orchestrator, store):
     """Test GET /chat/sessions/{id} returns session view excluding action/tool/event messages."""
     # Create session with messages including tool calls

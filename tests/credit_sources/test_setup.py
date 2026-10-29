@@ -22,9 +22,9 @@ class CreditSourcesSetupTests(unittest.TestCase):
             create_database(target)
             self.assertEqual(len(verify_saved_database(target, replay=True)), 12)
             with closing(sqlite3.connect(target.as_uri() + "?mode=ro", uri=True)) as db:
-                self.assertEqual(db.execute("SELECT COUNT(*) FROM persons").fetchone()[0], 323)
-                self.assertEqual(db.execute("SELECT COUNT(*) FROM credit_products").fetchone()[0], 422)
-                self.assertEqual(db.execute("SELECT COUNT(*) FROM payment_history").fetchone()[0], 10615)
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM persons").fetchone()[0], 332)
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM credit_products").fetchone()[0], 427)
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM payment_history").fetchone()[0], 10660)
 
     def test_empty_setup_preserves_original_schema_contract(self):
         with TemporaryDirectory(prefix="credit-sources-empty-") as directory:

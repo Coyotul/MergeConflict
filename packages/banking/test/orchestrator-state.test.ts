@@ -1,8 +1,6 @@
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
 import {
-  SYNTHETIC_CUSTOMERS,
-  pickCustomer,
   initialChatState,
   chatReducer,
   canSend,
@@ -25,14 +23,6 @@ import type {
 } from "../src/orchestrator";
 
 describe("orchestrator-state", () => {
-  describe("pickCustomer", () => {
-    it("covers all three customers", () => {
-      assert.equal(pickCustomer(() => 0), "cust-001");
-      assert.equal(pickCustomer(() => 0.5), "cust-002");
-      assert.equal(pickCustomer(() => 0.99), "cust-003");
-    });
-  });
-
   describe("chatReducer", () => {
     it("requested message appends customer entry and sets pending", () => {
       const state = {
@@ -380,14 +370,14 @@ describe("orchestrator-state", () => {
   });
 
   describe("isValidCustomerId", () => {
-    it("returns true for synthetic customers", () => {
-      assert.equal(isValidCustomerId("cust-001"), true);
-      assert.equal(isValidCustomerId("cust-002"), true);
-      assert.equal(isValidCustomerId("cust-003"), true);
+    it("returns true for demo customer ids", () => {
+      assert.equal(isValidCustomerId("cust-dan-ionescu"), true);
+      assert.equal(isValidCustomerId("cust-alex-morgan"), true);
     });
 
     it("returns false for invalid customers", () => {
-      assert.equal(isValidCustomerId("cust-004"), false);
+      assert.equal(isValidCustomerId("../x"), false);
+      assert.equal(isValidCustomerId("cust-Dan"), false);
       assert.equal(isValidCustomerId("invalid"), false);
       assert.equal(isValidCustomerId(""), false);
     });

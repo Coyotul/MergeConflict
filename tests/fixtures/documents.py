@@ -93,6 +93,16 @@ def image_bytes(text: str = "", *, image_format="PNG", rotation=0) -> bytes:
     return output.getvalue()
 
 
-def document_bytes(doc_type: str) -> bytes:
-    texts = {"id_card": identity_text(), "payslip": income_text(), "bank_statement": statement_text()}
+def cnp_for(body: str) -> str:
+    """A checksum-valid synthetic CNP from its first twelve digits."""
+    return body + str(compute_cnp_checksum(body))
+
+
+def document_bytes(doc_type: str, *, first_name="ANA", last_name="POPESCU", cnp=CNP) -> bytes:
+    name = f"{first_name} {last_name}"
+    texts = {
+        "id_card": identity_text(first_name=first_name, last_name=last_name, cnp=cnp),
+        "payslip": income_text(name=name, cnp=cnp),
+        "bank_statement": statement_text(holder=name),
+    }
     return pdf_bytes(texts[doc_type])

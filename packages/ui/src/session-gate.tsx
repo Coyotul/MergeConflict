@@ -11,11 +11,13 @@ interface SessionGateProps {
   loading: boolean;
   error: string | null;
   demoAccount: { name: string; email: string; password: string };
+  /** Optional list of demo customers; when present each one gets a fill-in button. */
+  demoAccounts?: { name: string; email: string; password: string; scenario: string }[];
   onLogin: (credentials: { email: string; password: string }) => Promise<void>;
   onClearError: () => void;
 }
 
-export function SessionGate({ role, loading, error, demoAccount, onLogin, onClearError }: SessionGateProps) {
+export function SessionGate({ role, loading, error, demoAccount, demoAccounts, onLogin, onClearError }: SessionGateProps) {
   const id = useId();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,11 +58,17 @@ export function SessionGate({ role, loading, error, demoAccount, onLogin, onClea
           <Button type="submit" size="lg" className="w-full justify-between" disabled={loading || !email.trim() || !password}>{loading ? <><span role="status">Connecting locally…</span><LoaderCircle className="animate-spin" /></> : <>Sign in as {label}<ArrowRight /></>}</Button>
         </form>
 
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        {demoAccounts && demoAccounts.length > 0 ? <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mb-3 flex items-center justify-between gap-2"><p className="text-xs font-semibold">Try a demo customer</p><Pill tone="slate" className="px-2 py-0 text-[9px]">Public demo accounts</Pill></div>
+          <p className="mb-3 text-[11px] text-slate-500">All share the password <span className="font-mono font-medium text-ink">{demoAccounts[0].password}</span></p>
+          <ul aria-label="Demo customers" className="max-h-56 space-y-1 overflow-y-auto">
+            {demoAccounts.map((account) => <li key={account.email}><button type="button" disabled={loading} aria-pressed={email === account.email} onClick={() => { setEmail(account.email); setPassword(account.password); onClearError(); }} className={cn("flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[11px] transition-colors hover:bg-white disabled:opacity-60", email === account.email && "bg-white shadow-sm")}><span><span className="font-semibold">{account.name}</span><span className="text-slate-500"> — {account.scenario}</span></span><ArrowRight className="size-3.5 shrink-0 text-slate-400" /></button></li>)}
+          </ul>
+        </div> : <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="mb-3 flex items-center justify-between gap-2"><p className="text-xs font-semibold">Try it as {demoAccount.name.split(" ")[0]}</p><Pill tone="slate" className="px-2 py-0 text-[9px]">Public demo account</Pill></div>
           <dl className="space-y-1.5 text-[11px]"><div className="flex flex-wrap justify-between gap-2"><dt className="text-slate-500">Email</dt><dd className="break-all font-medium">{demoAccount.email}</dd></div><div className="flex flex-wrap justify-between gap-2"><dt className="text-slate-500">Password</dt><dd className="font-mono font-medium">{demoAccount.password}</dd></div></dl>
           <Button type="button" variant="outline" size="sm" className="mt-4 w-full" disabled={loading} onClick={() => { setEmail(demoAccount.email); setPassword(demoAccount.password); onClearError(); }}>Use {label} demo account<ArrowRight /></Button>
-        </div>
+        </div>}
         <p className="mt-5 flex items-start gap-2 text-[10px] leading-relaxed text-slate-500"><LockKeyhole className="mt-0.5 size-3.5 shrink-0" />Demo authentication only, not production banking security. Use the public credentials above, never a real banking password or personal data.</p>
       </section>
     </div>

@@ -39,14 +39,20 @@ Use the synthetic customers:
 
 | Id | What happens |
 |---|---|
-| `cust-001` | Happy path: eligible; the payslip income (6200) differs from a stated 7000, so you see a conflict to confirm |
-| `cust-002` | Low income (2100): ends in `not_eligible` |
-| `cust-003` | Self-employed: answer `self_employed` for the employment type to reach `manual_review`; the payslip income has low extraction confidence |
+| `cust-alex-morgan` | Happy path: eligible (ANAF income 8500, no loans); the payslip income (8500) differs from a stated 7000, so you see a conflict to confirm |
+| `cust-elena-popa` | Eligible (ANAF income 4500, no loans) |
+| `cust-radu-mihai` | Eligible on two ANAF salaries (5000 total) with two small loans; a stated 6500 adds an `income_gap` reason |
+| `cust-dan-ionescu` | Debt-to-income above 40% (large existing loan): `not_eligible` |
+| `cust-andrei-stan` | ANAF income 2300, below the 2500 minimum: `not_eligible` |
+| `cust-ioana-marin` | A loan currently 91 days past due: `not_eligible` |
+| `cust-victor-dobre` | Open insolvency procedure: `not_eligible` |
+| `cust-maria-stoica` | Loan restructured in the last 12 months: `manual_review` |
+| `cust-mihai-ilie` | Self-employed (PFA): answer `self_employed` for the employment type to reach `manual_review`; the payslip income has low extraction confidence |
 
-Other ids can chat, but profile-backed identity acceptance requires a configured
-synthetic customer. Document values now come from the actual uploaded files, not
-from the synthetic customer's canned document metadata. Existing generated Alex
-Morgan files do not match Ana Popescu's `cust-001` profile and correctly require review.
+Eligibility is decided by deterministic rules over the session fields plus the mock ANAF and credit-bureau
+SQLite dataset (`data/local/credit_sources.db`, built by `python scripts/credit_sources/setup.py`). If the
+database is missing, the eligibility and profile tools fail with `tool_unavailable`.
+Other ids can chat, but their profile lookup and document processing fail.
 
 ## Endpoints
 
@@ -102,20 +108,14 @@ When `awaiting.kind` is `confirmation`, `awaiting.summary_version` equals the
 changed in the meantime, nothing is submitted and the response shows the current summary instead.
 Ask the customer to review it again.
 
-## Testing with real synthetic documents
+## Test hooks
 
-- Filenames no longer force a pass or rejection. Actual bytes go through OCR,
-  extraction, deterministic checks and cross-document reconciliation, even with
-  the mock conversational model. Empty or malformed files are rejected before storage.
-- Use the small real synthetic PDFs in `tests/fixtures/documents.py` to exercise
-  `cust-001` (Ana Popescu) consistently; the contract exporter uses these files.
-  Check the full pipeline with `scripts/check_document_tools.py`.
-- Low-confidence, mismatched or incomplete evidence enters `manual_review` and
-  blocks offers/submission. The existing checklist uses `rejected` for unusable
-  evidence and the assistant gives a fixed explanation when human verification is needed.
-- Scripted conversation (Romanian or English) that walks the happy path with `cust-001`:
+- Upload a file whose name starts with `reject_` (for example `reject_id.pdf`) to get a rejected document
+  with a `rejection_reason`. The checklist shows `rejected` and the customer is asked to upload it again.
+- An empty file is rejected too.
+- Scripted conversation (Romanian or English) that walks the happy path with `cust-alex-morgan`:
   `Vreau un credit` → `pentru renovare` → `30000 lei` → `60 luni` → `employed` → `48` → `7000` →
-  `TechCorp SRL` → `400` → upload `id_card`, `payslip`, `bank_statement` → `da` → pick an offer → confirm.
+  `FICTIV Employer's Studio 1` → `0` → upload `id_card`, `payslip`, `bank_statement` → `da` → pick an offer → confirm.
 - A message ending in `?` (for example `Ce documente îmi trebuie?`) is answered from the synthetic policy
   passages, with citations (publisher `Synthetic stub`). This works mid-application too.
 
@@ -132,13 +132,9 @@ Every error has the body `{"code": "...", "message": "...", "retryable": true | 
 | `413` | `upload_too_large` | File over 10 MB |
 | `415` | `unsupported_media_type` | Not PDF, JPG or PNG |
 | `422` | `invalid_request`, `document_not_requested` | Invalid body, or a `doc_type` the application doesn't ask for |
-| `422` | `empty_upload`, `file_type_mismatch`, `invalid_file_format` | Empty, mislabeled, damaged, encrypted, active-content or unsupported-size/page file |
 | `503` | `service_unavailable` | The model or a tool provider is down; nothing was saved (`retryable: true`) |
 | `500` | `internal_error` | Unexpected failure |
 
 When `retryable` is `true`, keep the customer's input and offer a retry (or retry once
 automatically after a short delay). When it is `false`, show the `message` and don't resend the same
 request unchanged.
-
-See [the document-tool runbook](../../docs/runbooks/orchestrator-documents.md) for
-actual OCR requirements, persistence/integrity safeguards and production limitations.

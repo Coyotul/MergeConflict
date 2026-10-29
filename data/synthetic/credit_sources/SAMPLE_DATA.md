@@ -2,7 +2,7 @@
 
 Seed: `20261028`. Default reference date: `2026-10-28`.
 
-73 guaranteed labelled cases plus 250 seeded-random people.
+82 guaranteed labelled cases plus 250 seeded-random people.
 No real records are used. CNPs deliberately fail the checksum; names/addresses/employers are fictional and phones are NULL.
 
 ## Find a scenario
@@ -100,25 +100,34 @@ selected fixed-rate RON amortizer scenarios have nonincreasing balances except e
 | EVENT_PAYMENT_SUSPENSION | 1740327000714 | Fictional payment_suspension event; explained balance increase for refinancing/restructuring only. |
 | REVOLVING_DRAWDOWN | 2760627000721 | Revolving balance rises from new drawdowns without restructuring; this is allowed. |
 | YOUNG_ADULT | 6040229000737 | Post-2000 CNP century prefix and leap-day birth; credit opens after adulthood. |
+| DEMO_ALEX_MORGAN | 1880412003246 | Demo customer Alex Morgan: salary 8,500 RON/month, no credit history. |
+| DEMO_ELENA_POPA | 2910903003252 | Demo customer Elena Popa: salary 4,500 RON/month, no credit history. |
+| DEMO_RADU_MIHAI | 1850220003262 | Demo customer Radu Mihai: two employers (3,000 + 2,000 RON/month), two consumer loans with 150 RON instalments. |
+| DEMO_DAN_IONESCU | 1831107003278 | Demo customer Dan Ionescu: salary 5,996.25 RON/month, consumer loan 80,000 RON with 2,340 RON instalment (DSTI 39%). |
+| DEMO_ANDREI_STAN | 1960625003280 | Demo customer Andrei Stan: salary 2,300 RON/month (below minimum income). |
+| DEMO_LATE_91 | 2870314003292 | Demo customer Ioana Marin: salary 6,000 RON/month, consumer loan 91 days past due in 2026-10. |
+| DEMO_INSOLVENCY | 1790830003301 | Demo customer Victor Dobre: salary 5,500 RON/month, open debt repayment plan insolvency since 2025-01-01. |
+| DEMO_RESTRUCTURED | 2901201003316 | Demo customer Maria Stoica: salary 6,500 RON/month, consumer loan restructured on 2026-08-28. |
+| DEMO_SELF_EMPLOYED | 1860518003320 | Demo customer Mihai Ilie: self-employed (active PFA since 2022-01-15), 84,000 RON independent-activity income in 2025. |
 
 ## Table counts
 
 | Table | Rows |
 | --- | ---: |
 | report_params | 1 |
-| persons | 323 |
+| persons | 332 |
 | employers | 6 |
 | lenders | 5 |
-| employments | 171 |
-| income_activity_forms | 5 |
-| income_records | 597 |
-| monthly_salary_declarations | 5866 |
-| credit_products | 422 |
-| product_participants | 491 |
-| payment_history | 10615 |
-| credit_events | 12 |
+| employments | 180 |
+| income_activity_forms | 6 |
+| income_records | 616 |
+| monthly_salary_declarations | 6082 |
+| credit_products | 427 |
+| product_participants | 496 |
+| payment_history | 10660 |
+| credit_events | 13 |
 | bureau_inquiries | 378 |
-| fico_scores | 257 |
-| fico_reason_codes | 875 |
-| insolvency_records | 4 |
+| fico_scores | 263 |
+| fico_reason_codes | 905 |
+| insolvency_records | 5 |
 | card_fraud_records | 4 |

@@ -37,7 +37,7 @@ from src.models.credit import EligibilityResult, EligibilityStatus, ReasonItem
 from src.models.knowledge import Product
 from tests.unit.orchestrator.factories import call, make_verified_app, respond, seed_application
 
-CUSTOMER = "cust-001"
+CUSTOMER = "cust-alex-morgan"
 NOW = datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
 
 
@@ -126,7 +126,7 @@ def test_product_code_triggers_requirements_and_profile(orchestrator_factory):
     assert app.product_code == Product.personal_loan
     assert app.requirements is not None
     assert app.requirements.product_code == Product.personal_loan
-    for name, value in (("full_name", "Ana Popescu"), ("age", 34)):
+    for name, value in (("full_name", "Alex Morgan"), ("age", 38)):
         assert app.fields[name].source == FieldSource.profile
         assert app.fields[name].confirmed is True
         assert app.fields[name].value == value
@@ -398,9 +398,9 @@ def test_access_denied_and_busy(orchestrator_factory):
     sid = orch.start_session(CUSTOMER).session_id
 
     with pytest.raises(SessionAccessDenied):
-        orch.handle(sid, "cust-002", CustomerMessage("hi"))
+        orch.handle(sid, "cust-andrei-stan", CustomerMessage("hi"))
     with pytest.raises(SessionAccessDenied):
-        orch.view(sid, "cust-002")
+        orch.view(sid, "cust-andrei-stan")
     with pytest.raises(SessionNotFound):
         orch.handle("0" * 32, CUSTOMER, CustomerMessage("hi"))
 
@@ -481,7 +481,7 @@ def test_view_returns_chat_messages_and_latest(orchestrator_factory):
 def test_step_logging(orchestrator_factory, caplog):
     orch, _, _ = orchestrator_factory([GREET, call("get_credit_products", intent="product_info"), respond("Avem")])
     sid = orch.start_session(CUSTOMER).session_id
-    caplog.clear()
+    caplog.clear()  # create_app elsewhere in the run may already have the src logger at INFO
     with caplog.at_level(logging.INFO, logger="src.agent.orchestration"):
         orch.handle(sid, CUSTOMER, CustomerMessage("Ce credite aveți?"))
     lines = [json.loads(r.getMessage().split(" ", 1)[1]) for r in caplog.records
@@ -533,7 +533,7 @@ def test_blocks_for_document_stage(stub_data):
         "monthly_net_income", "employer_name", "employment_type", "employment_months", "existing_monthly_obligations",
     }
     assert by_field["monthly_net_income"].needs_confirmation is True
-    assert by_field["monthly_net_income"].value == "6200"
+    assert by_field["monthly_net_income"].value == "8500"
     assert by_field["employer_name"].needs_confirmation is False
     assert any(b.type == "eligibility_result" for b in resp.blocks)
 

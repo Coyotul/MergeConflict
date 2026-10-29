@@ -9,7 +9,6 @@ import {
 import {
   chatReducer,
   initialChatState,
-  pickCustomer,
   canSend,
   storageKey,
   shouldStartFresh,
@@ -51,11 +50,7 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startFresh = useCallback(
-    (key: string, currentEpoch: number) => {
-      const newCustomerId =
-        lumaCustomerId && isValidCustomerId(lumaCustomerId)
-          ? lumaCustomerId
-          : pickCustomer();
+    (key: string, currentEpoch: number, newCustomerId: string) => {
       const client = createOrchestratorClient(newCustomerId);
       client
         .createSession()
@@ -96,8 +91,11 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
   );
 
   const resumeOrStart = useCallback(
-    (key: string, currentEpoch: number) => {
-      const stored = parseStoredSession(sessionStorage.getItem(key));
+    (key: string, currentEpoch: number, customerId: string) => {
+      const parsed = parseStoredSession(sessionStorage.getItem(key));
+      // A stored session for a different customer (e.g. pre-sign-in-per-customer
+      // synthetic IDs) must not be resumed under this login.
+      const stored = parsed && parsed.customerId === customerId ? parsed : null;
 
       if (stored) {
         // Try to resume existing session
@@ -123,7 +121,7 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
             // Only clear storage and start fresh on 404/403
             if (error instanceof OrchestratorError && shouldStartFresh(error)) {
               sessionStorage.removeItem(key);
-              startFresh(key, currentEpoch);
+              startFresh(key, currentEpoch, customerId);
             } else {
               // Other errors: dispatch failed, keep stored session, allow retry
               dispatch({
@@ -143,7 +141,7 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
           });
       } else {
         // Start new session
-        startFresh(key, currentEpoch);
+        startFresh(key, currentEpoch, customerId);
       }
     },
     [startFresh]
@@ -170,7 +168,7 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
       actionLockRef.current = true; // Lock during init
 
       const key = storageKey(lumaCustomerId);
-      resumeOrStart(key, epochRef.current);
+      resumeOrStart(key, epochRef.current, lumaCustomerId);
     }
 
     // Cleanup: clear retry timer
@@ -194,7 +192,7 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
         // Show spinner and clear error
         dispatch({ type: "requested", action });
         const key = storageKey(lumaCustomerId);
-        resumeOrStart(key, epochRef.current);
+        resumeOrStart(key, epochRef.current, lumaCustomerId);
         return true;
       }
 
@@ -365,7 +363,7 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
 
     // Start new session
     actionLockRef.current = true;
-    startFresh(key, epochRef.current);
+    startFresh(key, epochRef.current, lumaCustomerId);
   }, [lumaCustomerId, startFresh]);
 
   return {

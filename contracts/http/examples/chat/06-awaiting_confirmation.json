@@ -79,7 +79,7 @@
         {
           "field": "full_name",
           "label": "Full Name",
-          "value": "ANA POPESCU",
+          "value": "ALEX MORGAN",
           "source": "document",
           "confidence": 0.9,
           "needs_confirmation": false,
@@ -88,9 +88,27 @@
         {
           "field": "age",
           "label": "Age",
-          "value": "34",
+          "value": "38",
           "source": "document",
           "confidence": 0.9,
+          "needs_confirmation": false,
+          "conflict_with": null
+        },
+        {
+          "field": "employment_type",
+          "label": "Employment Type",
+          "value": "employed",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": false,
+          "conflict_with": null
+        },
+        {
+          "field": "employment_months",
+          "label": "Employment Duration (months)",
+          "value": "66",
+          "source": "document",
+          "confidence": 1.0,
           "needs_confirmation": false,
           "conflict_with": null
         },
@@ -129,23 +147,23 @@
         "status": "satisfied",
         "reasons": [
           {
+            "code": "income_gap",
+            "message": "Declared income 6200.00 RON differs from ANAF income 8500.00 RON; ANAF is used."
+          },
+          {
+            "code": "dti_computed",
+            "message": "Debt-to-income 12.1%: new instalment 630.06 + existing 400.00 RON over income 8500.00 RON (limit 40%)."
+          },
+          {
+            "code": "no_credit_history",
+            "message": "No active loans in the credit bureau; this is neutral."
+          },
+          {
             "code": "all_preliminary_rules_passed",
             "message": "All preliminary rules passed"
-          },
-          {
-            "code": "anaf_salary_verified",
-            "message": "Verified monthly net income from ANAF: 5000.33 RON (recurring salary)."
-          },
-          {
-            "code": "dti_within_limit",
-            "message": "Estimated DTI ratio: 20.6%, comfortably within the 40% maximum limit."
-          },
-          {
-            "code": "bureau_history_clean",
-            "message": "Credit Bureau check passed: no overdue obligations or defaults reported."
           }
         ],
-        "rule_version": "2026-10-28.1",
+        "rule_version": "credit-check-2026-10-29",
         "missing_fields": [],
         "simulated": true
       }
@@ -154,7 +172,7 @@
       "type": "offers",
       "offers": [
         {
-          "offer_id": "personal_loan-60m-ed8af0a62ca8a236",
+          "offer_id": "personal_loan-60m-5edfd172fc2e65c5",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -198,7 +216,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-36m-a1d9b7bd42355d0f",
+          "offer_id": "personal_loan-36m-4ee6d6da2876ee22",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -242,7 +260,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-48m-1c9e37fbeaa3a2c1",
+          "offer_id": "personal_loan-48m-98fb107271e500d8",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -286,7 +304,7 @@
           "simulated": true
         }
       ],
-      "selected_offer_id": "personal_loan-60m-ed8af0a62ca8a236"
+      "selected_offer_id": "personal_loan-60m-5edfd172fc2e65c5"
     },
     {
       "type": "application_summary",
@@ -301,7 +319,7 @@
         },
         "term_months": 60,
         "offer": {
-          "offer_id": "personal_loan-60m-ed8af0a62ca8a236",
+          "offer_id": "personal_loan-60m-5edfd172fc2e65c5",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -362,23 +380,23 @@
           },
           {
             "label": "Full Name",
-            "value": "ANA POPESCU",
+            "value": "ALEX MORGAN",
             "source": "document"
           },
           {
             "label": "Age",
-            "value": "34",
+            "value": "38",
             "source": "document"
           },
           {
             "label": "Employment Type",
             "value": "employed",
-            "source": "customer"
+            "source": "document"
           },
           {
             "label": "Employment Duration (months)",
-            "value": "48",
-            "source": "customer"
+            "value": "66",
+            "source": "document"
           },
           {
             "label": "Monthly Net Income",

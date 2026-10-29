@@ -28,7 +28,7 @@ from tests.unit.orchestrator.factories import (
     spy_tool,
 )
 
-CUSTOMER = "cust-001"
+CUSTOMER = "cust-alex-morgan"
 GREET = respond("Bună! Cu ce te pot ajuta?")
 PAYSLIP_LABEL = "Payslip (last 3 months)"
 
@@ -69,10 +69,10 @@ def collecting(orchestrator_factory, requirements):
         sid = orch.start_session(CUSTOMER).session_id
         seed_application(store, sid, make_collecting_app(requirements, {
             "employment_type": "employed",
-            "employment_months": 48,
+            "employment_months": 67,
             "monthly_net_income": Decimal("7000"),
-            "employer_name": "TechCorp SRL",
-            "existing_monthly_obligations": Decimal("400"),
+            "employer_name": "FICTIV Employer's Studio 1",
+            "existing_monthly_obligations": Decimal("0"),
         }))
         return orch, store, model, sid
     return make
@@ -125,7 +125,7 @@ def test_check_upload_rejects_unrequested(orchestrator_factory, requirements):
     orch.check_upload(sid, CUSTOMER, "payslip")  # requested: no error
 
     with pytest.raises(SessionAccessDenied):
-        orch.check_upload(sid, "cust-002", "payslip")
+        orch.check_upload(sid, "cust-andrei-stan", "payslip")
     # handle() re-checks under the lock and records nothing.
     before = store.get(sid)
     with pytest.raises(InvalidUpload):
@@ -141,7 +141,7 @@ def test_upload_accepted_merges_fields_and_conflict(collecting):
     [record] = app.documents
     assert record.status == DocumentStatus.accepted
     assert record.document_id == "up-payslip"
-    assert app.fields["monthly_net_income"].value == Decimal("6200")
+    assert app.fields["monthly_net_income"].value == Decimal("8500")
     assert app.fields["monthly_net_income"].document_id == "up-payslip"
     [conflict] = app.conflicts
     assert conflict.field == "monthly_net_income"
@@ -420,10 +420,10 @@ def test_submit_failure_does_not_submit(at_confirmation):
 
 STATED = [
     {"field": "employment_type", "value": "employed"},
-    {"field": "employment_months", "value": 48},
-    {"field": "monthly_net_income", "value": "6200 lei"},
-    {"field": "employer_name", "value": "TechCorp SRL"},
-    {"field": "existing_monthly_obligations", "value": "400"},
+    {"field": "employment_months", "value": 67},
+    {"field": "monthly_net_income", "value": "8500 lei"},
+    {"field": "employer_name", "value": "FICTIV Employer's Studio 1"},
+    {"field": "existing_monthly_obligations", "value": "0"},
 ]
 
 
@@ -471,9 +471,9 @@ def test_full_happy_path_with_scripted_model(orchestrator_factory):
 
     resp = say("Un credit de nevoi personale")
     assert (resp.progress.stage, resp.awaiting.kind) == ("collecting_information", "text")
-    assert store.get(sid).application.fields["full_name"].value == "Ana Popescu"
+    assert store.get(sid).application.fields["full_name"].value == "Alex Morgan"
 
-    resp = say("Sunt angajată de 4 ani la TechCorp SRL, câștig 6200 lei, rate 400 lei")
+    resp = say("Sunt angajată de 4 ani la FICTIV Employer's Studio 1, câștig 8500 lei, fără rate")
     assert (resp.progress.stage, resp.awaiting.kind) == ("eligibility", "text")
 
     resp = say("Verifică eligibilitatea")

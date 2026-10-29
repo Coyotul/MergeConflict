@@ -9,7 +9,11 @@ eligibility:
     min_employment_months: 3
     manual_review_employment_types:
       - self_employed
-    rule_version: "stub-2026-10-28"
+    reject_dpd: 90
+    review_dpd: 31
+    min_score: 500
+    income_gap_ratio: 0.10
+    rule_version: "credit-check-2026-10-29"
 
   refinancing_unsecured:
     min_age: 18
@@ -19,7 +23,11 @@ eligibility:
     min_employment_months: 3
     manual_review_employment_types:
       - self_employed
-    rule_version: "stub-2026-10-28"
+    reject_dpd: 90
+    review_dpd: 31
+    min_score: 500
+    income_gap_ratio: 0.10
+    rule_version: "credit-check-2026-10-29"
 
   mortgage_casa_ta:
     min_age: 18
@@ -29,4 +37,8 @@ eligibility:
     min_employment_months: 3
     manual_review_employment_types:
       - self_employed
-    rule_version: "stub-2026-10-28"
+    reject_dpd: 90
+    review_dpd: 31
+    min_score: 500
+    income_gap_ratio: 0.10
+    rule_version: "credit-check-2026-10-29"

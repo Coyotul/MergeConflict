@@ -21,13 +21,34 @@ from src.services.conversations.store import InMemorySessionStore
 from src.services.pricing.models import DISCLAIMER
 from src.agent.tools.stubs import StubData
 from tests.unit.orchestrator.factories import call, make_verified_app, respond, seed_application
-from tests.fixtures.documents import document_bytes
+from tests.fixtures import documents as _docs
+from tests.fixtures.documents import image_bytes, pdf_bytes  # noqa: F401
+
+# Documents for the demo customer cust-alex-morgan: the name matches the profile, the CNP is
+# checksum-valid with Alex's birth date (1988-04-12, so 38 at the 2026-10-28 reference date).
+CNP = _docs.cnp_for("188041241001")
+
+
+def identity_text(**kw):
+    return _docs.identity_text(**{"first_name": "ALEX", "last_name": "MORGAN", "cnp": CNP, **kw})
+
+
+def income_text(**kw):
+    return _docs.income_text(**{"name": "ALEX MORGAN", "cnp": CNP, **kw})
+
+
+def statement_text(**kw):
+    return _docs.statement_text(**{"holder": "ALEX MORGAN", **kw})
+
+
+def document_bytes(doc_type):
+    return _docs.document_bytes(doc_type, first_name="ALEX", last_name="MORGAN", cnp=CNP)
 from src.agent.tools.documents import DOCUMENT_KINDS
 
 
 ROOT = Path(__file__).resolve().parents[3]
 NOW = datetime(2026, 10, 28, 12, tzinfo=UTC)
-CUSTOMER = "cust-001"
+CUSTOMER = "cust-alex-morgan"
 
 
 @pytest.fixture
@@ -118,7 +139,7 @@ def test_cross_customer_cannot_price_or_select_another_session(priced_chat):
     client, store, _, sid, headers = priced_chat
     before = store.get(sid).model_dump(mode="json")
     for suffix, payload in (("messages", {"text": "Calculate offers"}), ("offer-selection", {"offer_id": "guessed"})):
-        denied = client.post(f"/chat/sessions/{sid}/{suffix}", json=payload, headers={"X-Customer-Id": "cust-002"})
+        denied = client.post(f"/chat/sessions/{sid}/{suffix}", json=payload, headers={"X-Customer-Id": "cust-andrei-stan"})
         assert denied.status_code == 403
     assert store.get(sid).model_dump(mode="json") == before
 

@@ -61,52 +61,7 @@ if TYPE_CHECKING:
     from src.services.document_processing.service import DocumentProcessingService
 
 
-def annuity_installment(principal: Decimal, annual_rate_percent: Decimal, months: int) -> Decimal:
-    """Calculate monthly annuity installment.
-
-    Args:
-        principal: Loan principal amount
-        annual_rate_percent: Annual interest rate as percentage (e.g., 9.5)
-        months: Number of months
-
-    Returns:
-        Monthly installment quantized to 0.01 with ROUND_HALF_UP
-    """
-    if annual_rate_percent == Decimal("0"):
-        # Zero interest: simple division
-        result = principal / Decimal(months)
-    else:
-        # Standard annuity formula
-        monthly_rate = annual_rate_percent / Decimal("100") / Decimal("12")
-        # payment = P * r / (1 - (1 + r)^(-n))
-        one_plus_r = Decimal("1") + monthly_rate
-        # Use Python's built-in pow for Decimal exponentiation
-        denominator = Decimal("1") - (one_plus_r ** (-months))
-        result = principal * monthly_rate / denominator
-
-    return result.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
-@dataclass
-class EligibilityRule:
-    """Eligibility rules for a product."""
-    product_code: Product
-    min_age: int
-    max_age_at_maturity: int
-    min_monthly_income: Decimal
-    max_dti: Decimal
-    min_employment_months: int
-    manual_review_employment_types: list[str]
-    rule_version: str
-
-    def make_satisfied_result(self) -> EligibilityResult:
-        """Create a satisfied eligibility result."""
-        return EligibilityResult(
-            status=EligibilityStatus.satisfied,
-            reasons=[ReasonItem(code="all_preliminary_rules_passed", message="All preliminary rules passed")],
-            rule_version=self.rule_version,
-            simulated=True
-        )
+from src.rules.eligibility.credit_check import EligibilityRule, annuity_installment  # noqa: F401 (re-exported)
 
 
 @dataclass
@@ -196,7 +151,11 @@ class StubData:
                 max_dti=Decimal(str(rules["max_dti"])),
                 min_employment_months=rules["min_employment_months"],
                 manual_review_employment_types=rules["manual_review_employment_types"],
-                rule_version=rules["rule_version"]
+                rule_version=rules["rule_version"],
+                reject_dpd=rules.get("reject_dpd", 90),
+                review_dpd=rules.get("review_dpd", 31),
+                min_score=rules.get("min_score", 500),
+                income_gap_ratio=Decimal(str(rules.get("income_gap_ratio", "0.10"))),
             )
 
         # Load customers

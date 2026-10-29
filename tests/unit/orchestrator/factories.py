@@ -94,7 +94,7 @@ def make_app(**overrides):
 
 
 def make_verified_app(requirements: ProductRequirements, now: datetime | None = None):
-    """Return a personal-loan ApplicationState for cust-001 with every required
+    """Return a personal-loan ApplicationState for cust-alex-morgan with every required
     field present and verified (identity from profile, the rest from accepted,
     confirmed documents) and all required documents accepted.
 
@@ -114,13 +114,13 @@ def make_verified_app(requirements: ProductRequirements, now: datetime | None = 
         "purpose": "renovation",
         "amount": Decimal("30000"),
         "term_months": 48,
-        "full_name": "Ana Popescu",
-        "age": 34,
+        "full_name": "Alex Morgan",
+        "age": 38,
         "employment_type": "employed",
         "employment_months": 48,
-        "monthly_net_income": Decimal("6200"),
-        "employer_name": "TechCorp SRL",
-        "existing_monthly_obligations": Decimal("400"),
+        "monthly_net_income": Decimal("8500"),
+        "employer_name": "FICTIV Employer's Studio 1",
+        "existing_monthly_obligations": Decimal("0"),
     }
     kinds = {"purpose": "text", "amount": "money", "term_months": "integer"}
     specs = {spec.name: spec for spec in requirements.fields}

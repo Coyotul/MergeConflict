@@ -5,7 +5,7 @@
   "messages": [
     {
       "role": "assistant",
-      "text": "Am notat angajatorul (TechCorp SRL). Ai alte rate sau obligații lunare în derulare? (Existing Monthly Obligations: dacă nu ai alte credite, poți scrie 0 sau „nu am”)",
+      "text": "Am notat angajatorul (FICTIV Employer's Studio 1). Ai alte rate sau obligații lunare în derulare? (Existing Monthly Obligations: dacă nu ai alte credite, poți scrie 0 sau „nu am”)",
       "citations": [],
       "created_at": "2026-10-28T09:00:00Z"
     }

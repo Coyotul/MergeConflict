@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { DemoStore } from "../src/types";
-import { seedStore } from "../src/seed";
+import { seedCustomers, seedStore } from "../src/seed";
 
 export class FileStore {
   private tail: Promise<unknown> = Promise.resolve();
@@ -9,8 +9,16 @@ export class FileStore {
   static async open(path: string) {
     let state: DemoStore;
     try {
-      state = JSON.parse(await readFile(path, "utf8"));
+      // Alex's id changed from "customer-alex"; rename it everywhere so his seeded loans and application follow.
+      state = JSON.parse((await readFile(path, "utf8")).replaceAll('"customer-alex"', '"cust-alex-morgan"'));
       if (state.version !== 1 || !Array.isArray(state.applications) || !Array.isArray(state.customers) || !Array.isArray(state.products) || !Array.isArray(state.loans) || !state.messages || !state.consents || !Array.isArray(state.audit) || !Array.isArray(state.notifications) || !Array.isArray(state.idempotency)) throw new Error("Invalid demo store structure. Restore or move the file explicitly; it will not be silently reset.");
+      // Older stores predate one-sign-in-per-customer: add any missing demo customer profiles.
+      for (const customer of seedCustomers()) {
+        if (state.customers.some((c) => c.id === customer.id)) continue;
+        state.customers.push(customer);
+        state.messages[customer.id] ??= [];
+        state.consents[customer.id] ??= { financialInsights: false, notifications: true };
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       state = seedStore();

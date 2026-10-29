@@ -133,16 +133,16 @@
             "message": "All preliminary rules passed"
           },
           {
-            "code": "anaf_salary_verified_ro",
-            "message": "Venit net lunar verificat la ANAF: 5000.33 RON (salariu recurent)."
+            "code": "anaf_salary_verified",
+            "message": "Verified monthly net income from ANAF: 5000.33 RON (recurring salary)."
           },
           {
-            "code": "dti_within_limit_ro",
-            "message": "Grad de îndatorare estimat (DTI): 20.6%, încadrabil în plafonul maxim admis de 40%."
+            "code": "dti_within_limit",
+            "message": "Estimated DTI ratio: 20.6%, comfortably within the 40% maximum limit."
           },
           {
-            "code": "bureau_history_clean_ro",
-            "message": "Istoric de creditare conform: fără restanțe raportate la Biroul de Credit."
+            "code": "bureau_history_clean",
+            "message": "Credit Bureau check passed: no overdue obligations or defaults reported."
           }
         ],
         "rule_version": "2026-10-28.1",

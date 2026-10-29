@@ -131,11 +131,7 @@ def assess_session_eligibility(
         reasons = [
             ReasonItem(
                 code="income_below_minimum",
-                message=f"Monthly net income {display_income} RON is below minimum {min_income_threshold} RON",
-            ),
-            ReasonItem(
-                code="income_below_minimum_ro",
-                message=f"Venitul net lunar ({display_income} RON) este sub pragul minim reglementat de {min_income_threshold} RON pentru acest tip de credit.",
+                message=f"Monthly net income {display_income} RON is below minimum threshold of {min_income_threshold} RON",
             ),
         ]
         ctx.state.used_stubs = False
@@ -151,15 +147,11 @@ def assess_session_eligibility(
         reasons = [
             ReasonItem(
                 code="self_employed_manual_review",
-                message=f"Employment type '{employment_type}' requires manual review",
-            ),
-            ReasonItem(
-                code="pfa_manual_review_ro",
-                message="Veniturile din activități independente (PFA/profesii liberale) necesită analiză documentară și aprobare manuală din partea unui consilier bancar.",
+                message=f"Employment type '{employment_type}' requires manual review by a loan advisor",
             ),
             ReasonItem(
                 code="anaf_independent_activity",
-                message="Datele ANAF indică venituri anuale din activități independente (fără declarații lunare de salariu).",
+                message="ANAF records indicate annual independent activity revenue (PFA/freelance) without monthly salary statements.",
             ),
         ]
         ctx.state.used_stubs = False
@@ -178,11 +170,7 @@ def assess_session_eligibility(
         reasons = [
             ReasonItem(
                 code="dti_above_limit",
-                message=f"Debt-to-income ratio {float(dti):.2%} exceeds maximum {float(max_dti):.2%}",
-            ),
-            ReasonItem(
-                code="dti_above_limit_ro",
-                message=f"Gradul total de îndatorare estimat ({float(dti):.1%}) depășește limita maximă legală BNR de {float(max_dti):.0%}.",
+                message=f"Debt-to-income ratio {float(dti):.2%} exceeds maximum allowed regulatory limit of {float(max_dti):.2%}",
             ),
         ]
         ctx.state.used_stubs = False
@@ -200,16 +188,16 @@ def assess_session_eligibility(
             message="All preliminary rules passed",
         ),
         ReasonItem(
-            code="anaf_salary_verified_ro",
-            message=f"Venit net lunar verificat la ANAF: {effective_income} RON (salariu recurent).",
+            code="anaf_salary_verified",
+            message=f"Verified monthly net income from ANAF: {effective_income} RON (recurring salary).",
         ),
         ReasonItem(
-            code="dti_within_limit_ro",
-            message=f"Grad de îndatorare estimat (DTI): {float(dti):.1%}, încadrabil în plafonul maxim admis de 40%.",
+            code="dti_within_limit",
+            message=f"Estimated DTI ratio: {float(dti):.1%}, comfortably within the 40% maximum limit.",
         ),
         ReasonItem(
-            code="bureau_history_clean_ro",
-            message="Istoric de creditare conform: fără restanțe raportate la Biroul de Credit.",
+            code="bureau_history_clean",
+            message="Credit Bureau check passed: no overdue obligations or defaults reported.",
         ),
     ]
 

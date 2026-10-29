@@ -247,7 +247,7 @@ class _Turn:
                 kind, name, payload = match.groups()
                 self.tools[name] = json.loads(payload) if kind == "TOOL_RESULT" else None
 
-        self.lang: str = self.context.get("language") or "ro"
+        self.lang: str = self.context.get("language") or "en"
         self.needs: list[dict] = self.context.get("needs") or []
         self.has_application = self.context.get("stage") is not None
         self.notices: list[str] = self.context.get("notices") or []
@@ -327,7 +327,17 @@ class DemoChatModel:
                 return intent, updates, _respond(text)
 
         if kind in ("confirm_extracted", "resolve_conflict") and t.customer_text and t.first_step:
-            if " ".join(_words(t.customer_text)) in _YES:
+            text_lower = t.customer_text.lower()
+            words_str = " ".join(_words(t.customer_text))
+            is_confirmed = (
+                words_str in _YES
+                or any(w in words_str.split() for w in ("yes", "da", "correct", "corect", "confirm", "sigur", "ok"))
+                or "is correct" in text_lower
+                or "use document value" in text_lower
+                or "document value" in text_lower
+                or "confirm" in text_lower
+            )
+            if is_confirmed:
                 updates = [
                     {"field": n["target"], "confirm": True}
                     for n in t.needs if n["kind"] in ("confirm_extracted", "resolve_conflict")

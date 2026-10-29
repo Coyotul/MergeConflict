@@ -140,9 +140,29 @@ def _agent_text(body: dict) -> str:
     return "\n\n".join(m["text"] for m in body.get("messages") or [] if m.get("role") == "assistant")
 
 
-def _rejection(action, awaiting: dict, offers: list[dict], documents: dict[str, bytes]) -> str | None:
+_OUTSTANDING = {"requested", "rejected"}
+
+
+def _requested_documents(body: dict, *, documents_requested: bool) -> list[str]:
+    """Document types the customer may upload now.
+
+    `awaiting.document_types` while the agent awaits a document. Once documents have been
+    requested, a real agent may await text (e.g. the eligibility re-run after the first upload)
+    while still asking for the rest, so the checklist's outstanding items stay uploadable.
+    """
+    awaiting = body.get("awaiting") or {}
+    types = list(awaiting.get("document_types") or [])
+    if awaiting.get("kind") == "document" or not documents_requested:
+        return types
+    for block in body.get("blocks") or []:
+        if block.get("type") == "document_checklist":
+            types += [i["doc_type"] for i in block.get("items") or []
+                      if i.get("status") in _OUTSTANDING and i["doc_type"] not in types]
+    return types
+
+
+def _rejection(action, requested: list[str], offers: list[dict], documents: dict[str, bytes]) -> str | None:
     if action.type == "upload":
-        requested = awaiting.get("document_types") or []
         if action.doc_type not in requested:
             return (f"The agent did not request a '{action.doc_type}' document. Requested document types: "
                     f"{', '.join(requested) or '(none)'}.")
@@ -210,15 +230,18 @@ def run_conversation(app: FastAPI, scenario: Scenario, customer, *, max_turns: i
 
     turns = 0
     rejected = False
+    documents_requested = False
     feedback: str | None = None
     while True:
         if turns >= max_turns:
             return result("max_turns", session_id)
         awaiting = body.get("awaiting") or {}
+        documents_requested = documents_requested or awaiting.get("kind") == "document"
+        requested = _requested_documents(body, documents_requested=documents_requested)
         offers = _offers(body)
         view = CustomerView(
             transcript=list(chat), awaiting_kind=str(awaiting.get("kind", "text")),
-            document_types=list(awaiting.get("document_types") or []), offers=offers, feedback=feedback,
+            document_types=requested, offers=offers, feedback=feedback,
         )
         try:
             action = customer.next_action(view)
@@ -227,7 +250,7 @@ def run_conversation(app: FastAPI, scenario: Scenario, customer, *, max_turns: i
         if action.type == "done":
             return result("customer_done", session_id)
 
-        problem = _rejection(action, awaiting, offers, documents)
+        problem = _rejection(action, requested, offers, documents)
         if problem is not None:
             if rejected:
                 return result("customer_error", session_id, f"rejected customer action twice: {problem}")

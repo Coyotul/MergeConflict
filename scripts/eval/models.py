@@ -6,7 +6,6 @@ from typing import Callable, Literal, TypeVar
 
 from pydantic import ValidationError
 
-from src.core.errors import ConfigurationError
 from src.core.settings import OrchestratorSettings
 from src.integrations.llm.chat import ChatMessage, ChatModel, FeatherlessChatModel
 
@@ -14,6 +13,10 @@ from src.integrations.llm.chat import ChatMessage, ChatModel, FeatherlessChatMod
 T = TypeVar("T")
 
 _TEMPERATURES = {"customer": 0.7, "judge": 0.0}
+
+# A different family from the agent's default (openai/gpt-oss-120b), so the judge does not grade
+# its own style. Instruction-tuned, ungated on Featherless, follows the JSON grading format.
+DEFAULT_JUDGE_MODEL = "deepseek-ai/DeepSeek-V3-0324"
 
 
 class EvalModelError(Exception):
@@ -25,9 +28,7 @@ def build_eval_model(role: Literal["customer", "judge"], base: OrchestratorSetti
     if role == "customer":
         model = os.environ.get("EVAL_CUSTOMER_MODEL") or base.model
     elif role == "judge":
-        model = os.environ.get("EVAL_JUDGE_MODEL")
-        if not model:
-            raise ConfigurationError("EVAL_JUDGE_MODEL is required")
+        model = os.environ.get("EVAL_JUDGE_MODEL") or DEFAULT_JUDGE_MODEL
     else:
         raise ValueError(f"unknown eval model role: {role}")
     settings = base.model_copy(update={"model": model, "temperature": _TEMPERATURES[role]})

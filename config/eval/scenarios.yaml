@@ -97,6 +97,7 @@
     - {check: cited_answers, min: 3}
     - {check: tool_not_called, tool: run_eligibility_check}
     - {check: tool_not_called, tool: calculate_loan_offer}
+    - {check: no_product_selected}
     - {check: no_model_tool_rejections}
     - {check: no_failed_turns}
   rubric:

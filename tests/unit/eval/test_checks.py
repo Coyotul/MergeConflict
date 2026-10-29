@@ -232,6 +232,21 @@ def test_product_changed_fail():
     assert r.status == "fail"
 
 
+def test_no_product_selected_pass_with_rejected_update():
+    events = greeting() + [say("t1"), parsed("t1", 1, "product_info"), finished("t1"),
+                           say("t2"), *product("t2", 1, "personal_loan", accepted=False), finished("t2")]
+    r = check({"check": "no_product_selected"}, events)
+    assert r.status == "pass"
+
+
+def test_no_product_selected_fail_names_turn():
+    events = greeting() + [say("t1"), parsed("t1", 1, "product_info"), finished("t1"),
+                           say("t2"), *product("t2", 1, "personal_loan"), finished("t2")]
+    r = check({"check": "no_product_selected"}, events)
+    assert r.status == "fail"
+    assert r.evidence == ["turn 2 step 1: product_code = personal_loan"]
+
+
 # ---- switch ---------------------------------------------------------------
 
 def switch_events(tool_in_window: bool) -> list[dict]:

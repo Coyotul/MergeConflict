@@ -207,6 +207,11 @@ def _product_changed(t: _Trace, **params: Any) -> Outcome:
     return ("pass" if changed else "fail"), [t.describe_product(p) for p in t.products]
 
 
+def _no_product_selected(t: _Trace) -> Outcome:
+    """No accepted product_code update at all (an information-only conversation)."""
+    return ("fail" if t.products else "pass"), [t.describe_product(p) for p in t.products]
+
+
 def _no_tool_after_switch(t: _Trace, tools: list[str]) -> Outcome:
     starts = [i for i, e in t.of_type("turn_started") if e.get("turn_id") in set(t.switch_turn_ids)]
     if not starts:
@@ -254,6 +259,7 @@ _CHECKS: dict[str, tuple[Callable[..., Outcome], dict, tuple[str, ...]]] = {
     "clarifying_before_product": (_clarifying_before_product, {"min_replies": 1}, ()),
     "product_final": (_product_final, {}, ()),
     "product_changed": (_product_changed, {}, ("from", "to")),
+    "no_product_selected": (_no_product_selected, {}, ()),
     "no_tool_after_switch": (_no_tool_after_switch, {}, ("tools",)),
     "search_per_question": (_search_per_question, {}, ("min",)),
     "cited_answers": (_cited_answers, {}, ("min",)),

@@ -5,8 +5,7 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 from scripts.eval.customer import CustomerAction, CustomerView, SimulatedCustomer
-from scripts.eval.models import EvalModelError, build_eval_model
-from src.core.errors import ConfigurationError
+from scripts.eval.models import DEFAULT_JUDGE_MODEL, EvalModelError, build_eval_model
 from src.core.settings import OrchestratorSettings
 from src.integrations.llm.chat import FakeChatModel, FeatherlessChatModel
 
@@ -101,10 +100,11 @@ def _settings() -> OrchestratorSettings:
     return OrchestratorSettings(featherless_api_key=SecretStr("k"), model="agent/model")
 
 
-def test_build_eval_model_requires_judge_model(monkeypatch):
+def test_build_eval_model_judge_default(monkeypatch):
     monkeypatch.delenv("EVAL_JUDGE_MODEL", raising=False)
-    with pytest.raises(ConfigurationError, match="EVAL_JUDGE_MODEL is required"):
-        build_eval_model("judge", _settings())
+    judge = build_eval_model("judge", _settings())
+    assert judge.settings.model == DEFAULT_JUDGE_MODEL
+    assert DEFAULT_JUDGE_MODEL.split("/")[0] != "openai"  # not the agent's family
 
 
 def test_build_eval_model_judge_and_customer(monkeypatch):

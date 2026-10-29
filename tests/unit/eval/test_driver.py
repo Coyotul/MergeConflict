@@ -216,6 +216,22 @@ def test_offers_reach_customer_and_driver_stops_before_confirmation(work_dir, cr
                    for e in map(json.loads, result.trace_path.read_text(encoding="utf-8").splitlines()))
 
 
+def test_requested_documents_stay_open_once_requested():
+    """After the first upload a real agent may await text (eligibility re-run) while still asking for
+    the remaining documents; outstanding checklist items stay uploadable once documents were requested."""
+    from scripts.eval.driver import _requested_documents
+    checklist = {"type": "document_checklist", "items": [
+        {"doc_type": "id_card", "label": "ID", "status": "accepted"},
+        {"doc_type": "payslip", "label": "Payslip", "status": "requested"},
+        {"doc_type": "bank_statement", "label": "Statement", "status": "rejected"},
+    ]}
+    text_body = {"awaiting": {"kind": "text"}, "blocks": [checklist]}
+    assert _requested_documents(text_body, documents_requested=False) == []
+    assert _requested_documents(text_body, documents_requested=True) == ["payslip", "bank_statement"]
+    doc_body = {"awaiting": {"kind": "document", "document_types": ["payslip"]}, "blocks": [checklist]}
+    assert _requested_documents(doc_body, documents_requested=True) == ["payslip"]
+
+
 def test_customer_documents_match_profile(credit_db):
     docs = customer_documents("cust-alex-morgan", CONFIG_DIR, credit_db, BINDINGS)
     assert set(docs) == {"id_card", "payslip", "bank_statement"}

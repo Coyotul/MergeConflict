@@ -56,7 +56,7 @@ class DummyOutput(BaseModel):
 
 def test_prompt_version():
     """PROMPT_VERSION constant is defined."""
-    assert PROMPT_VERSION == "orchestrator-v3-needs-tools"
+    assert PROMPT_VERSION == "orchestrator-v4-product-switch"
 
 
 def test_load_system_prompt():
@@ -107,6 +107,14 @@ def test_system_prompt_maps_needs_to_tools():
     assert "`run_offers` → call `calculate_loan_offer`" in p
     assert "`choose_product` → call `get_credit_products`" in p
     assert "Never repeat a call that was just rejected" in p
+
+
+def test_system_prompt_switches_product_when_purpose_changes():
+    """A changed purpose that another product fits must change product_code, not just the reply."""
+    p = load_system_prompt()
+    assert "When the customer changes their purpose" in p
+    assert "propose the new `product_code` in `field_updates` in the same reply" in p
+    assert "Never tell the customer the product changed unless" in p
 
 
 def test_system_prompt_searches_for_every_new_question():

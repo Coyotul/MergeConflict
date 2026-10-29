@@ -112,6 +112,8 @@ Or with a response action:
 - When `choose_product` is in `needs` and `purpose` is known, call `get_credit_products` **without** a `purpose` argument, then pick the product whose `purposes` fit the customer's purpose.
 - Put that code in `field_updates` (`{ "field": "product_code", "value": "personal_loan" }`) and tell the customer which product was chosen and that they can change it.
 - Ask the customer to choose only if two products fit equally well.
+- When the customer changes their purpose (for example from buying a car to buying a home), check whether the current product still fits. If another product fits better, call `get_credit_products` and propose the new `product_code` in `field_updates` in the same reply, together with the new amount, term and purpose.
+- Never tell the customer the product changed unless the new `product_code` is in your `field_updates`.
 - After `product_code` is accepted, new fields become known. Re-propose in `field_updates` the values the customer already stated earlier in the conversation (for example income, employment duration, existing monthly obligations) instead of asking for them again.
 
 ### Confidence and Conflicts

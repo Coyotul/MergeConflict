@@ -827,8 +827,8 @@ class GeneratedFixtureTests(DatabaseTestCase):
         counts = fixtures.validate_fixture(self.db, self.manifest)
         self.assertEqual(len(counts), 12)
         self.assertTrue(all(count > 0 for count in counts.values()))
-        self.assertEqual(len(self.manifest["scenarios"]), 73)
-        self.assertEqual(self.manifest["table_counts"]["persons"], 85)
+        self.assertEqual(len(self.manifest["scenarios"]), 82)
+        self.assertEqual(self.manifest["table_counts"]["persons"], 94)
         self.assertEqual(fictional_data_issues(self.db, self.manifest["sex_by_cnp"],
                                              self.manifest["amortizing_products"]), [])
 
@@ -918,11 +918,12 @@ class GeneratedFixtureTests(DatabaseTestCase):
         fixtures.validate_fixture(self.db, self.manifest)
 
     def test_cnp_metadata_fictional_contacts_and_invalid_official_checksums(self):
-        for row in self.db.execute("SELECT cnp, last_name, phone FROM persons"):
+        for row in self.db.execute("SELECT cnp, last_name, phone, persona_tag FROM persons"):
             checksum = sum(int(a) * int(b) for a, b in zip(row["cnp"][:12], "279146358279")) % 11
             checksum = 1 if checksum == 10 else checksum
             self.assertNotEqual(int(row["cnp"][-1]), checksum)
-            self.assertTrue(row["last_name"].startswith("FICTIV_"))
+            if not (row["persona_tag"] or "").startswith("DEMO_"):  # demo customers carry fictional display names
+                self.assertTrue(row["last_name"].startswith("FICTIV_"))
             self.assertIsNone(row["phone"])
         self.assertEqual(len(self.manifest["sex_by_cnp"]), self.manifest["table_counts"]["persons"])
 
@@ -990,7 +991,7 @@ class OrganizedLayoutTests(unittest.TestCase):
                                             encoding="utf-8", errors="replace", timeout=30)
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             manifest = json.loads((Path(directory) / "sample_data_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["table_counts"]["persons"], 73)
+            self.assertEqual(manifest["table_counts"]["persons"], 82)
         self.assertEqual(fixtures.SCHEMA_PATH, ROOT / "data" / "synthetic" / "credit_sources" / "credit_sources.sql")
         self.assertEqual(fixtures.SAMPLE_DIR, ROOT / "data" / "synthetic" / "credit_sources")
 

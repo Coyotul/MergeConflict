@@ -5,7 +5,7 @@
   "messages": [
     {
       "role": "assistant",
-      "text": "Mulțumesc. Te rog să-mi spui: Existing Monthly Obligations.",
+      "text": "Am notat angajatorul (TechCorp SRL). Ai alte rate sau obligații lunare în derulare? (Existing Monthly Obligations: dacă nu ai alte credite, poți scrie 0 sau „nu am”)",
       "citations": [],
       "created_at": "2026-10-28T09:00:00Z"
     }

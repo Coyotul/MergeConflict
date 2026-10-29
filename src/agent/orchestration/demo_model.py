@@ -60,6 +60,14 @@ FIELD_QUESTIONS: dict[str, dict[str, str]] = {
         "ro": "De câte luni lucrezi la angajatorul actual? ({label})",
         "en": "How many months have you been with your current employer? ({label})",
     },
+    "employment_months": {
+        "ro": "De câte luni lucrezi la angajatorul actual? ({label}, de exemplu: 24 sau „2 ani”)",
+        "en": "How many months have you been with your current employer? ({label}, e.g. 24 or '2 years')",
+    },
+    "existing_monthly_obligations": {
+        "ro": "Ai alte rate sau obligații lunare în derulare? ({label}: dacă nu ai alte credite, poți scrie 0 sau „nu am”)",
+        "en": "Do you have any existing monthly loan installments or obligations? ({label}: if none, enter 0)",
+    },
 }
 
 # ---- texts ------------------------------------------------------------------
@@ -481,6 +489,14 @@ class DemoChatModel:
             return f"Am notat perioada de {value} luni." if lang == "ro" else f"Got it, {value} months."
         if target == "employment_type":
             return "Am reținut statutul profesional." if lang == "ro" else "Got it."
+        if target in ("employment_months", "tenure_months"):
+            return f"Am reținut vechimea de {value} luni." if lang == "ro" else f"Got it, {value} months duration."
+        if target in ("existing_monthly_obligations", "monthly_obligations"):
+            return f"Am notat obligațiile lunare ({value} RON)." if lang == "ro" else f"Got it, {value} RON obligations."
+        if target == "monthly_net_income":
+            return f"Am notat venitul net lunar ({value} RON)." if lang == "ro" else f"Got it, {value} RON net income."
+        if target == "employer_name":
+            return f"Am notat angajatorul ({value})." if lang == "ro" else f"Got it, employer {value}."
         return _text("thanks", lang)
 
     def _extract(self, need: dict, text: str) -> str | int | None:
@@ -496,7 +512,7 @@ class DemoChatModel:
         candidate: str | int | None = None
         lower_text = text.lower().strip()
         if spec.type == FieldType.money:
-            if name == "monthly_obligations" and any(
+            if name in ("existing_monthly_obligations", "monthly_obligations") and any(
                 w in lower_text for w in ("nu", "nu am", "niciun", "niciuna", "zero", "fara", "none", "no", "nimic")
             ):
                 candidate = "0"
@@ -515,7 +531,7 @@ class DemoChatModel:
                     big = [raw for raw, value in numbers if value >= 100]
                     candidate = big[0] if big else (numbers[0][0] if numbers else None)
         elif spec.type == FieldType.integer:
-            if name == "term_months":
+            if name in ("term_months", "employment_months"):
                 years_match = re.search(r"(\d+)\s*(?:ani|an|years|year|yrs|yr)\b", lower_text)
                 if years_match:
                     candidate = int(years_match.group(1)) * 12

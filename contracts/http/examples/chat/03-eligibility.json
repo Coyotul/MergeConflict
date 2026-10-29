@@ -5,7 +5,7 @@
   "messages": [
     {
       "role": "assistant",
-      "text": "Mulțumesc. Am toate datele pentru o verificare preliminară (simulată, pe baza condițiilor publice). Scrie „ok” ca s-o rulez sau încarcă documentele: ID Card, Payslip (last 3 months), Bank Statement (last 6 months).",
+      "text": "Am notat obligațiile lunare (400 RON). Am toate datele pentru o verificare preliminară (simulată, pe baza condițiilor publice). Scrie „ok” ca s-o rulez sau încarcă documentele: ID Card, Payslip (last 3 months), Bank Statement (last 6 months).",
       "citations": [],
       "created_at": "2026-10-28T09:00:00Z"
     }

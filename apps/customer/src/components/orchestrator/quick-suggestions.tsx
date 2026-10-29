@@ -28,6 +28,7 @@ export function getQuickSuggestions(state: ChatState): SuggestionItem[] {
     text.includes("sum") ||
     text.includes("luni") ||
     text.includes("angajar") ||
+    text.includes("vechime") ||
     text.includes("venit") ||
     text.includes("verific") ||
     text.includes("bună") ||
@@ -53,7 +54,30 @@ export function getQuickSuggestions(state: ChatState): SuggestionItem[] {
       : [{ label: "🚀 Ok, run preliminary check", value: "ok" }];
   }
 
-  // 3. Employment Type
+  // 3. Employment Duration / Tenure
+  if (
+    text.includes("employment duration") ||
+    text.includes("vechime") ||
+    text.includes("tenure") ||
+    text.includes("câte luni lucrezi") ||
+    text.includes("luni lucrezi")
+  ) {
+    return isRo
+      ? [
+          { label: "12 luni (1 an)", value: "12" },
+          { label: "24 luni (2 ani)", value: "24" },
+          { label: "36 luni (3 ani)", value: "36" },
+          { label: "48 luni (4 ani)", value: "48" },
+        ]
+      : [
+          { label: "12 months (1 yr)", value: "12" },
+          { label: "24 months (2 yrs)", value: "24" },
+          { label: "36 months (3 yrs)", value: "36" },
+          { label: "48 months (4 yrs)", value: "48" },
+        ];
+  }
+
+  // 4. Employment Type
   if (
     text.includes("employment type") ||
     text.includes("statutul") ||
@@ -73,12 +97,13 @@ export function getQuickSuggestions(state: ChatState): SuggestionItem[] {
         ];
   }
 
-  // 4. Monthly Obligations
+  // 5. Monthly Obligations
   if (
     text.includes("obligații") ||
     text.includes("obligatii") ||
     text.includes("obligations") ||
-    text.includes("rate")
+    text.includes("existing monthly obligations") ||
+    text.includes("alte rate")
   ) {
     return isRo
       ? [
@@ -87,13 +112,13 @@ export function getQuickSuggestions(state: ChatState): SuggestionItem[] {
           { label: "800 RON / lună", value: "800" },
         ]
       : [
-          { label: "0 RON (no other loans)", value: "none" },
+          { label: "0 RON (no other loans)", value: "0" },
           { label: "400 RON / month", value: "400" },
           { label: "800 RON / month", value: "800" },
         ];
   }
 
-  // 5. Monthly Net Income
+  // 6. Monthly Net Income
   if (text.includes("venit") || text.includes("net income")) {
     return [
       { label: "4.500 RON", value: "4500" },
@@ -103,27 +128,13 @@ export function getQuickSuggestions(state: ChatState): SuggestionItem[] {
     ];
   }
 
-  // 6. Employer Name
+  // 7. Employer Name
   if (text.includes("angajator") || text.includes("employer")) {
     return [
       { label: "TechCorp SRL", value: "TechCorp SRL" },
       { label: "Alpha Solutions", value: "Alpha Solutions" },
+      { label: "SC Exemplu SRL", value: "SC Exemplu SRL" },
     ];
-  }
-
-  // 7. Tenure / Months with employer
-  if (text.includes("vechime") || text.includes("tenure") || text.includes("câte luni lucrezi")) {
-    return isRo
-      ? [
-          { label: "12 luni", value: "12" },
-          { label: "24 luni (2 ani)", value: "24" },
-          { label: "48 luni (4 ani)", value: "48" },
-        ]
-      : [
-          { label: "12 months", value: "12" },
-          { label: "24 months (2 yrs)", value: "24" },
-          { label: "48 months (4 yrs)", value: "48" },
-        ];
   }
 
   // 8. Purpose (what is the loan for)

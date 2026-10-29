@@ -540,11 +540,101 @@ def build_stub_registry(
 
     # Handler for submit_application
     def handle_submit_application(input: SubmitApplicationInput, ctx: ToolContext) -> SubmitApplicationOutput:
-        # Check idempotency
+        # Check in-memory idempotency cache first
         if input.idempotency_key in submission_cache:
             app_id = submission_cache[input.idempotency_key]
         else:
-            app_id = f"APP-{secrets.token_hex(4)}"
+            app = ctx.state.application
+            customer_id = ctx.state.customer_id
+            session_id = ctx.state.session_id
+
+            amount = 30000.0
+            term_months = 60
+            monthly_installment = 621.22
+            total_repayment = 37273.16
+            total_cost = 7273.16
+            nominal_rate = 8.90
+            dae = 9.58
+            product_code = "personal_loan"
+            customer_name = None
+            employer_name = None
+            monthly_net_income = None
+            documents = []
+
+            if app is not None:
+                if app.product_code is not None:
+                    product_code = getattr(app.product_code, "value", str(app.product_code))
+                if "amount" in app.fields and app.fields["amount"].value is not None:
+                    try:
+                        amount = float(app.fields["amount"].value)
+                    except (ValueError, TypeError):
+                        pass
+                if "term_months" in app.fields and app.fields["term_months"].value is not None:
+                    try:
+                        term_months = int(app.fields["term_months"].value)
+                    except (ValueError, TypeError):
+                        pass
+                if "full_name" in app.fields and app.fields["full_name"].value:
+                    customer_name = str(app.fields["full_name"].value)
+                if "employer_name" in app.fields and app.fields["employer_name"].value:
+                    employer_name = str(app.fields["employer_name"].value)
+                if "monthly_net_income" in app.fields and app.fields["monthly_net_income"].value is not None:
+                    try:
+                        monthly_net_income = float(app.fields["monthly_net_income"].value)
+                    except (ValueError, TypeError):
+                        pass
+
+                selected_offer = None
+                if app.offers and app.selected_offer_id:
+                    selected_offer = next((o for o in app.offers.offers if o.offer_id == app.selected_offer_id), None)
+                if selected_offer is None and app.summary and app.summary.offer:
+                    selected_offer = app.summary.offer
+
+                if selected_offer:
+                    if hasattr(selected_offer, "monthly_installment"):
+                        monthly_installment = float(selected_offer.monthly_installment.amount)
+                    if hasattr(selected_offer, "total_repayment"):
+                        total_repayment = float(selected_offer.total_repayment.amount)
+                    if hasattr(selected_offer, "total_cost"):
+                        total_cost = float(selected_offer.total_cost.amount)
+                    if hasattr(selected_offer, "nominal_rate") and selected_offer.nominal_rate is not None:
+                        nominal_rate = float(selected_offer.nominal_rate)
+                    if hasattr(selected_offer, "dae") and selected_offer.dae is not None:
+                        dae = float(selected_offer.dae)
+
+                for doc in app.documents:
+                    documents.append({
+                        "doc_type": doc.doc_type,
+                        "filename": doc.filename,
+                        "document_id": doc.document_id,
+                        "status": getattr(doc.status, "value", str(doc.status)),
+                    })
+
+            try:
+                from src.storage.application_db.repository import SqliteApplicationRepository
+                repo = SqliteApplicationRepository()
+                app_id = repo.save_application(
+                    idempotency_key=input.idempotency_key,
+                    customer_id=customer_id,
+                    session_id=session_id,
+                    product_code=product_code,
+                    amount=amount,
+                    term_months=term_months,
+                    monthly_installment=monthly_installment,
+                    total_repayment=total_repayment,
+                    total_cost=total_cost,
+                    nominal_rate=nominal_rate,
+                    dae=dae,
+                    status="PENDING_HUMAN_REVIEW",
+                    customer_name=customer_name,
+                    employer_name=employer_name,
+                    monthly_net_income=monthly_net_income,
+                    documents=documents,
+                )
+            except Exception as exc:
+                logger.warning("Application persistence fallback: %s", exc)
+                app_id = f"APP-{secrets.token_hex(4)}"
+
             submission_cache[input.idempotency_key] = app_id
 
         ctx.state.used_stubs = True
@@ -557,8 +647,9 @@ def build_stub_registry(
     # Handler for get_application_status
     def handle_get_status(input: GetApplicationStatusInput, ctx: ToolContext) -> ApplicationStatusOutput:
         app = ctx.state.application
+        target_id = input.application_id or (app.application_id if app else None)
 
-        if app is None or app.application_id is None:
+        if not target_id:
             ctx.state.used_stubs = True
             return ApplicationStatusOutput(
                 application_id=None,
@@ -567,23 +658,32 @@ def build_stub_registry(
                 simulated=True
             )
 
-        # Build history
+        status = "PENDING_HUMAN_REVIEW"
         history = []
-        if app.submitted_at:
-            history.append(StatusEntry(
-                status="SUBMITTED",
-                at=app.submitted_at.isoformat()
-            ))
-        if app.draft_application_id:
-            history.append(StatusEntry(
-                status="DRAFT",
-                at=ctx.state.updated_at.isoformat()
-            ))
+        try:
+            from src.storage.application_db.repository import SqliteApplicationRepository
+            repo = SqliteApplicationRepository()
+            persisted = repo.get_application(target_id)
+            if persisted:
+                status = persisted.get("status", "PENDING_HUMAN_REVIEW")
+                for h in persisted.get("history", []):
+                    history.append(StatusEntry(
+                        status=h.get("status", "SUBMITTED"),
+                        at=h.get("at", ctx.now.isoformat())
+                    ))
+        except Exception as exc:
+            logger.warning("Error fetching application status from DB: %s", exc)
+
+        if not history:
+            if app and app.submitted_at:
+                history.append(StatusEntry(status="SUBMITTED", at=app.submitted_at.isoformat()))
+            if app and app.draft_application_id:
+                history.append(StatusEntry(status="DRAFT", at=ctx.state.updated_at.isoformat()))
 
         ctx.state.used_stubs = True
         return ApplicationStatusOutput(
-            application_id=app.application_id,
-            status="PENDING_HUMAN_REVIEW",
+            application_id=target_id,
+            status=status,
             history=history,
             simulated=True
         )

@@ -356,3 +356,32 @@ def test_withdrawn_old_edition_keeps_multi_url_document_active(db_conn, tmp_path
         "select v.effective_from from knowledge_document_versions v where v.effective_from <= %s "
         "order by v.effective_from desc limit 1", (date(2026, 11, 15),))
     assert in_force == [(date(2026, 11, 1),)]
+
+
+def test_document_is_rekeyed_when_its_folder_becomes_shared_and_back(db_conn, tmp_path):
+    # A folder with one dated stem keys its document by the folder; a second stem makes it folder/stem.
+    # The stored document and the links pointing at it follow the new key instead of leaving an orphan.
+    folder = "/content/dam/rbi/retail/eu/ro/documents/pf/credite/demo"
+    html = f"""<html><body><main><h1>Credit Demo</h1><h2>Documente demo</h2>
+        <p>Vezi <a href="{folder}/20260901-alfa.pdf">informarea alfa</a>.</p></main></body></html>""".encode("utf-8")
+    sha, path = save_raw(tmp_path, html, ".html")
+    page = entry(PRODUCT_URL, sha=sha, raw_path=path.name)
+    p = IngestionPipeline(db_conn, HashingEmbedder(), CFG)
+
+    def keys():
+        return (sorted(r[0] for r in committed("select canonical_key from knowledge_documents")),
+                committed("select target_canonical_key from knowledge_chunk_links"))
+
+    page_key = "/ro/persoane-fizice/produsele-noastre/credite/credit-de-nevoi-personale-fara-ipoteca.html"
+    alfa, beta = pdf_entries(tmp_path, ["alfa", "beta"])
+    p.ingest_entries([page, alfa], tmp_path)
+    assert keys() == ([folder, page_key], [(folder,)])
+
+    rep = p.ingest_entries([page, alfa, beta], tmp_path)
+    assert list(rep.outcomes.values()) == [IngestOutcome.unchanged, IngestOutcome.unchanged, IngestOutcome.created]
+    assert keys() == ([folder + "/alfa", folder + "/beta", page_key], [(folder + "/alfa",)])
+    assert committed("select count(*) from knowledge_document_versions") == [(3,)]
+
+    rep = p.ingest_entries([page, alfa], tmp_path)
+    assert list(rep.outcomes.values()) == [IngestOutcome.unchanged, IngestOutcome.unchanged]
+    assert keys() == ([folder, folder + "/beta", page_key], [(folder,)])

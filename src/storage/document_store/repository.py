@@ -45,6 +45,31 @@ class DocumentRepository:
         ).fetchone()
         return row[0]
 
+    def find_source_url(self, canonical_key: str) -> str | None:
+        """The stored source URL of the document with this canonical key, if there is one."""
+        row = self.conn.execute(
+            "SELECT source_url FROM knowledge_documents WHERE canonical_key = %s", (canonical_key,)
+        ).fetchone()
+        return row[0] if row else None
+
+    def rekey_document(self, old_key: str, new_key: str) -> None:
+        """Move a document, and every link pointing at it, from old_key to new_key."""
+        self.conn.execute(
+            "UPDATE knowledge_documents SET canonical_key = %s WHERE canonical_key = %s", (new_key, old_key)
+        )
+        # A chunk linking to both keys keeps one link (the table is unique per chunk and target).
+        self.conn.execute(
+            """
+            DELETE FROM knowledge_chunk_links old USING knowledge_chunk_links new
+            WHERE old.target_canonical_key = %s AND new.target_canonical_key = %s AND old.chunk_id = new.chunk_id
+            """,
+            (old_key, new_key),
+        )
+        self.conn.execute(
+            "UPDATE knowledge_chunk_links SET target_canonical_key = %s WHERE target_canonical_key = %s",
+            (new_key, old_key),
+        )
+
     def find_version_by_hash(self, document_id: int, content_hash: str) -> int | None:
         """Return the id of the document's version with this content hash, if any."""
         row = self.conn.execute(

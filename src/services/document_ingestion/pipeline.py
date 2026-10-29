@@ -14,6 +14,7 @@ from src.models.knowledge import AUTHORITY_BY_DOC_KIND, DocKind, Product
 from src.services.document_ingestion.chunking import CHUNKER_VERSION, ChunkDraft, build_header, estimate_tokens
 from src.services.document_ingestion.manifest import ManifestEntry
 from src.services.document_ingestion.metadata import (
+    alternate_canonical_key,
     canonical_key,
     extract_campaign_window,
     extract_effective_date,
@@ -137,10 +138,10 @@ class IngestionPipeline:
                 parser_version=parsed.parser_version,
             )
 
+            key = canonical_key(entry.final_url, shared_folders)
             with self.conn.transaction():
-                document_id = self.documents.upsert_document(
-                    canonical_key(entry.final_url, shared_folders), entry.final_url, parsed.title, str(doc_kind)
-                )
+                self._follow_key_change(entry.final_url, key, shared_folders)
+                document_id = self.documents.upsert_document(key, entry.final_url, parsed.title, str(doc_kind))
                 if self.documents.find_version_by_hash(document_id, version.content_hash) is not None:
                     return IngestOutcome.unchanged, parsed.warnings
                 version_id = self.documents.create_version(document_id, version)
@@ -208,6 +209,19 @@ class IngestionPipeline:
         except OSError as exc:
             return IngestOutcome.failed, [f"{entry.url}: cannot read raw file: {exc}"]
         return self.ingest_one(entry, data, shared)
+
+    def _follow_key_change(self, url: str, key: str, shared_folders: frozenset[str]) -> None:
+        """Re-key the stored document when its folder's shared status changed since it was stored.
+
+        The document stored under the alternate key is the same one only if its own source URL now
+        maps to `key`; otherwise it is another stem's document and stays where it is.
+        """
+        old_key = alternate_canonical_key(url, shared_folders)
+        if old_key is None or self.documents.find_source_url(key) is not None:
+            return
+        old_source_url = self.documents.find_source_url(old_key)
+        if old_source_url is not None and canonical_key(old_source_url, shared_folders) == key:
+            self.documents.rekey_document(old_key, key)
 
     def _require_idle(self) -> None:
         if self.conn.info.transaction_status != TransactionStatus.IDLE:

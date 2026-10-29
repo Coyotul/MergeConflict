@@ -69,6 +69,19 @@ def canonical_key(url: str, shared_folders: frozenset[str] = frozenset()) -> str
     return path
 
 
+def alternate_canonical_key(url: str, shared_folders: frozenset[str]) -> str | None:
+    """For a dated file, its key under the opposite sharing decision for its folder; None otherwise.
+
+    A folder's shared status depends on the manifest (a second stem appearing or disappearing),
+    so a document stored under this key may be the same document as `canonical_key(url, shared_folders)`.
+    """
+    path = urlparse(url).path.lower()
+    if not re.match(r'^\d{8}-', path.split("/")[-1]):
+        return None
+    parent = "/".join(path.split("/")[:-1])
+    return canonical_key(url, shared_folders ^ {parent})
+
+
 def shared_dated_folders(urls: list[str] | frozenset[str]) -> frozenset[str]:
     """Find folders containing two or more distinct dated file stems.
 

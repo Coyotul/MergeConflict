@@ -31,6 +31,7 @@ class AwaitingKind(StrEnum):
     text = "text"
     document = "document"
     offer_choice = "offer_choice"
+    review_form = "review_form"
     confirmation = "confirmation"
     none = "none"
 
@@ -81,6 +82,8 @@ class ExtractedFieldView(BaseModel):
     confidence: float | None = None
     needs_confirmation: bool
     conflict_with: str | None = None
+    editable: bool = False
+    document_type: str | None = None
 
 
 class ExtractedFieldsBlock(BaseModel):
@@ -183,6 +186,11 @@ class SendMessageRequest(BaseModel):
         if len(v) > 4000:
             raise ValueError("text must be at most 4000 characters")
         return v
+
+
+class ExtractedFieldsReviewRequest(BaseModel):
+    """OK on the review form; edits may only target editable fields."""
+    edits: dict[str, str] = {}
 
 
 class OfferSelectionRequest(BaseModel):

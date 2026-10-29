@@ -120,13 +120,9 @@ T: dict[str, dict[str, str]] = {
     "upload_detail": {
         "ro": "Documentul {label} nu a putut fi folosit: {detail}", "en": "Your {label} could not be used: {detail}",
     },
-    "confirm_values": {
-        "ro": "Te rog verifică valorile din documente: {items}. Răspunde „da” dacă valorile din documente sunt corecte.",
-        "en": "Please check the values from your documents: {items}. Reply \"yes\" if the document values are correct.",
-    },
-    "conflict_item": {
-        "ro": "{label}: documentul arată {document}, tu ai spus {customer}",
-        "en": "{label}: the document shows {document}, you said {customer}",
+    "review_form": {
+        "ro": "Am citit datele din documente. Verifică-le în formular și apasă OK; poți corecta acolo numele sau angajatorul.",
+        "en": "I've read your documents. Check the values in the form and press OK; you can correct the name or employer there.",
     },
     "eligibility": {
         "ro": "Rezultatul verificării preliminare (simulat, pe baza condițiilor publice): {status}.",
@@ -327,24 +323,6 @@ class DemoChatModel:
                     text += " " + self._ask(t, following)
                 return intent, updates, _respond(text)
 
-        if kind in ("confirm_extracted", "resolve_conflict") and t.customer_text and t.first_step:
-            text_lower = t.customer_text.lower()
-            words_str = " ".join(_words(t.customer_text))
-            is_confirmed = (
-                words_str in _YES
-                or any(w in words_str.split() for w in ("yes", "da", "correct", "corect", "confirm", "sigur", "ok"))
-                or "is correct" in text_lower
-                or "use document value" in text_lower
-                or "document value" in text_lower
-                or "confirm" in text_lower
-            )
-            if is_confirmed:
-                updates = [
-                    {"field": n["target"], "confirm": True}
-                    for n in t.needs if n["kind"] in ("confirm_extracted", "resolve_conflict")
-                ]
-                return intent, updates, _call("run_eligibility_check", {})
-
         if kind == "confirm_submission" and t.customer_text and t.first_step:
             words = _words(t.customer_text)
             if words and (" ".join(words) in _YES or words[0] in ("da", "yes")):
@@ -465,28 +443,11 @@ class DemoChatModel:
             if need.get("detail") and not (t.event or "").startswith(f"DOCUMENT_PROCESSED {need['target']}:"):
                 text = _text("upload_detail", lang, label=need.get("label"), detail=need["detail"]) + " " + text
             return text
-        if kind in ("confirm_extracted", "resolve_conflict"):
-            return _text("confirm_values", lang, items="; ".join(self._confirm_items(t)))
+        if kind == "review_extracted":
+            return _text("review_form", lang)
         if kind in ("choose_offer", "confirm_submission", "not_eligible", "manual_review", "escalated"):
             return _text(kind, lang)
         return _text("more", lang)
-
-    def _confirm_items(self, t: _Turn) -> list[str]:
-        fields = t.context.get("fields") or {}
-        conflicts = {c["field"]: c for c in self._ctx_list(t, "conflicts")}
-        items = []
-        for need in t.needs:
-            if need["kind"] not in ("confirm_extracted", "resolve_conflict"):
-                continue
-            name = need["target"]
-            label = need.get("label") or name
-            if name in conflicts:
-                c = conflicts[name]
-                items.append(_text("conflict_item", t.lang, label=label, document=c["document_value"],
-                                   customer=c["customer_value"]))
-            elif name in fields:
-                items.append(f"{label}: {fields[name]['value']}")
-        return items
 
     def _document_labels(self, t: _Turn) -> list[str]:
         return [n.get("label") or n["target"] for n in t.needs if n["kind"] == "document"]

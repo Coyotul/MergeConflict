@@ -1,7 +1,7 @@
 {
   "session_id": "example-session-1",
-  "turn_id": "example-turn-16",
-  "session_version": 15,
+  "turn_id": "example-turn-11",
+  "session_version": 10,
   "messages": [
     {
       "role": "assistant",
@@ -83,7 +83,9 @@
           "source": "document",
           "confidence": 0.9,
           "needs_confirmation": false,
-          "conflict_with": null
+          "conflict_with": null,
+          "editable": true,
+          "document_type": "id_card"
         },
         {
           "field": "age",
@@ -92,34 +94,9 @@
           "source": "document",
           "confidence": 0.9,
           "needs_confirmation": false,
-          "conflict_with": null
-        },
-        {
-          "field": "employment_type",
-          "label": "Employment Type",
-          "value": "employed",
-          "source": "document",
-          "confidence": 1.0,
-          "needs_confirmation": false,
-          "conflict_with": null
-        },
-        {
-          "field": "employment_months",
-          "label": "Employment Duration (months)",
-          "value": "66",
-          "source": "document",
-          "confidence": 1.0,
-          "needs_confirmation": false,
-          "conflict_with": null
-        },
-        {
-          "field": "monthly_net_income",
-          "label": "Monthly Net Income",
-          "value": "6200.00",
-          "source": "document",
-          "confidence": 1.0,
-          "needs_confirmation": false,
-          "conflict_with": null
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "id_card"
         },
         {
           "field": "employer_name",
@@ -128,7 +105,42 @@
           "source": "document",
           "confidence": 1.0,
           "needs_confirmation": false,
-          "conflict_with": null
+          "conflict_with": null,
+          "editable": true,
+          "document_type": "payslip"
+        },
+        {
+          "field": "monthly_net_income",
+          "label": "Monthly Net Income",
+          "value": "6200.00",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": false,
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "payslip"
+        },
+        {
+          "field": "employment_type",
+          "label": "Employment Type",
+          "value": "employed",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": false,
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "payslip"
+        },
+        {
+          "field": "employment_months",
+          "label": "Employment Duration (months)",
+          "value": "66",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": false,
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "payslip"
         },
         {
           "field": "existing_monthly_obligations",
@@ -137,7 +149,9 @@
           "source": "document",
           "confidence": 1.0,
           "needs_confirmation": false,
-          "conflict_with": null
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "bank_statement"
         }
       ]
     },

@@ -49,12 +49,14 @@ export function OrchestratorConversation({
   onSend,
   onUpload,
   onChooseOffer,
+  onReview,
   disabled,
 }: {
   state: ChatState;
   onSend: (text: string) => void;
   onUpload: (docType: string, file: File) => void;
   onChooseOffer: (offerId: string) => void;
+  onReview: (edits: Record<string, string>) => void;
   disabled: boolean;
 }) {
   const lastAssistantIndex = lastAssistantEntryIndex(state);
@@ -102,6 +104,7 @@ export function OrchestratorConversation({
                   onSend={onSend}
                   onUpload={onUpload}
                   onChooseOffer={onChooseOffer}
+                  onReview={onReview}
                   disabled={disabled}
                 />
               </div>

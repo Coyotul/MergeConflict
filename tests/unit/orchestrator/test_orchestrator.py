@@ -118,6 +118,8 @@ def test_product_code_triggers_requirements_and_profile(orchestrator_factory):
         GREET,
         respond("Ce tip de angajare ai?", intent="credit_application",
                 updates=DISCOVERY_UPDATES + [{"field": "product_code", "value": "personal_loan"}]),
+        # Written before the product's needs existed: the model answers again for the documents.
+        respond("Te rog încarcă documentele cerute.", intent="credit_application"),
     ])
     sid = orch.start_session(CUSTOMER).session_id
     resp = orch.handle(sid, CUSTOMER, CustomerMessage("Vreau un credit pentru renovare"))
@@ -130,30 +132,12 @@ def test_product_code_triggers_requirements_and_profile(orchestrator_factory):
         assert app.fields[name].source == FieldSource.profile
         assert app.fields[name].confirmed is True
         assert app.fields[name].value == value
-    assert resp.progress.stage == "collecting_information"
+    assert resp.progress.stage == "documents"  # documents are requested right after the product
+    assert resp.messages[-1].text == "Te rog încarcă documentele cerute."
     checklist = [b for b in resp.blocks if b.type == "document_checklist"]
     assert [i.doc_type for i in checklist[0].items] == ["id_card", "payslip", "bank_statement"]
     assert all(i.status == "requested" for i in checklist[0].items)
     assert resp.simulated is True
-
-
-def test_product_fields_in_same_batch_as_product_code_accepted(orchestrator_factory):
-    """Product-specific fields listed before product_code in one batch are not unknown_field."""
-    orch, store, model = orchestrator_factory([
-        GREET,
-        respond("Mulțumesc!", intent="credit_application", updates=DISCOVERY_UPDATES + [
-            {"field": "monthly_net_income", "value": "6200 RON"},
-            {"field": "product_code", "value": "personal_loan"},
-        ]),
-    ])
-    sid = orch.start_session(CUSTOMER).session_id
-    orch.handle(sid, CUSTOMER, CustomerMessage("Venitul meu net este 6200 lei"))
-
-    app = store.get(sid).application
-    assert app.product_code == Product.personal_loan
-    assert app.fields["monthly_net_income"].value == Decimal("6200")
-    assert "unknown_field" not in joined(model.calls[-1])
-    assert len(model.calls) == 2  # no re-ask step was needed
 
 
 def test_product_code_outside_catalog_rejected(orchestrator_factory):

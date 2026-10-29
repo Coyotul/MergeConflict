@@ -39,52 +39,6 @@ def test_stale_eligibility_runs_before_the_model_is_asked(orchestrator_factory, 
     assert "TOOL_REJECTED calculate_loan_offer" not in joined(model.calls[-1])
 
 
-def test_eligibility_runs_when_the_last_required_field_arrives(orchestrator_factory, stub_data):
-    requirements = stub_data.requirements[Product.personal_loan]
-    values = dict(ELIGIBILITY_FIELDS)
-    values.pop("existing_monthly_obligations")
-    orch, store, model = orchestrator_factory([
-        GREET,
-        respond("Thanks, checking now.", intent="credit_application",
-                updates=[{"field": "existing_monthly_obligations", "value": "0 RON"}]),
-        respond("Here is the result.", intent="credit_application"),
-    ])
-    sid = orch.start_session(CUSTOMER).session_id
-    app = make_collecting_app(requirements, values)
-    app.fields.update(make_verified_app(requirements).fields)  # identity fields as the profile sets them
-    for name in ("existing_monthly_obligations",):
-        app.fields.pop(name, None)
-    seed_application(store, sid, app)
-
-    orch.handle(sid, CUSTOMER, CustomerMessage("No other loans, 0 RON"))
-
-    assert store.get(sid).application.eligibility is not None
-
-
-def test_reply_is_rewritten_after_eligibility_runs_from_its_own_updates(orchestrator_factory, stub_data):
-    """A reply written before the result existed gets one more step, with the result shown."""
-    requirements = stub_data.requirements[Product.personal_loan]
-    values = dict(ELIGIBILITY_FIELDS)
-    values.pop("existing_monthly_obligations")
-    orch, store, model = orchestrator_factory([
-        GREET,
-        respond("Thanks!", intent="credit_application",
-                updates=[{"field": "existing_monthly_obligations", "value": "0 RON"}]),
-        respond("You meet the preliminary conditions.", intent="credit_application"),
-    ])
-    sid = orch.start_session(CUSTOMER).session_id
-    app = make_collecting_app(requirements, values)
-    app.fields.update({k: v for k, v in make_verified_app(requirements).fields.items() if k in ("full_name", "age")})
-    seed_application(store, sid, app)
-
-    resp = orch.handle(sid, CUSTOMER, CustomerMessage("No other loans, 0 RON"))
-
-    last_prompt = joined(model.calls[-1])
-    assert "TOOL_RESULT run_eligibility_check" in last_prompt
-    assert "ELIGIBILITY_UPDATED" in last_prompt
-    assert resp.messages[-1].text == "You meet the preliminary conditions."
-
-
 def test_eligibility_not_run_while_fields_are_missing(orchestrator_factory, stub_data):
     orch, store, model = orchestrator_factory([GREET, respond("What is your income?", intent="credit_application")])
     sid = orch.start_session(CUSTOMER).session_id

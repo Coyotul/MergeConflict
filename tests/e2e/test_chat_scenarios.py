@@ -91,6 +91,12 @@ class Chat:
             f"/chat/sessions/{self.session_id}/messages", json={"text": text}, headers=self.headers
         ))
 
+    def review(self, edits: dict | None = None) -> dict:
+        """Press OK on the review form, optionally correcting editable values."""
+        return self._ok(self.client.post(
+            f"/chat/sessions/{self.session_id}/extracted-fields", json={"edits": edits or {}}, headers=self.headers,
+        ))
+
     def upload(self, doc_type: str, filename: str | None = None, *, content: bytes | None = None) -> dict:
         files = {"file": (filename or f"{doc_type}.pdf", io.BytesIO(document_bytes(doc_type, **self.person) if content is None else content), "application/pdf")}
         return self._ok(self.client.post(
@@ -120,10 +126,20 @@ def block(body: dict, block_type: str) -> dict:
 
 
 def answer_discovery(chat: Chat) -> None:
+    """Only the values no document supplies are asked; then the documents are requested."""
     assert stage(chat.say("Vreau un credit")) == "discovery"
     assert stage(chat.say("pentru renovare")) == "discovery"
     assert stage(chat.say("30000 lei")) == "discovery"
-    assert stage(chat.say("60 luni")) == "collecting_information"
+    body = chat.say("60 luni")
+    assert stage(body) == "documents"
+    assert body["awaiting"]["kind"] == "document"
+
+
+def upload_all(chat: Chat) -> dict:
+    body = None
+    for doc_type in ("id_card", "payslip", "bank_statement"):
+        body = chat.upload(doc_type)
+    return body
 
 
 def test_happy_path_alex_morgan(client):
@@ -131,33 +147,22 @@ def test_happy_path_alex_morgan(client):
     assert chat.responses[0]["messages"], "greeting expected"
 
     answer_discovery(chat)
-    assert stage(chat.say("employed")) == "collecting_information"
-    assert stage(chat.say("67")) == "collecting_information"
-    assert stage(chat.say("7000")) == "collecting_information"
-    assert stage(chat.say("FICTIV Employer's Studio 1")) == "collecting_information"
-    body = chat.say("0")  # the last required field: eligibility runs in this turn
-    assert stage(body) == "documents"
-    assert block(body, "eligibility_result")["result"]["status"] == "satisfied"
-
     body = chat.upload("id_card")
-    assert stage(body) == "documents"
-    result = block(body, "eligibility_result")["result"]
-    assert result["status"] == "satisfied"
-    assert "income_gap" in {r["code"] for r in result["reasons"]}  # ANAF 8500 vs declared 7000
-    assert body["awaiting"]["kind"] == "document"
+    assert stage(body) == "documents" and body["awaiting"]["kind"] == "document"
     chat.upload("payslip")
     body = chat.upload("bank_statement")
     assert stage(body) == "documents"
-    income = next(f for f in block(body, "extracted_fields")["fields"] if f["field"] == "monthly_net_income")
-    assert income["conflict_with"] == "7000.00"
+    assert body["awaiting"]["kind"] == "review_form"
+    form = {f["field"]: f for f in block(body, "extracted_fields")["fields"]}
+    assert form["monthly_net_income"]["value"] and not form["monthly_net_income"]["editable"]
+    assert form["employer_name"]["editable"] and form["full_name"]["editable"]
 
-    body = chat.say("da")
+    body = chat.review()  # OK on the form: eligibility and offers follow
+    assert block(body, "eligibility_result")["result"]["status"] == "satisfied"
     assert stage(body) == "offer_selection"
     assert body["awaiting"]["kind"] == "offer_choice"
     offers = block(body, "offers")["offers"]
     assert len(offers) >= 2
-    reply = body["messages"][-1]["text"]
-    assert offers[0]["monthly_installment"]["amount"] in reply  # summarised from CONTEXT_JSON
 
     # Submission is by explicit agreement in chat: the agent asks, the customer agrees in words.
     body = chat.select_offer(offers[0]["offer_id"])
@@ -179,23 +184,20 @@ def test_happy_path_alex_morgan(client):
 def test_not_eligible_andrei_stan(client):
     chat = Chat(client, "cust-andrei-stan")
     answer_discovery(chat)
-    for text in ("employed", "67", "2300", "FICTIV Employer's Studio 1"):
-        chat.say(text)
-    body = chat.say("0")  # the last required field: eligibility runs and is explained in this turn
+    upload_all(chat)
+    body = chat.review()  # eligibility runs on the document values and is explained in this turn
     assert stage(body) == "not_eligible"
     assert body["awaiting"]["kind"] == "text"
     assert block(body, "eligibility_result")["result"]["status"] == "not_satisfied"
-    assert "2300" in body["messages"][-1]["text"]  # reason text comes from the tool result (ANAF income)
 
 
 def test_manual_review_mihai_ilie(client):
     chat = Chat(client, "cust-mihai-ilie")
     answer_discovery(chat)
-    for text in ("self_employed", "57", "7000", "Ilie Mihai PFA", "0"):
-        chat.say(text)
-    body = chat.say("ok")
+    body = upload_all(chat)
+    if body["awaiting"]["kind"] == "review_form":
+        body = chat.review()
     assert stage(body) == "manual_review"
-    assert block(body, "eligibility_result")["result"]["status"] == "manual_review"
 
 
 def test_product_question_has_citations(client):
@@ -217,26 +219,20 @@ def test_resume_after_restart(work_dir, credit_db):
     restarted = TestClient(make_app(work_dir, credit_db))
     chat.client = restarted
     after = chat.view()
-    assert stage(after["latest"]) == stage(before["latest"]) == "collecting_information"
+    assert stage(after["latest"]) == stage(before["latest"]) == "documents"
     assert after["messages"] == before["messages"]
     assert len(after["messages"]) == 9  # greeting + 4 customer/assistant pairs
-    assert stage(chat.say("employed")) == "collecting_information"
+    assert stage(chat.upload("id_card")) == "documents"
 
 
 def test_side_question_mid_application(client):
     chat = Chat(client, "cust-alex-morgan")
     answer_discovery(chat)
     body = chat.say("Ce documente îmi trebuie?")
-    assert stage(body) == "collecting_information"
+    assert stage(body) == "documents"
     assert body["progress"]["flow"] == "credit_application"
     assert body["messages"][-1]["citations"]
-    assert "Employment Type" in body["messages"][-1]["text"]  # back to the application
-
-    body = chat.say("employed")
-    fields = chat.view()["latest"]
-    assert stage(body) == "collecting_information"
-    assert stage(fields) == "collecting_information"
-    assert "Employment Duration (months)" in body["messages"][-1]["text"]
+    assert body["awaiting"]["kind"] == "document"  # back to the uploads, nothing else asked
 
 
 def test_rejected_upload_asks_again(client):

@@ -18,6 +18,7 @@ export function Blocks({
   onSend,
   onUpload,
   onChooseOffer,
+  onReview,
   disabled,
 }: {
   latest: TurnResponse;
@@ -25,6 +26,7 @@ export function Blocks({
   onSend: (text: string) => void;
   onUpload: (docType: string, file: File) => void;
   onChooseOffer: (offerId: string) => void;
+  onReview: (edits: Record<string, string>) => void;
   disabled: boolean;
 }) {
   if (!latest.blocks.length) {
@@ -55,7 +57,8 @@ export function Blocks({
               <ExtractedFieldsBlockComponent
                 key={index}
                 block={block}
-                onSend={onSend}
+                reviewing={latest.awaiting.kind === "review_form"}
+                onReview={onReview}
                 disabled={disabled}
               />
             );

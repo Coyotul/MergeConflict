@@ -204,58 +204,6 @@ def test_product_change_clears_downstream():
     assert "amount" in app.fields
 
 
-def test_document_conflict_detected_and_resolved_by_confirm():
-    """Test that document extraction creates a conflict and confirm resolves it."""
-    specs = make_specs()
-    app = make_app()
-    now = datetime.now(UTC)
-
-    # Customer states income of 6000
-    updates = [FieldUpdate(field="monthly_net_income", value="6000")]
-    results = apply_field_updates(app, updates, specs, offer_ids=set(), now=now)
-    assert results[0].accepted is True
-    assert app.fields["monthly_net_income"].value == Decimal("6000")
-    assert app.fields["monthly_net_income"].source == FieldSource.customer
-    assert app.fields["monthly_net_income"].confirmed is True
-
-    # Document extraction shows 5200
-    doc = DocumentRecord(
-        document_id="doc-1",
-        doc_type="payslip",
-        filename="payslip.pdf",
-        status=DocumentStatus.accepted,
-        rejection_reason=None,
-        extracted_fields={
-            "monthly_net_income": ExtractedField(
-                value="5200",
-                confidence=0.95,
-                location="page 1"
-            )
-        },
-        uploaded_at=now
-    )
-    app.documents.append(doc)  # Add to documents list
-    merge_document_extraction(app, doc, specs, now=now)
-
-    # Should create conflict
-    assert len(app.conflicts) == 1
-    assert app.conflicts[0].field == "monthly_net_income"
-    assert app.conflicts[0].customer_value == "6000.00"
-    assert app.conflicts[0].document_value == "5200"
-    assert app.conflicts[0].document_id == "doc-1"
-
-    # Field should have document value, unconfirmed
-    assert app.fields["monthly_net_income"].value == Decimal("5200")
-    assert app.fields["monthly_net_income"].source == FieldSource.document
-    assert app.fields["monthly_net_income"].confirmed is False
-    assert app.fields["monthly_net_income"].confidence == 0.95
-
-    # Confirm accepts document value and removes conflict
-    updates = [FieldUpdate(field="monthly_net_income", confirm=True)]
-    results = apply_field_updates(app, updates, specs, offer_ids=set(), now=now)
-    assert results[0].accepted is True
-    assert app.fields["monthly_net_income"].confirmed is True
-    assert len(app.conflicts) == 0
 
 
 def test_customer_cannot_override_verified_value():
@@ -292,7 +240,7 @@ def test_customer_cannot_override_verified_value():
 
     assert len(results) == 1
     assert results[0].accepted is False
-    assert results[0].reason == "must_verify_from_document"
+    assert results[0].reason == "from_documents_only"
     # Field should remain unchanged
     assert app.fields["monthly_net_income"].value == Decimal("5200")
 
@@ -303,9 +251,8 @@ def test_reupload_matching_customer_value_clears_conflict():
     app = make_app()
     now = datetime.now(UTC)
 
-    # Customer states income
-    updates = [FieldUpdate(field="monthly_net_income", value="6000")]
-    apply_field_updates(app, updates, specs, offer_ids=set(), now=now)
+    # Customer value (e.g. corrected on the review form)
+    _customer_value(app, specs, "monthly_net_income", Decimal("6000.00"), now)
 
     # First document has different value
     doc1 = DocumentRecord(
@@ -376,12 +323,9 @@ def test_conflicts_not_wiped_across_doc_types():
     app = make_app()
     now = datetime.now(UTC)
 
-    # Customer states values for both fields
-    updates = [
-        FieldUpdate(field="monthly_net_income", value="6000"),
-        FieldUpdate(field="full_name", value="John Doe")
-    ]
-    apply_field_updates(app, updates, specs, offer_ids=set(), now=now)
+    # Customer values for both fields (e.g. corrected on the review form)
+    _customer_value(app, specs, "monthly_net_income", Decimal("6000.00"), now)
+    _customer_value(app, specs, "full_name", "John Doe", now)
 
     # ID card doc creates conflict on full_name
     id_card = DocumentRecord(
@@ -714,3 +658,10 @@ def test_parse_money_quantizes_half_up():
     assert parse_money(Decimal("10.005")) == Decimal("10.01")
     assert parse_money("10,005.5") == Decimal("10005.50")
     assert parse_money(25000).as_tuple().exponent == -2
+
+
+
+def _customer_value(app, specs, name, value, now):
+    from src.agent.orchestration.fields import field_type_to_kind
+    app.fields[name] = FieldValue(kind=field_type_to_kind(specs[name].type), value=value,
+                                  source=FieldSource.customer, confirmed=True, updated_at=now)

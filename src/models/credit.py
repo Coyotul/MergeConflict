@@ -43,6 +43,7 @@ class FieldSpec(BaseModel):
     required: bool = True
     verified_by: str | None = None
     identity: bool = False
+    editable: bool = False  # customer may correct it in the review form (never amount-relevant)
     min: Decimal | None = None
     max: Decimal | None = None
     options: list[str] | None = None

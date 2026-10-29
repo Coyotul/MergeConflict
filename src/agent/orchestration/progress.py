@@ -47,8 +47,7 @@ class NeedKind(StrEnum):
     choose_product = "choose_product"
     run_eligibility = "run_eligibility"
     document = "document"
-    confirm_extracted = "confirm_extracted"
-    resolve_conflict = "resolve_conflict"
+    review_extracted = "review_extracted"
     run_offers = "run_offers"
     choose_offer = "choose_offer"
     confirm_submission = "confirm_submission"
@@ -145,6 +144,10 @@ def is_verified(app: ApplicationState, spec: FieldSpec) -> bool:
 
     # If doesn't require verification, just needs to exist
     if not spec.must_verify:
+        return True
+
+    # Editable fields corrected by the customer on the review form count as reviewed
+    if spec.editable and field.source == FieldSource.customer and field.confirmed:
         return True
 
     # Identity fields from profile count as verified
@@ -269,65 +272,57 @@ def next_needs(state: SessionState) -> list[Need]:
     if app.requirements is None:
         return needs
 
-    # Group 4: Missing required fields
+    if needs:
+        return needs
+
+    # Group 4: required values no document supplies (documents fill the rest)
+    for spec in app.requirements.fields:
+        if spec.required and spec.verified_by is None and spec.name not in app.fields:
+            needs.append(Need(kind=NeedKind.missing_field, target=spec.name))
+    if needs:
+        return needs
+
+    # Group 5: required documents not accepted; while any is pending nothing else is asked
+    for doc_req in app.requirements.documents or []:
+        docs_of_type = [d for d in app.documents if d.doc_type == doc_req.doc_type]
+        if not docs_of_type:
+            needs.append(Need(kind=NeedKind.document, target=doc_req.doc_type))
+            continue
+        latest = max(docs_of_type, key=lambda d: d.uploaded_at)
+        if latest.status != DocumentStatus.accepted:
+            needs.append(Need(
+                kind=NeedKind.document, target=doc_req.doc_type,
+                detail=latest.rejection_reason if latest.status == DocumentStatus.rejected else None,
+            ))
+    if needs:
+        return needs
+
+    # Group 6: one review of every document value (the form), replacing per-field confirmation
+    if app.conflicts or any(f.source == FieldSource.document and not f.confirmed for f in app.fields.values()):
+        return [Need(kind=NeedKind.review_extracted)]
+
+    # Group 7: required values the documents did not provide
     for spec in app.requirements.fields:
         if spec.required and spec.name not in app.fields:
             needs.append(Need(kind=NeedKind.missing_field, target=spec.name))
+    if needs:
+        return needs
 
-    # Group 5: Eligibility not current
+    # Group 8: eligibility on the reviewed values
     if not eligibility_current(app):
         needs.append(Need(kind=NeedKind.run_eligibility))
 
-    # Group 6: Eligibility results
     if app.eligibility is not None:
         status = app.eligibility.result.status
-
         if status == EligibilityStatus.not_satisfied:
             needs.append(Need(kind=NeedKind.not_eligible))
-            return needs  # Stop after not_eligible
-
+            return needs
         if status == EligibilityStatus.manual_review:
             needs.append(Need(kind=NeedKind.manual_review))
-            return needs  # Stop after manual_review
-
+            return needs
         if status == EligibilityStatus.more_information_required:
-            # Add missing_field for each missing field
             for field_name in app.eligibility.result.missing_fields:
                 needs.append(Need(kind=NeedKind.missing_field, target=field_name))
-
-    # Group 7: Required documents not accepted
-    if app.requirements.documents:
-        for doc_req in app.requirements.documents:
-            # Find latest document of this type
-            docs_of_type = [d for d in app.documents if d.doc_type == doc_req.doc_type]
-
-            if not docs_of_type:
-                # No document uploaded
-                needs.append(Need(kind=NeedKind.document, target=doc_req.doc_type))
-            else:
-                latest = max(docs_of_type, key=lambda d: d.uploaded_at)
-                if latest.status == DocumentStatus.rejected:
-                    # Rejected with reason
-                    needs.append(Need(
-                        kind=NeedKind.document,
-                        target=doc_req.doc_type,
-                        detail=latest.rejection_reason
-                    ))
-                elif latest.status != DocumentStatus.accepted:
-                    # Not accepted yet
-                    needs.append(Need(kind=NeedKind.document, target=doc_req.doc_type))
-
-    # Group 8: Unconfirmed document-sourced fields (no open conflict)
-    conflicted_fields = {c.field for c in app.conflicts}
-    for field_name, field in app.fields.items():
-        if (field.source == FieldSource.document
-                and not field.confirmed
-                and field_name not in conflicted_fields):
-            needs.append(Need(kind=NeedKind.confirm_extracted, target=field_name))
-
-    # Group 9: Open conflicts
-    for conflict in app.conflicts:
-        needs.append(Need(kind=NeedKind.resolve_conflict, target=conflict.field))
 
     # If any needs from groups 2-9 exist, return them (don't add groups 10-13)
     if needs:
@@ -412,7 +407,7 @@ def derive_stage(state: SessionState) -> Stage | None:
     if first_need.kind == NeedKind.manual_review:
         return Stage.manual_review
 
-    if first_need.kind in (NeedKind.document, NeedKind.confirm_extracted, NeedKind.resolve_conflict):
+    if first_need.kind in (NeedKind.document, NeedKind.review_extracted):
         return Stage.documents
 
     if first_need.kind in (NeedKind.run_offers, NeedKind.choose_offer):

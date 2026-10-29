@@ -1,23 +1,23 @@
 {
   "session_id": "example-session-1",
-  "turn_id": "example-turn-15",
-  "session_version": 14,
+  "turn_id": "example-turn-09",
+  "session_version": 8,
   "messages": [
     {
       "role": "assistant",
-      "text": "Ai ales varianta pe 60 luni. Cererea este gata. Răspunde „da, trimite” dacă vrei să o trimit spre analiză. Nu trimit nimic fără acordul tău.",
+      "text": "Rezultatul verificării preliminare (simulat, pe baza condițiilor publice): condițiile preliminare sunt îndeplinite. Ofertele (simulate, pe baza condițiilor publice): 60 luni: rată lunară 621.22 RON, cost total 7473.16 RON; 36 luni: rată lunară 952.72 RON, cost total 4497.99 RON; 48 luni: rată lunară 745.16 RON, cost total 5967.56 RON. Product personal_loan_fixed version 2026-10-15 (synthetic parameters). Simulation date 2026-10-28; the credit is paid out in full on that date. Instalments are monthly; DAE uses equal months of 1/12 year (OUG 50/2010, Annex 1). Amounts are rounded to 0.01 per instalment; the last instalment absorbs rounding. Base rate 8.55% (product minimum (no risk-based rate provided)); fixed for the whole term. Affordability uses the declared net monthly income and existing payments, unverified. Net amount paid out: 29800.00 RON; requested amount is total credit including financed costs. No salary-account discount or optional insurance is assumed; annuity repayment, no first-home uplift. Fees include upfront and recurring charges over the full term. Do not add them again to total repayment or total cost. ANALYSIS_FEE: 200.00 RON (financed and deducted from payout). Indicative simulation based on synthetic product parameters and the stated assumptions. It is not an offer, an approval or an authoritative settlement amount. 60 luni: DAE/APR: 9.58%; nominal interest is not the total cost of credit. Total upfront fees/premiums: 200.00 RON; total recurring charges: 300.00 RON. Simulation debt-service ratio: 0.1647; limit: 0.40; within limit: true. Indicative check against BNR Regulation 17/2012; not an eligibility decision. 36 luni: DAE/APR: 9.78%; nominal interest is not the total cost of credit. Total upfront fees/premiums: 200.00 RON; total recurring charges: 180.00 RON. Simulation debt-service ratio: 0.2182; limit: 0.40; within limit: true. Indicative check against BNR Regulation 17/2012; not an eligibility decision. 48 luni: DAE/APR: 9.66%; nominal interest is not the total cost of credit. Total upfront fees/premiums: 200.00 RON; total recurring charges: 240.00 RON. Simulation debt-service ratio: 0.1847; limit: 0.40; within limit: true. Indicative check against BNR Regulation 17/2012; not an eligibility decision. Alege una dintre oferte din listă.",
       "citations": [],
       "created_at": "2026-10-28T09:00:00Z"
     }
   ],
   "awaiting": {
-    "kind": "text",
+    "kind": "offer_choice",
     "document_types": [],
     "summary_version": null
   },
   "progress": {
     "flow": "credit_application",
-    "stage": "awaiting_confirmation",
+    "stage": "offer_selection",
     "steps": [
       {
         "stage": "discovery",
@@ -37,11 +37,11 @@
       },
       {
         "stage": "offer_selection",
-        "status": "done"
+        "status": "current"
       },
       {
         "stage": "awaiting_confirmation",
-        "status": "current"
+        "status": "todo"
       },
       {
         "stage": "submitted",
@@ -83,7 +83,9 @@
           "source": "document",
           "confidence": 0.9,
           "needs_confirmation": false,
-          "conflict_with": null
+          "conflict_with": null,
+          "editable": true,
+          "document_type": "id_card"
         },
         {
           "field": "age",
@@ -92,34 +94,9 @@
           "source": "document",
           "confidence": 0.9,
           "needs_confirmation": false,
-          "conflict_with": null
-        },
-        {
-          "field": "employment_type",
-          "label": "Employment Type",
-          "value": "employed",
-          "source": "document",
-          "confidence": 1.0,
-          "needs_confirmation": false,
-          "conflict_with": null
-        },
-        {
-          "field": "employment_months",
-          "label": "Employment Duration (months)",
-          "value": "66",
-          "source": "document",
-          "confidence": 1.0,
-          "needs_confirmation": false,
-          "conflict_with": null
-        },
-        {
-          "field": "monthly_net_income",
-          "label": "Monthly Net Income",
-          "value": "6200.00",
-          "source": "document",
-          "confidence": 1.0,
-          "needs_confirmation": false,
-          "conflict_with": null
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "id_card"
         },
         {
           "field": "employer_name",
@@ -128,7 +105,42 @@
           "source": "document",
           "confidence": 1.0,
           "needs_confirmation": false,
-          "conflict_with": null
+          "conflict_with": null,
+          "editable": true,
+          "document_type": "payslip"
+        },
+        {
+          "field": "monthly_net_income",
+          "label": "Monthly Net Income",
+          "value": "6200.00",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": false,
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "payslip"
+        },
+        {
+          "field": "employment_type",
+          "label": "Employment Type",
+          "value": "employed",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": false,
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "payslip"
+        },
+        {
+          "field": "employment_months",
+          "label": "Employment Duration (months)",
+          "value": "66",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": false,
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "payslip"
         },
         {
           "field": "existing_monthly_obligations",
@@ -137,7 +149,9 @@
           "source": "document",
           "confidence": 1.0,
           "needs_confirmation": false,
-          "conflict_with": null
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "bank_statement"
         }
       ]
     },
@@ -304,7 +318,7 @@
           "simulated": true
         }
       ],
-      "selected_offer_id": "personal_loan-60m-5edfd172fc2e65c5"
+      "selected_offer_id": null
     }
   ],
   "simulated": true

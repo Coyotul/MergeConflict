@@ -13,6 +13,7 @@ from src.agent.orchestration.orchestrator import (
     DocumentUploaded,
     OfferSelected,
 )
+from src.agent.orchestration.events import ExtractedFieldsReviewed
 from src.agent.orchestration.progress import NeedKind, next_needs
 from src.agent.orchestration.state import DocumentStatus
 from src.core.errors import InvalidUpload, SessionAccessDenied, ToolUnavailable
@@ -293,26 +294,21 @@ def test_full_happy_path_with_scripted_model(orchestrator_factory):
     resp = say("Vreau un credit de 30.000 lei pe 48 de luni pentru renovare")
     assert (resp.progress.stage, resp.awaiting.kind) == ("discovery", "text")
 
+    # Product chosen: the documents are requested straight away, nothing they answer is asked.
     resp = say("Un credit de nevoi personale")
-    assert (resp.progress.stage, resp.awaiting.kind) == ("collecting_information", "text")
-    assert store.get(sid).application.fields["full_name"].value == "Alex Morgan"
-
-    # The last stated field completes the inputs: code runs eligibility in the same turn.
-    resp = say("Sunt angajată de 4 ani la FICTIV Employer's Studio 1, câștig 8500 lei, fără rate")
     assert (resp.progress.stage, resp.awaiting.kind) == ("documents", "document")
     assert resp.awaiting.document_types == ["id_card", "payslip", "bank_statement"]
-    assert store.get(sid).application.eligibility is not None
 
     resp = orch.handle(sid, CUSTOMER, upload("id_card"))
     assert resp.awaiting.document_types == ["payslip", "bank_statement"]
     resp = orch.handle(sid, CUSTOMER, upload("payslip"))
     assert resp.awaiting.document_types == ["bank_statement"]
     resp = orch.handle(sid, CUSTOMER, upload("bank_statement"))
-    assert (resp.progress.stage, resp.awaiting.kind) == ("documents", "text")
-    assert store.get(sid).application.conflicts == []
+    assert (resp.progress.stage, resp.awaiting.kind) == ("documents", "review_form")
 
-    # Confirming makes eligibility stale; code re-runs it on verified inputs, then the model prices.
-    resp = say("Datele sunt corecte")
+    # OK on the form confirms the document values; eligibility runs on them, then the model prices.
+    orch.handle(sid, CUSTOMER, ExtractedFieldsReviewed(edits={}))
+    resp = say("Vreau ofertele")
     assert (resp.progress.stage, resp.awaiting.kind) == ("offer_selection", "offer_choice")
     app = store.get(sid).application
     assert app.eligibility.verified_inputs is True
@@ -372,12 +368,11 @@ def to_confirmation(orchestrator_factory):
     orch, store, model = orchestrator_factory(scripted_model)
     sid = orch.start_session(CUSTOMER).session_id
     say = lambda text: orch.handle(sid, CUSTOMER, CustomerMessage(text))
-    for text in ("Vreau un credit de 30.000 lei pe 48 de luni pentru renovare", "Un credit de nevoi personale",
-                 "Sunt angajată de 4 ani la TechCorp SRL, câștig 6200 lei, rate 400 lei", "Verifică eligibilitatea"):
+    for text in ("Vreau un credit de 30.000 lei pe 48 de luni pentru renovare", "Un credit de nevoi personale"):
         say(text)
     for doc in ("id_card", "payslip", "bank_statement"):
         orch.handle(sid, CUSTOMER, upload(doc))
-    say("Datele sunt corecte")
+    orch.handle(sid, CUSTOMER, ExtractedFieldsReviewed(edits={}))
     resp = say("Vreau ofertele")
     resp = orch.handle(sid, CUSTOMER, OfferSelected(resp.blocks[[b.type for b in resp.blocks].index("offers")].offers[0].offer_id))
     assert resp.progress.stage == "awaiting_confirmation"

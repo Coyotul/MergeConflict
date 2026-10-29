@@ -18,6 +18,7 @@ from src.agent.orchestration.events import (
     CustomerMessage,
     DocumentUploaded,
     OfferSelected,
+    ExtractedFieldsReviewed,
     SessionStarted,
 )
 from src.agent.orchestration.fields import UpdateResult
@@ -77,6 +78,8 @@ def describe_event(event: object) -> dict[str, Any]:
     if isinstance(event, DocumentUploaded):
         return {"kind": "document_uploaded", "doc_type": event.doc_type,
                 "filename": event.filename, "size_bytes": event.size_bytes}
+    if isinstance(event, ExtractedFieldsReviewed):
+        return {"kind": "fields_reviewed", "edited": sorted(event.edits)}
     if isinstance(event, OfferSelected):
         return {"kind": "offer_selected", "offer_id": event.offer_id}
     if isinstance(event, SessionStarted):

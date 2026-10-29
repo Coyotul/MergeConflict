@@ -9,11 +9,13 @@ from src.agent.orchestration.events import (
     CustomerMessage,
     DocumentUploaded,
     OfferSelected,
+    ExtractedFieldsReviewed,
 )
 from src.agent.orchestration.orchestrator import Orchestrator
 from src.core.errors import InvalidUpload
 from src.models.chat import (
     OfferSelectionRequest,
+    ExtractedFieldsReviewRequest,
     SendMessageRequest,
     SessionView,
     TurnResponse,
@@ -149,6 +151,15 @@ def create_chat_router(
                 except Exception as cleanup_error:
                     logger.warning("Failed to clean up uncommitted upload %s: %s", document_id, type(cleanup_error).__name__)
             raise
+
+    @router.post("/sessions/{session_id}/extracted-fields", response_model=TurnResponse)
+    def review_extracted_fields(
+        session_id: str,
+        request: ExtractedFieldsReviewRequest,
+        customer_id: Annotated[str, Depends(get_customer_id)]
+    ) -> TurnResponse:
+        """OK on the review form: confirm document values, applying edits to editable fields only."""
+        return orchestrator.handle(session_id, customer_id, ExtractedFieldsReviewed(edits=request.edits))
 
     @router.post("/sessions/{session_id}/offer-selection", response_model=TurnResponse)
     def select_offer(

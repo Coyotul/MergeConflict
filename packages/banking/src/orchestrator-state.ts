@@ -18,6 +18,7 @@ export type PendingAction =
   | { kind: "message"; text: string }
   | { kind: "upload"; docType: string; file: File; filename: string }
   | { kind: "offer"; offerId: string }
+  | { kind: "review"; edits: Record<string, string> }
   | { kind: "start" };
 
 export interface ChatState {

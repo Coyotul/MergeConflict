@@ -232,6 +232,9 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
                 action.offerId
               );
               break;
+            case "review":
+              response = await client.reviewExtractedFields(state.sessionId!, action.edits);
+              break;
             default:
               return;
           }
@@ -311,6 +314,13 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
     [executeAction]
   );
 
+  const reviewFields = useCallback(
+    async (edits: Record<string, string>): Promise<boolean> => {
+      return executeAction({ kind: "review", edits });
+    },
+    [executeAction]
+  );
+
   const retry = useCallback(async (): Promise<boolean> => {
     const action = getRetryAction(state);
     if (!action) return false;
@@ -349,6 +359,7 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
     send,
     upload,
     chooseOffer,
+    reviewFields,
     retry,
     restart,
   };

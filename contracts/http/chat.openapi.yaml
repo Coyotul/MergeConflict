@@ -118,6 +118,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /chat/sessions/{session_id}/extracted-fields:
+    post:
+      tags:
+      - chat
+      summary: Review Extracted Fields
+      description: 'OK on the review form: confirm document values, applying edits
+        to editable fields only.'
+      operationId: review_extracted_fields_chat_sessions__session_id__extracted_fields_post
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: x-customer-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Customer-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtractedFieldsReviewRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TurnResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /chat/sessions/{session_id}/offer-selection:
     post:
       tags:
@@ -504,6 +546,7 @@ components:
       - text
       - document
       - offer_choice
+      - review_form
       - confirmation
       - none
       title: AwaitingKind
@@ -753,6 +796,15 @@ components:
           - type: string
           - type: 'null'
           title: Conflict With
+        editable:
+          type: boolean
+          title: Editable
+          default: false
+        document_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Document Type
       type: object
       required:
       - field
@@ -779,6 +831,17 @@ components:
       - fields
       title: ExtractedFieldsBlock
       description: Block showing extracted fields.
+    ExtractedFieldsReviewRequest:
+      properties:
+        edits:
+          additionalProperties:
+            type: string
+          type: object
+          title: Edits
+          default: {}
+      type: object
+      title: ExtractedFieldsReviewRequest
+      description: OK on the review form; edits may only target editable fields.
     HTTPValidationError:
       properties:
         detail:

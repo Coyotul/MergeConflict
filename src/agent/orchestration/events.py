@@ -47,7 +47,19 @@ class OfferSelected:
     offer_id: str
 
 
-TurnEvent = Union[SessionStarted, CustomerMessage, DocumentUploaded, OfferSelected]
+@dataclass(frozen=True)
+class ExtractedFieldsReviewed:
+    """The customer pressed OK on the review form, optionally correcting editable values."""
+    edits: dict[str, str]
+
+
+class InvalidFieldEdit(InvalidUpload):
+    """A review-form edit targets a read-only/unknown field or has an invalid value (HTTP 422)."""
+    def __init__(self, message: str):
+        super().__init__("invalid_field_edit", message)
+
+
+TurnEvent = Union[SessionStarted, CustomerMessage, DocumentUploaded, OfferSelected, ExtractedFieldsReviewed]
 
 
 # ---- fixed texts (used when the model can't explain the event) -------------
@@ -78,6 +90,14 @@ EVENT_TEXTS: dict[str, dict[str, str]] = {
     "declined": {
         "en": "OK, nothing was submitted. You can change any detail.",
         "ro": "Bine, nu am trimis nimic. Poți modifica orice detaliu.",
+    },
+    "review_not_ready": {
+        "en": "Please upload all requested documents first; then you can review the values read from them.",
+        "ro": "Te rog încarcă mai întâi toate documentele cerute; apoi poți verifica valorile citite din ele.",
+    },
+    "fields_reviewed": {
+        "en": "Thank you, the values from your documents are confirmed.",
+        "ro": "Mulțumesc, valorile din documentele tale sunt confirmate.",
     },
     "offer_rejected": {
         "en": "That offer is no longer available. Please choose one of the current offers.",
@@ -235,6 +255,42 @@ class CodeEventsMixin:
                 # A model explanation cannot conceal a deterministic review gate.
                 return self._fixed_reply(turn, loaded, text)
         return self._explain(turn, loaded, text)
+
+    def _handle_fields_reviewed(self, turn: "_Turn", event: ExtractedFieldsReviewed) -> TurnResponse:
+        state = turn.state
+        loaded = state.model_copy(deep=True)
+        app = state.application
+        if app is None or [n.kind for n in next_needs(state)][:1] != [NeedKind.review_extracted]:
+            self._add_message(turn, "event", "FIELDS_REVIEW_REJECTED")
+            turn.trace.code_event("review_form", "not_ready")
+            return self._explain(turn, loaded, event_text("review_not_ready", state.language))
+        specs = all_specs(app)
+        parsed = {}
+        for name, raw in event.edits.items():
+            spec = specs.get(name)
+            if spec is None or not spec.editable:
+                raise InvalidFieldEdit(f"'{name}' cannot be edited; upload a corrected document instead.")
+            try:
+                parsed[name] = parse_field_value(spec, raw.strip() if isinstance(raw, str) else raw)
+            except FieldValueError as exc:
+                raise InvalidFieldEdit(f"'{name}': {exc}") from exc
+            if isinstance(parsed[name], str) and not parsed[name]:
+                raise InvalidFieldEdit(f"'{name}' cannot be empty.")
+        for name, value in parsed.items():
+            current = app.fields.get(name)
+            if current is not None and current.value == value:
+                continue
+            app.fields[name] = FieldValue(
+                kind=field_type_to_kind(specs[name].type), value=value, source=FieldSource.customer,
+                confirmed=True, updated_at=turn.ctx.now,
+            )
+        for field in app.fields.values():
+            if field.source == FieldSource.document:
+                field.confirmed = True
+        app.conflicts = []
+        self._add_message(turn, "event", "FIELDS_REVIEWED " + json.dumps(sorted(parsed)))
+        turn.trace.code_event("review_form", "confirmed", edited=sorted(parsed))
+        return self._explain(turn, loaded, event_text("fields_reviewed", state.language))
 
     def _handle_offer_selected(self, turn: "_Turn", event: OfferSelected) -> TurnResponse:
         state = turn.state

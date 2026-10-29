@@ -22,7 +22,8 @@ export function DocumentChecklistBlockComponent({
 }) {
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const anyUpload = block.items.some(
+  // Uploads open only when the assistant is waiting for documents, never while it asks something else.
+  const anyUpload = awaiting.kind === "document" && block.items.some(
     (item) => item.status === "requested" || item.status === "rejected"
   );
 
@@ -40,7 +41,7 @@ export function DocumentChecklistBlockComponent({
         const isAwaitingNow =
           awaiting.kind === "document" &&
           (awaiting.document_types?.includes(item.doc_type) ?? false);
-        const canUploadNow = isRequested || isRejected;
+        const canUploadNow = (isRequested || isRejected) && isAwaitingNow;
 
         return (
           <div
@@ -85,7 +86,7 @@ export function DocumentChecklistBlockComponent({
               )}
               {isRequested && !isAwaitingNow && (
                 <p className="mt-0.5 text-[10px] text-slate-400">
-                  Ready for upload
+                  Needed later in the application
                 </p>
               )}
             </div>

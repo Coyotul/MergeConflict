@@ -1,17 +1,17 @@
 {
   "session_id": "example-session-1",
-  "turn_id": "example-turn-13",
-  "session_version": 12,
+  "turn_id": "example-turn-08",
+  "session_version": 7,
   "messages": [
     {
       "role": "assistant",
-      "text": "Am primit documentul (bank_statement). Rezultatul verificării preliminare (simulat, pe baza condițiilor publice): condițiile preliminare sunt îndeplinite. Te rog verifică valorile din documente: Full Name: ALEX MORGAN; Age: 38; Employment Type: employed; Employer Name: documentul arată TechCorp SRL, tu ai spus FICTIV Employer's Studio 1; Monthly Net Income: documentul arată 6200.00, tu ai spus 7000.00; Employment Duration (months): documentul arată 66, tu ai spus 67; Existing Monthly Obligations: documentul arată 400.00, tu ai spus 0.00. Răspunde „da” dacă valorile din documente sunt corecte.",
+      "text": "Am primit documentul (bank_statement). Am citit datele din documente. Verifică-le în formular și apasă OK; poți corecta acolo numele sau angajatorul.",
       "citations": [],
       "created_at": "2026-10-28T09:00:00Z"
     }
   ],
   "awaiting": {
-    "kind": "text",
+    "kind": "review_form",
     "document_types": [],
     "summary_version": null
   },
@@ -83,7 +83,9 @@
           "source": "document",
           "confidence": 0.9,
           "needs_confirmation": true,
-          "conflict_with": null
+          "conflict_with": null,
+          "editable": true,
+          "document_type": "id_card"
         },
         {
           "field": "age",
@@ -92,34 +94,9 @@
           "source": "document",
           "confidence": 0.9,
           "needs_confirmation": true,
-          "conflict_with": null
-        },
-        {
-          "field": "employment_type",
-          "label": "Employment Type",
-          "value": "employed",
-          "source": "document",
-          "confidence": 1.0,
-          "needs_confirmation": true,
-          "conflict_with": null
-        },
-        {
-          "field": "employment_months",
-          "label": "Employment Duration (months)",
-          "value": "66",
-          "source": "document",
-          "confidence": 1.0,
-          "needs_confirmation": true,
-          "conflict_with": "67"
-        },
-        {
-          "field": "monthly_net_income",
-          "label": "Monthly Net Income",
-          "value": "6200.00",
-          "source": "document",
-          "confidence": 1.0,
-          "needs_confirmation": true,
-          "conflict_with": "7000.00"
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "id_card"
         },
         {
           "field": "employer_name",
@@ -128,7 +105,42 @@
           "source": "document",
           "confidence": 1.0,
           "needs_confirmation": true,
-          "conflict_with": "FICTIV Employer's Studio 1"
+          "conflict_with": null,
+          "editable": true,
+          "document_type": "payslip"
+        },
+        {
+          "field": "monthly_net_income",
+          "label": "Monthly Net Income",
+          "value": "6200.00",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": true,
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "payslip"
+        },
+        {
+          "field": "employment_type",
+          "label": "Employment Type",
+          "value": "employed",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": true,
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "payslip"
+        },
+        {
+          "field": "employment_months",
+          "label": "Employment Duration (months)",
+          "value": "66",
+          "source": "document",
+          "confidence": 1.0,
+          "needs_confirmation": true,
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "payslip"
         },
         {
           "field": "existing_monthly_obligations",
@@ -137,36 +149,11 @@
           "source": "document",
           "confidence": 1.0,
           "needs_confirmation": true,
-          "conflict_with": "0.00"
+          "conflict_with": null,
+          "editable": false,
+          "document_type": "bank_statement"
         }
       ]
-    },
-    {
-      "type": "eligibility_result",
-      "result": {
-        "status": "satisfied",
-        "reasons": [
-          {
-            "code": "income_gap",
-            "message": "Declared income 6200.00 RON differs from ANAF income 8500.00 RON; ANAF is used."
-          },
-          {
-            "code": "dti_computed",
-            "message": "Debt-to-income 12.1%: new instalment 630.06 + existing 400.00 RON over income 8500.00 RON (limit 40%)."
-          },
-          {
-            "code": "no_credit_history",
-            "message": "No active loans in the credit bureau; this is neutral."
-          },
-          {
-            "code": "all_preliminary_rules_passed",
-            "message": "All preliminary rules passed"
-          }
-        ],
-        "rule_version": "credit-check-2026-10-29",
-        "missing_fields": [],
-        "simulated": true
-      }
     }
   ],
   "simulated": true

@@ -114,6 +114,8 @@ def build_awaiting(state: SessionState) -> Awaiting:
             if need.kind == NeedKind.document and need.target and need.target not in types:
                 types.append(need.target)
         return Awaiting(kind=AwaitingKind.document, document_types=types)
+    if first.kind == NeedKind.review_extracted:
+        return Awaiting(kind=AwaitingKind.review_form)
     if first.kind == NeedKind.choose_offer:
         return Awaiting(kind=AwaitingKind.offer_choice)
     return Awaiting(kind=AwaitingKind.text)
@@ -222,5 +224,7 @@ def _extracted_fields(app: ApplicationState) -> list[ExtractedFieldView]:
             confidence=value.confidence,
             needs_confirmation=not value.confirmed,
             conflict_with=conflict.customer_value if conflict is not None else None,
+            editable=bool(spec is not None and spec.editable),
+            document_type=document.doc_type if document is not None else None,
         ))
     return views

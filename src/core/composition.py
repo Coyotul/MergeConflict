@@ -5,6 +5,7 @@ import psycopg
 
 from src.agent.orchestration.demo_model import DemoChatModel
 from src.agent.orchestration.orchestrator import Orchestrator
+from src.agent.orchestration.trace import FileTracer, NullTracer, Tracer
 from src.agent.tools.registry import ToolRegistry
 from src.agent.tools.retrieval import PolicySearch, build_policy_search
 from src.agent.tools.stubs import StubData, build_stub_registry
@@ -57,11 +58,29 @@ def build_session_store(settings: OrchestratorSettings) -> SessionStore:
         raise ConfigurationError(f"Unknown session store type: {settings.session_store}")
 
 
+def build_tracer(settings: OrchestratorSettings) -> Tracer:
+    """Build a tracer based on settings.
+
+    Args:
+        settings: Orchestrator settings
+
+    Returns:
+        Tracer implementation
+    """
+    if settings.trace == "off":
+        return NullTracer()
+    elif settings.trace == "file":
+        return FileTracer(settings.traces_dir)
+    else:
+        raise ConfigurationError(f"Unknown trace type: {settings.trace}")
+
+
 def build_orchestrator(
     settings: OrchestratorSettings,
     *,
     model: ChatModel | None = None,
-    store: SessionStore | None = None
+    store: SessionStore | None = None,
+    tracer: Tracer | None = None
 ) -> Orchestrator:
     """Build an orchestrator with all dependencies.
 
@@ -69,6 +88,7 @@ def build_orchestrator(
         settings: Orchestrator settings
         model: Optional pre-built chat model (for testing)
         store: Optional pre-built session store (for testing)
+        tracer: Optional pre-built tracer (for testing)
 
     Returns:
         Configured Orchestrator instance
@@ -77,6 +97,8 @@ def build_orchestrator(
         model = build_chat_model(settings)
     if store is None:
         store = build_session_store(settings)
+    if tracer is None:
+        tracer = build_tracer(settings)
 
     # Load stub data for catalog and registry
     stub_data = StubData.load(settings.config_dir)
@@ -95,4 +117,7 @@ def build_orchestrator(
         catalog_codes=catalog_codes,
         max_steps=settings.max_steps,
         history_window=settings.history_window,
+        tracer=tracer,
+        # Allow-list for the trace's session_started event (never the settings object).
+        model_info={"model": settings.model, "temperature": settings.temperature, "json_mode": settings.json_mode},
     )

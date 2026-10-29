@@ -138,6 +138,7 @@ def build_messages(
     notices: list[str],
     *,
     catalog_codes: list[str] | None = None,
+    context: dict[str, Any] | None = None,
 ) -> list[ChatMessage]:
     """Build the complete message list for the LLM.
 
@@ -149,6 +150,8 @@ def build_messages(
         window: Number of recent messages to include
         notices: System notices
         catalog_codes: Product codes offered as options for choose_product
+        context: A context already built with build_context for these same
+            arguments (so a caller can trace the exact CONTEXT_JSON object)
 
     Returns:
         List of ChatMessage with system prompt, windowed history, and context JSON
@@ -167,7 +170,8 @@ def build_messages(
         messages.append(chat_msg)
 
     # 3. Context JSON as final system message
-    context = build_context(state, needs, tools, notices, catalog_codes=catalog_codes)
+    if context is None:
+        context = build_context(state, needs, tools, notices, catalog_codes=catalog_codes)
     context_json = json.dumps(context, indent=2)
     context_message = ChatMessage(
         role="system",

@@ -139,10 +139,10 @@ class CodeEventsMixin:
 
     # ---- handlers ---------------------------------------------------------
 
-    def _handle_document_uploaded(self, state: SessionState, event: DocumentUploaded) -> TurnResponse:
+    def _handle_document_uploaded(self, turn: "_Turn", event: DocumentUploaded) -> TurnResponse:
+        state = turn.state
         label = requested_document(state, event.doc_type)
         loaded = state.model_copy(deep=True)
-        turn = self._begin_turn(state)
         app = state.application
 
         # A re-upload replaces the earlier record of this type.
@@ -172,34 +172,39 @@ class CodeEventsMixin:
             merge_document_extraction(app, record, all_specs(app), now=turn.ctx.now)
             text = event_text("document_accepted", state.language, label=label)
             self._add_message(turn, "event", f"DOCUMENT_PROCESSED {event.doc_type}: accepted")
+            turn.trace.code_event("upload", "accepted", doc_type=event.doc_type)
         else:
             reason = record.rejection_reason or ""
             text = event_text("document_rejected", state.language, label=label, reason=reason)
+            turn.trace.code_event("upload", "rejected", doc_type=event.doc_type, reason=reason)
             self._add_message(turn, "event", f"DOCUMENT_PROCESSED {event.doc_type}: rejected {reason}".rstrip())
         return self._explain(turn, loaded, text)
 
-    def _handle_offer_selected(self, state: SessionState, event: OfferSelected) -> TurnResponse:
+    def _handle_offer_selected(self, turn: "_Turn", event: OfferSelected) -> TurnResponse:
+        state = turn.state
         loaded = state.model_copy(deep=True)
-        turn = self._begin_turn(state)
         app = state.application
         offer = None
         if app is not None and app.application_id is None and app.offers is not None and offers_current(app):
             offer = next((o for o in app.offers.offers if o.offer_id == event.offer_id), None)
         if offer is None:
             self._add_message(turn, "event", "OFFER_SELECTION_REJECTED")
+            turn.trace.code_event("offer", "rejected", offer_id=event.offer_id)
             return self._explain(turn, loaded, event_text("offer_rejected", state.language))
         app.selected_offer_id = offer.offer_id
         self._add_message(turn, "event", f"OFFER_SELECTED {offer.offer_id}")
+        turn.trace.code_event("offer", "selected", offer_id=offer.offer_id)
         return self._explain(turn, loaded, event_text("offer_selected", state.language, term=offer.term_months))
 
-    def _handle_confirmation(self, state: SessionState, event: ConfirmationDecision) -> TurnResponse:
+    def _handle_confirmation(self, turn: "_Turn", event: ConfirmationDecision) -> TurnResponse:
+        state = turn.state
         loaded = state.model_copy(deep=True)
-        turn = self._begin_turn(state)
         app = state.application
         language = state.language
 
         if app is not None and app.application_id is not None:
             self._add_message(turn, "event", f"ALREADY_SUBMITTED {app.application_id}")
+            turn.trace.code_event("confirmation", "already_submitted", application_id=app.application_id)
             return self._fixed_reply(turn, loaded, event_text("submitted", language, id=app.application_id))
 
         self._sync_application(turn)  # make sure the summary reflects the current state
@@ -211,12 +216,14 @@ class CodeEventsMixin:
             or app.summary.summary_version != event.summary_version
         ):
             self._add_message(turn, "event", "SUMMARY_CHANGED")
+            turn.trace.code_event("confirmation", "summary_changed", summary_version=event.summary_version)
             return self._explain(turn, loaded, event_text("summary_changed", language))
 
         if event.decision == "decline":
             app.summary = None
             app.selected_offer_id = None
             self._add_message(turn, "event", "SUBMISSION_DECLINED")
+            turn.trace.code_event("confirmation", "declined", summary_version=event.summary_version)
             return self._explain(turn, loaded, event_text("declined", language))
 
         key = f"{state.session_id}:{app.summary.summary_version}"
@@ -225,6 +232,7 @@ class CodeEventsMixin:
         )
         if output is None:
             self._add_message(turn, "event", f"SUBMISSION_FAILED {outcome.error_code}")
+            turn.trace.code_event("confirmation", "not_submitted", error_code=outcome.error_code)
             return self._explain(turn, loaded, event_text("not_submitted", language))
 
         app.application_id = output.application_id
@@ -233,15 +241,20 @@ class CodeEventsMixin:
         # Persist the submission before any model call: it must survive a provider failure.
         state.updated_at = self._clock()
         saved = self._store.save(state, expected_version=loaded.version)
+        turn.trace.saved = True
         state.version = saved.version
         loaded = state.model_copy(deep=True)
 
         self._add_message(turn, "tool", outcome.as_message())
         self._add_message(turn, "event", f"APPLICATION_SUBMITTED {app.application_id} {output.status}")
+        turn.trace.code_event(
+            "confirmation", "submitted", application_id=app.application_id, status=output.status
+        )
         return self._fixed_reply(turn, loaded, event_text("submitted", language, id=app.application_id))
 
     def _fixed_reply(self, turn: "_Turn", loaded: SessionState, text: str) -> TurnResponse:
         """Reply with a fixed text, no model call (submission must never be paraphrased)."""
+        turn.trace.outcome = "replied"
         self._add_message(turn, "assistant", text)
         return self._commit(turn, loaded)
 
@@ -250,5 +263,6 @@ class CodeEventsMixin:
         try:
             self._run_model_steps(turn, [], fallback=text)
         except ModelUnavailable:
+            turn.trace.outcome = "model_unavailable"
             self._add_message(turn, "assistant", text)
         return self._commit(turn, loaded)

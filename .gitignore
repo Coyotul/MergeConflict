@@ -72,3 +72,4 @@ coverage/
 !apps/*/src/lib/**
 
 factura_scanata.pdf
+.test_tmp_trace/

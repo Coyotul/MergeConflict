@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Callable, Literal
+from typing import Any, Callable, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -52,7 +52,7 @@ from src.agent.orchestration.progress import (
     offer_input_names,
     offers_current,
 )
-from src.agent.orchestration.prompting import build_messages
+from src.agent.orchestration.prompting import build_context, build_messages
 from src.agent.orchestration.state import (
     ApplicationState,
     EligibilityRecord,
@@ -63,6 +63,8 @@ from src.agent.orchestration.state import (
     SessionState,
     StoredMessage,
 )
+from src.agent.orchestration.trace import NullTracer, Tracer
+from src.agent.orchestration.turn_trace import TurnTrace, record_session_started
 from src.agent.tools.contracts import CustomerProfileOutput
 from src.agent.tools.registry import ToolCallOutcome, ToolContext, ToolRegistry
 from src.core.errors import ModelUnavailable, SessionAccessDenied, SessionBusy
@@ -126,6 +128,7 @@ class _Turn:
     turn_id: str
     ctx: ToolContext
     history: list[StoredMessage]
+    trace: TurnTrace
     new_messages: list[StoredMessage] = field(default_factory=list)
 
     @property
@@ -143,6 +146,8 @@ class Orchestrator(CodeEventsMixin):
         *,
         max_steps: int = 4,
         history_window: int = 30,
+        tracer: Tracer = NullTracer(),
+        model_info: dict[str, Any] | None = None,
         clock: Callable[[], datetime] = utcnow,
         new_id: Callable[[], str] = lambda: uuid4().hex,
     ):
@@ -150,6 +155,9 @@ class Orchestrator(CodeEventsMixin):
         self._model = model
         self._registry = registry
         self._catalog_codes = list(catalog_codes)
+        self._tracer = tracer
+        # Traced model settings (allow-list: model, temperature, json_mode).
+        self._model_info = dict(model_info or {"model": type(model).__name__})
         self._max_steps = max_steps
         self._history_window = history_window
         self._clock = clock
@@ -163,29 +171,36 @@ class Orchestrator(CodeEventsMixin):
         """Create a session and greet with one model step (fixed greeting on failure)."""
         now = self._clock()
         state = SessionState(session_id=self._new_id(), customer_id=customer_id, created_at=now, updated_at=now)
-        turn = self._begin_turn(state, history=[])
+        record_session_started(
+            self._tracer, state, model_info=self._model_info,
+            max_steps=self._max_steps, history_window=self._history_window,
+        )
+        turn = self._begin_turn(state, SessionStarted(), history=[])
+        return self._traced(turn, lambda: self._greet(turn))
+
+    def _greet(self, turn: _Turn) -> TurnResponse:
+        state = turn.state
         self._add_message(turn, "event", SESSION_STARTED_EVENT)
 
         greeting = FALLBACK_GREETING
         started = time.perf_counter()
         action_type, outcome = None, "fallback_greeting"
+        turn.trace.outcome = "fallback"
         try:
-            messages = build_messages(
-                state, [], self._registry.model_tools(state), turn.transcript, self._history_window, [],
-                catalog_codes=self._catalog_codes,
-            )
-            action = parse_model_output(self._model.complete(messages))
+            action = self._parse(turn, self._complete(turn, 1, [], []), will_retry=False)
             action_type = action.action.type
             if isinstance(action.action, Respond):
                 greeting, outcome = action.action.message, "responded"
+                turn.trace.outcome = "replied"
         except ModelUnavailable:
-            outcome = "model_unavailable"
+            outcome = turn.trace.outcome = "model_unavailable"
         except ActionParseError:
             outcome = "parse_error"
         self._log_step(turn, 1, started, action_type, None, outcome)
 
         self._add_message(turn, "assistant", greeting)
         self._store.create(state)
+        turn.trace.saved = True
         self._store.append_messages(state.session_id, turn.new_messages)
         return build_turn_response(state, turn.new_messages, turn.turn_id)
 
@@ -203,19 +218,35 @@ class Orchestrator(CodeEventsMixin):
             raise SessionBusy(f"Session {session_id} is busy")
         try:
             state = self._store.get(session_id)
-            if isinstance(event, CustomerMessage):
-                return self._handle_customer_message(state, event)
-            if isinstance(event, DocumentUploaded):
-                return self._handle_document_uploaded(state, event)
-            if isinstance(event, OfferSelected):
-                return self._handle_offer_selected(state, event)
-            if isinstance(event, ConfirmationDecision):
-                return self._handle_confirmation(state, event)
-            if isinstance(event, SessionStarted):
-                raise ValueError("SessionStarted is handled by start_session")
-            raise TypeError(f"Unknown event {type(event).__name__}")
+            handler = self._handler_for(event)
+            turn = self._begin_turn(state, event)
+            return self._traced(turn, lambda: handler(turn, event))
         finally:
             lock.release()
+
+    def _handler_for(self, event: TurnEvent) -> Callable[[_Turn, TurnEvent], TurnResponse]:
+        if isinstance(event, CustomerMessage):
+            return self._handle_customer_message
+        if isinstance(event, DocumentUploaded):
+            return self._handle_document_uploaded
+        if isinstance(event, OfferSelected):
+            return self._handle_offer_selected
+        if isinstance(event, ConfirmationDecision):
+            return self._handle_confirmation
+        if isinstance(event, SessionStarted):
+            raise ValueError("SessionStarted is handled by start_session")
+        raise TypeError(f"Unknown event {type(event).__name__}")
+
+    def _traced(self, turn: _Turn, run: Callable[[], TurnResponse]) -> TurnResponse:
+        """Run a turn; turn_finished is recorded even when it raises (then re-raised unchanged)."""
+        error: BaseException | None = None
+        try:
+            return run()
+        except BaseException as e:
+            error = e
+            raise
+        finally:
+            turn.trace.finish(turn.state, turn.new_messages, error)
 
     def view(self, session_id: str, customer_id: str) -> SessionView:
         """Chat messages plus the current response fields.
@@ -250,14 +281,20 @@ class Orchestrator(CodeEventsMixin):
         with self._locks_guard:
             return self._locks.setdefault(session_id, threading.Lock())
 
-    def _begin_turn(self, state: SessionState, history: list[StoredMessage] | None = None) -> _Turn:
+    def _begin_turn(
+        self, state: SessionState, event: TurnEvent, history: list[StoredMessage] | None = None
+    ) -> _Turn:
         if history is None:
             history = self._store.messages(state.session_id)
+        turn_id = self._new_id()
+        trace = TurnTrace(self._tracer, state.session_id, turn_id)
+        trace.start(state, event)
         return _Turn(
             state=state,
-            turn_id=self._new_id(),
+            turn_id=turn_id,
             ctx=ToolContext(state=state, now=self._clock()),
             history=history,
+            trace=trace,
         )
 
     def _add_message(
@@ -283,13 +320,14 @@ class Orchestrator(CodeEventsMixin):
         if state.model_dump() != loaded.model_dump():
             state.updated_at = self._clock()
             saved = self._store.save(state, expected_version=loaded.version)
+            turn.trace.saved = True
         if turn.new_messages:
             self._store.append_messages(state.session_id, turn.new_messages)
         return build_turn_response(saved, turn.new_messages, turn.turn_id)
 
-    def _handle_customer_message(self, state: SessionState, event: CustomerMessage) -> TurnResponse:
+    def _handle_customer_message(self, turn: _Turn, event: CustomerMessage) -> TurnResponse:
+        state = turn.state
         loaded = state.model_copy(deep=True)
-        turn = self._begin_turn(state)
         self._add_message(turn, "customer", event.text)
         state.language = detect_language(event.text, state.language)
         self._run_model_steps(turn, [])
@@ -311,28 +349,21 @@ class Orchestrator(CodeEventsMixin):
         reasked = False
         self._sync_application(turn)
 
+        no_reply = "step_cap"  # trace outcome when no reply was given
         for step in range(1, self._max_steps + 1):
-            messages = build_messages(
-                state,
-                next_needs(state),
-                self._registry.model_tools(state),
-                turn.transcript,
-                self._history_window,
-                pending,
-                catalog_codes=self._catalog_codes,
-            )
-            pending = []
             started = time.perf_counter()
             try:
-                raw = self._model.complete(messages)
+                raw = self._complete(turn, step, next_needs(state), pending)
             except ModelUnavailable:
                 self._log_step(turn, step, started, None, None, "model_unavailable")
                 raise
+            pending = []
             try:
-                action = parse_model_output(raw)
+                action = self._parse(turn, raw, will_retry=not parse_failed and step < self._max_steps)
             except ActionParseError as e:
                 self._log_step(turn, step, started, None, None, "parse_error")
                 if parse_failed:
+                    no_reply = "fallback"
                     break
                 parse_failed = True
                 pending.append(INVALID_ACTION_NOTICE.format(error=e))
@@ -359,10 +390,47 @@ class Orchestrator(CodeEventsMixin):
 
             self._add_reply(turn, action.action)
             self._log_step(turn, step, started, "respond", None, "responded")
+            turn.trace.outcome = "replied"
             return True
 
+        turn.trace.outcome = no_reply
         self._add_message(turn, "assistant", fallback or FALLBACK_REPLY[state.language])
         return False
+
+    def _complete(self, turn: _Turn, step: int, needs: list, notices: list[str]) -> str:
+        """Build this step's messages and call the model (traced as model_call)."""
+        state = turn.state
+        tools = self._registry.model_tools(state)
+        context = build_context(state, needs, tools, notices, catalog_codes=self._catalog_codes)
+        messages = build_messages(
+            state, needs, tools, turn.transcript, self._history_window, notices,
+            catalog_codes=self._catalog_codes, context=context,
+        )
+        turn.trace.begin_step(step)
+        started = time.perf_counter()
+        try:
+            raw = self._model.complete(messages)
+        except ModelUnavailable as e:
+            turn.trace.model_call(context, messages, notices, started, None, error=e)
+            raise
+        turn.trace.model_call(context, messages, notices, started, self._last_usage(), raw=raw)
+        return raw
+
+    def _last_usage(self) -> dict | None:
+        """The model's last token usage, if it exposes one; never raises."""
+        try:
+            return getattr(self._model, "last_usage", None)
+        except Exception:
+            return None
+
+    def _parse(self, turn: _Turn, raw: str, *, will_retry: bool) -> ModelAction:
+        try:
+            action = parse_model_output(raw)
+        except ActionParseError as e:
+            turn.trace.action_invalid(e, will_retry)
+            raise
+        turn.trace.action_parsed(action)
+        return action
 
     def _route_intent(self, state: SessionState, intent: Intent) -> None:
         """Start the application on credit intent; never drop an active one."""
@@ -376,6 +444,11 @@ class Orchestrator(CodeEventsMixin):
         """Validate and apply field updates; return the rejected ones."""
         if not updates:
             return []
+        results = self._update_results(turn, updates)
+        turn.trace.field_updates(results)
+        return [r for r in results if not r.accepted]
+
+    def _update_results(self, turn: _Turn, updates: list[FieldUpdate]) -> list[UpdateResult]:
         app = turn.state.application
         if app is None:
             return [UpdateResult(field=u.field, accepted=False, reason="no_active_application") for u in updates]
@@ -393,12 +466,12 @@ class Orchestrator(CodeEventsMixin):
             offer_ids = {o.offer_id for o in app.offers.offers} if app.offers and offers_current(app) else set()
             results += apply_field_updates(app, batch, specs, offer_ids=offer_ids, now=turn.ctx.now)
             self._sync_application(turn)
-        return [r for r in results if not r.accepted]
+        return results
 
     def _execute_model_tool(self, turn: _Turn, action: ModelAction) -> ToolCallOutcome:
         call = action.action
         self._add_message(turn, "action", json.dumps(action.model_dump(mode="json"), ensure_ascii=False))
-        outcome, output = self._registry.execute(call.tool, call.arguments, turn.ctx, caller="model")
+        outcome, output = turn.trace.execute(self._registry, call.tool, call.arguments, turn.ctx, caller="model")
         if outcome.ok:
             self._store_output(turn, call.tool, output)
         self._add_message(turn, "tool", outcome.as_message())
@@ -419,6 +492,7 @@ class Orchestrator(CodeEventsMixin):
             logger.info("citations_dropped %s", json.dumps({
                 "session_id": turn.state.session_id, "turn_id": turn.turn_id, "citation_ids": dropped,
             }))
+            turn.trace.citations_filtered([cid for cid in reply.citation_ids if cid in sources], dropped)
         self._add_message(turn, "assistant", reply.message, citations)
 
     # ---- code-side state sync ---------------------------------------------
@@ -431,7 +505,7 @@ class Orchestrator(CodeEventsMixin):
         self, turn: _Turn, name: str, arguments: dict
     ) -> tuple[ToolCallOutcome, BaseModel | None]:
         """Run a tool as code. Failures are logged and reported to the model."""
-        outcome, output = self._registry.execute(name, arguments, turn.ctx, caller="code")
+        outcome, output = turn.trace.execute(self._registry, name, arguments, turn.ctx, caller="code")
         if not outcome.ok:
             logger.warning("code_tool_failed %s", json.dumps({
                 "session_id": turn.state.session_id, "turn_id": turn.turn_id,

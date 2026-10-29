@@ -711,3 +711,78 @@ def test_malformed_sitemap_fails_run_without_crashing(tmp_path, source_config):
     assert not report.completed
     assert any("sitemap" in url for url in report.failed)
     assert report.entries == []
+
+
+SITEMAP_3 = b"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://www.raiffeisen.ro/persoane-fizice/credite/page1</loc></url>
+  <url><loc>https://www.raiffeisen.ro/persoane-fizice/credite/page2</loc></url>
+  <url><loc>https://www.raiffeisen.ro/persoane-fizice/credite/page3</loc></url>
+</urlset>"""
+PAGE = "https://www.raiffeisen.ro/persoane-fizice/credite/"
+
+
+def _scrape(tmp_path, source_config, pages, previous=()):
+    """Run a scrape over SITEMAP_3; `pages` maps a path to a response or an exception to raise."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, content=b"User-agent: *\nAllow: /")
+        if request.url.path == "/sitemap.xml":
+            return httpx.Response(200, content=SITEMAP_3)
+        result = pages.get(request.url.path, httpx.Response(404))
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), timeout=30, follow_redirects=True)
+    now, sleep, _ = make_fake_time()
+    return Scraper(client, source_config, tmp_path / "raw", min_interval_s=0.01, now=now, sleep=sleep).run(list(previous))
+
+
+def test_failed_fetch_keeps_the_previous_good_entry(tmp_path, source_config):
+    ok = {f"/persoane-fizice/credite/page{i}": httpx.Response(200, content=f"<html>{i}</html>".encode(),
+                                                               headers={"content-type": "text/html"}) for i in (1, 2, 3)}
+    first = _scrape(tmp_path, source_config, ok)
+    good = next(e for e in first.entries if e.url == PAGE + "page1")
+    assert good.status_code == 200 and good.raw_path
+
+    second = _scrape(tmp_path, source_config, {**ok, "/persoane-fizice/credite/page1": httpx.Response(503)}, first.entries)
+    kept = next(e for e in second.entries if e.url == PAGE + "page1")
+    assert kept == good
+    assert second.failed[PAGE + "page1"] == "Server error: 503"
+    assert PAGE + "page1" not in second.unchanged + second.changed + second.new
+
+
+def test_any_http_error_fails_only_its_url(tmp_path, source_config):
+    pages = {
+        "/persoane-fizice/credite/page1": httpx.TooManyRedirects("redirect loop"),
+        "/persoane-fizice/credite/page2": httpx.InvalidURL("bad url"),
+        "/persoane-fizice/credite/page3": httpx.Response(200, content=b"<html>3</html>", headers={"content-type": "text/html"}),
+    }
+    report = _scrape(tmp_path, source_config, pages)
+    assert set(report.failed) == {PAGE + "page1", PAGE + "page2"}
+    assert "TooManyRedirects" in report.failed[PAGE + "page1"] and "InvalidURL" in report.failed[PAGE + "page2"]
+    assert report.new == [PAGE + "page3"]
+
+
+def test_redirect_outside_the_allowlist_is_a_failure(tmp_path, source_config):
+    pages = {
+        "/persoane-fizice/credite/page1": httpx.Response(301, headers={"location": "https://www.raiffeisen.ro/altceva/promo"}),
+        "/altceva/promo": httpx.Response(200, content=b"<html>promo</html>", headers={"content-type": "text/html"}),
+        "/persoane-fizice/credite/page2": httpx.Response(301, headers={"location": PAGE + "page2-nou"}),
+        "/persoane-fizice/credite/page2-nou": httpx.Response(200, content=b"<html>2</html>", headers={"content-type": "text/html"}),
+    }
+    report = _scrape(tmp_path, source_config, pages)
+    assert "outside the allowlist" in report.failed[PAGE + "page1"]
+    entry1 = next(e for e in report.entries if e.url == PAGE + "page1")
+    assert entry1.raw_path is None and entry1.final_url == "https://www.raiffeisen.ro/altceva/promo"
+    entry2 = next(e for e in report.entries if e.url == PAGE + "page2")
+    assert entry2.final_url == PAGE + "page2-nou" and entry2.raw_path and PAGE + "page2" not in report.failed
+
+
+def test_entries_have_utc_fetch_time_and_posix_raw_path(tmp_path, source_config):
+    report = _scrape(tmp_path, source_config, {
+        "/persoane-fizice/credite/page1": httpx.Response(200, content=b"<html>1</html>", headers={"content-type": "text/html"})})
+    entry = next(e for e in report.entries if e.url == PAGE + "page1")
+    assert entry.fetched_at.utcoffset() is not None and entry.fetched_at.utcoffset().total_seconds() == 0
+    assert entry.raw_path.startswith("raw/") and "\\" not in entry.raw_path

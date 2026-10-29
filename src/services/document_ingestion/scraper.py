@@ -1,7 +1,7 @@
 """Polite incremental web scraper with withdrawal detection."""
 import re
 import time
-from datetime import datetime, date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urljoin
@@ -12,7 +12,7 @@ import httpx
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
 
-from src.services.document_ingestion.sources import SourceConfig
+from src.services.document_ingestion.sources import SourceConfig, is_allowed_url
 from src.services.document_ingestion.manifest import ManifestEntry
 from src.storage.document_store.raw_store import save_raw
 from src.services.document_ingestion.parsers.links import absolutize
@@ -48,7 +48,7 @@ def _make_entry(
     return ManifestEntry(
         url=url,
         final_url=final_url,
-        fetched_at=datetime.now(),
+        fetched_at=datetime.now(timezone.utc),
         status_code=status_code,
         content_type=content_type,
         sitemap_lastmod=sitemap_lastmod,
@@ -135,9 +135,13 @@ class Scraper:
             fetched_urls.add(url)
             attempted += 1
             is_seed = url in self.cfg.discovery_seeds
-            entry = self._fetch_url(url, robots, previous_by_url.get(url), is_seed)
+            previous_entry = previous_by_url.get(url)
+            entry = self._fetch_url(url, robots, previous_entry, is_seed)
             if entry.error:
                 failed[url] = entry.error
+                # A failed fetch says nothing about the content: keep the last good copy.
+                if previous_entry is not None and previous_entry.status_code == 200 and previous_entry.raw_path:
+                    entry = previous_entry
             entries_by_url[url] = entry
 
             # Extract PDF links from successful HTML fetches
@@ -201,7 +205,7 @@ class Scraper:
         for url, entry in entries_by_url.items():
             if entry.withdrawn:
                 continue
-            if entry.error:
+            if entry.error or url in failed:
                 continue
             if entry.status_code not in (200, 304):
                 continue
@@ -247,8 +251,8 @@ class Scraper:
                     return robots, f"Server error: {response.status_code}"
                 else:
                     return robots, f"Unexpected status: {response.status_code}"
-            except (httpx.TimeoutException, httpx.TransportError) as e:
-                if attempt < self.max_retries:
+            except (httpx.HTTPError, httpx.InvalidURL) as e:
+                if isinstance(e, httpx.TransportError) and attempt < self.max_retries:
                     self.sleep(2 ** (attempt + 1))
                     continue
                 return robots, f"Network error: {type(e).__name__}"
@@ -267,7 +271,7 @@ class Scraper:
                 urls.update(self._parse_sitemap(response.content, robots))
             else:
                 return set(), f"Sitemap fetch failed: {response.status_code}"
-        except (httpx.TimeoutException, httpx.TransportError) as e:
+        except (httpx.HTTPError, httpx.InvalidURL) as e:
             return set(), f"Sitemap network error: {type(e).__name__}"
         except ET.ParseError as e:
             return set(), f"Sitemap is not valid XML: {e}"
@@ -284,8 +288,6 @@ class Scraper:
 
     def _parse_sitemap(self, content: bytes, robots: RobotFileParser) -> set[str]:
         """Parse sitemap XML and return allowed URLs, storing lastmod dates."""
-        from src.services.document_ingestion.sources import is_allowed_url
-
         urls = set()
         # The live sitemap carries stray non-UTF-8 bytes in image captions; replace them rather than fail.
         root = ET.fromstring(content.decode("utf-8", errors="replace"))
@@ -350,6 +352,20 @@ class Scraper:
             try:
                 response = self.client.get(url, follow_redirects=True)
 
+                final_url = str(response.url)
+                if not self._redirect_allowed(url, final_url):
+                    return _make_entry(
+                        url=url,
+                        final_url=final_url,
+                        status_code=response.status_code,
+                        content_type=response.headers.get("content-type"),
+                        sitemap_lastmod=lastmod,
+                        sha256=None,
+                        raw_path=None,
+                        error=f"Redirected outside the allowlist: {final_url}",
+                        index=index,
+                    )
+
                 # Handle 404/410 without retry
                 if response.status_code in (404, 410):
                     return _make_entry(
@@ -399,22 +415,23 @@ class Scraper:
                     index=index,
                 )
 
-            except (httpx.TimeoutException, httpx.TransportError) as e:
-                if attempt < self.max_retries:
+            except (httpx.HTTPError, httpx.InvalidURL) as e:
+                # Timeouts and connection errors are retried; anything else (a redirect loop,
+                # an invalid URL) fails this URL only.
+                if isinstance(e, httpx.TransportError) and attempt < self.max_retries:
                     self.sleep(2 ** (attempt + 1))
                     continue
-                else:
-                    return _make_entry(
-                        url=url,
-                        final_url=url,
-                        status_code=None,
-                        content_type=None,
-                        sitemap_lastmod=lastmod,
-                        sha256=None,
-                        raw_path=None,
-                        error=f"Network error: {type(e).__name__}",
-                        index=index,
-                    )
+                return _make_entry(
+                    url=url,
+                    final_url=url,
+                    status_code=None,
+                    content_type=None,
+                    sitemap_lastmod=lastmod,
+                    sha256=None,
+                    raw_path=None,
+                    error=f"Network error: {type(e).__name__}",
+                    index=index,
+                )
 
         # Should never reach here
         return _make_entry(
@@ -457,10 +474,21 @@ class Scraper:
             content_type=content_type,
             sitemap_lastmod=lastmod,
             sha256=sha256,
-            raw_path=str(raw_path.relative_to(self.raw_dir.parent)),
+            raw_path=raw_path.relative_to(self.raw_dir.parent).as_posix(),
             error=None,
             index=index,
         )
+
+    def _redirect_allowed(self, url: str, final_url: str) -> bool:
+        """A redirect must stay in scope: an allowlisted URL must land on an allowlisted URL.
+
+        Seeds and extra URLs are not allowlisted themselves; they must stay on the same host.
+        """
+        if final_url == url:
+            return True
+        if is_allowed_url(url, self.cfg):
+            return is_allowed_url(final_url, self.cfg)
+        return httpx.URL(final_url).host == httpx.URL(url).host
 
     def _extract_pdf_links(
         self,

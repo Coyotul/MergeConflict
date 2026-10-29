@@ -6,7 +6,7 @@
 | STRUCTURE-01 | ARCHITECTURE.md, README.md, scaffold directories, .gitignore | Codex | DONE | 2026-10-28 | All diagram components mapped; scaffold and documentation created locally. |
 | SCOPE-01 | IDEAS.md, CONTEXT.md, README.md, ARCHITECTURE.md | Codex | DONE | 2026-10-28 | Focus documentation exclusively on the AI credit application assistant. |
 | SPEC-01 | SPECIFICATION.md, scope docs, apps/, additional service packages | Codex | DONE | 2026-10-28 | Preserve owner specification and align scaffold with the complete credit lifecycle. |
-| RAG-01 | src/services/document_ingestion, src/services/retrieval, src/storage/{document_store,vector_index}, scripts/rag, config/rag | Claude | DONE | 2026-10-28 | Local RAG per docs/superpowers/specs/2026-10-28-rag-retrieval-design.md. Validation: recall@5 0.807, refusals 10/12, false refusals 0.111 (gate missed on false refusals; see docs/decisions/0001-local-rag-pgvector.md). Runbook: docs/runbooks/rag-local.md |
+| RAG-01 | src/services/document_ingestion, src/services/retrieval, src/storage/{document_store,vector_index}, scripts/rag, config/rag | Claude | DONE | 2026-10-28 | Local RAG per docs/superpowers/specs/2026-10-28-rag-retrieval-design.md. Validation (last run, after fix wave): recall@5 0.784, refusals 10/12, false refusals 0.117 (gate missed on recall and false refusals; see docs/decisions/0001-local-rag-pgvector.md). Runbook: docs/runbooks/rag-local.md |
 
 ---
 

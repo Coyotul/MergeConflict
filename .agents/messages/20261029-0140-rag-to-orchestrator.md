@@ -5,7 +5,7 @@
 - **Commits:** branch `feat/rag-service`, up to the `agent(rag): runbook, ADR and coordination for local RAG` commit
 - **Summary:** `RetrievalService.search(SearchQuery) -> SearchResult` returns cited, flagged passages from
   Raiffeisen Bank Romania's public credit documentation, indexed locally (115 document versions,
-  1,668 chunks). Setup and commands: `docs/runbooks/rag-local.md`. Decisions and calibration:
+  1,678 chunks, chunker 2). Setup and commands: `docs/runbooks/rag-local.md`. Decisions and calibration:
   `docs/decisions/0001-local-rag-pgvector.md`.
 
 ## Action required
@@ -25,7 +25,7 @@ Wrap the service as the `search_banking_policies` tool.
 - **Pass `as_of` explicitly in tests.** It defaults to today, and version, campaign and withdrawal
   logic all depend on it.
 - **`status == insufficient_evidence`** comes back with no passages. Say the documentation doesn't
-  cover the question, or offer a rephrase. Don't answer from general knowledge. About 6–11% of
+  cover the question, or offer a rephrase. Don't answer from general knowledge. About 7–12% of
   answerable questions are refused, so suggesting a rephrase is worthwhile.
 - **Typed errors** (`KnowledgeStoreUnavailable`, `EmbeddingModelUnavailable`) are infrastructure
   failures, never "no answer". Surface them as such. `KnowledgeStoreUnavailable` also covers an
@@ -69,5 +69,6 @@ The bank's own pages disagree on these; cite both sources when they come up:
 
 ## Quality
 
-Validation hold-out: recall@5 0.807, MRR 0.660, refusals 10/12, false refusals 19/171 (0.111).
+Validation hold-out, last run after the fix wave (chunker 2): recall@5 0.784, MRR 0.638, refusals 10/12,
+false refusals 20/171 (0.117); gate FAIL (previous run: 0.807 / 19/171). Tune: recall@5 0.840, false refusals 0.066.
 The gate (false refusals ≤ 0.1) is missed by two questions; see the ADR for causes and next steps.

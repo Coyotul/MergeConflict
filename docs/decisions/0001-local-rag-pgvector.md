@@ -80,11 +80,12 @@ Findings that shaped the final values:
 |---|---|---|---|---|---|---|---|
 | 1 | flat weights, rrf_k 20, keyword weight 1.0, floor 0.74 | 0.754 | 0.581 | 0.538 | 10/12 (0.833) | 16/171 (0.094) | FAIL (recall) |
 | 2 | final values | 0.807 | 0.660 | 0.607 | 10/12 (0.833) | 19/171 (0.111) | FAIL (false refusals) |
+| 3 (last) | after fix wave: chunker 2 (table rows, long-line split, one cost_facts chunk), same settings; tune 0.840 / 15/17 / 16/244 (0.066), labels 0 unmatched | 0.784 | 0.638 | 0.586 | 10/12 (0.833) | 20/171 (0.117) | FAIL (recall, false refusals) |
 
 The gate (recall@5 ≥ 0.8, refusal accuracy ≥ 0.8, false refusals ≤ 0.1) is **not met**: run 2
-misses the false-refusal limit by two questions. A third run was not spent: the only remaining
-tune-side choices either repeat the failed direction or would be chosen because of the validation
-result. The recall-versus-refusal trade-off is limited by the signal a dense profile carries.
+misses the false-refusal limit by two questions. Run 3, the last one, was spent after the final fix
+wave re-chunked the corpus (settings unchanged, since tune still passed): recall@5 fell to 0.784 and
+false refusals rose to 20/171, so it misses both limits. No tuning follows it. The recall-versus-refusal trade-off is limited by the signal a dense profile carries.
 
 ## Consequences
 

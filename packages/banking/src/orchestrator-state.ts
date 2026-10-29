@@ -7,16 +7,23 @@ import type {
   ChatMessageView,
 } from "./orchestrator";
 
+export const DEFAULT_CUSTOMERS = [
+  "cust-001",
+  "cust-002",
+  "cust-003",
+] as const;
+
 export const SYNTHETIC_CUSTOMERS = [
   "cust-001",
   "cust-002",
   "cust-003",
   "customer-alex",
+  "alex_morgan",
 ] as const;
 
 export function pickCustomer(random: () => number = Math.random): string {
-  const index = Math.floor(random() * SYNTHETIC_CUSTOMERS.length);
-  return SYNTHETIC_CUSTOMERS[index];
+  const index = Math.floor(random() * DEFAULT_CUSTOMERS.length);
+  return DEFAULT_CUSTOMERS[index];
 }
 
 export interface ChatEntry {

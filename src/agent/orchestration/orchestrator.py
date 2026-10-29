@@ -32,6 +32,7 @@ from src.agent.orchestration.events import (  # noqa: F401  (event types re-expo
     CustomerMessage,
     DocumentUploaded,
     OfferSelected,
+    ExtractedFieldsReviewed,
     SessionStarted,
     TurnEvent,
 )
@@ -253,6 +254,8 @@ class Orchestrator(CodeEventsMixin):
             return self._handle_customer_message
         if isinstance(event, DocumentUploaded):
             return self._handle_document_uploaded
+        if isinstance(event, ExtractedFieldsReviewed):
+            return self._handle_fields_reviewed
         if isinstance(event, OfferSelected):
             return self._handle_offer_selected
         if isinstance(event, SessionStarted):

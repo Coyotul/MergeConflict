@@ -353,30 +353,14 @@ def apply_field_updates(
         return results
 
     for update in updates:
-        # Handle confirmation
+        # Document values are confirmed only by the customer's review form, never by a field update.
         if update.confirm:
-            if update.field not in app.fields:
-                results.append(UpdateResult(
-                    field=update.field,
-                    accepted=False,
-                    reason="nothing_to_confirm"
-                ))
-                continue
-
-            # Mark confirmed
-            app.fields[update.field].confirmed = True
-            app.fields[update.field].updated_at = now
-
-            # Remove conflict if present
-            app.conflicts = [
-                c for c in app.conflicts if c.field != update.field
-            ]
-
-            results.append(UpdateResult(
-                field=update.field,
-                accepted=True,
-                reason=None
-            ))
+            results.append(UpdateResult(field=update.field, accepted=False, reason="review_form_only"))
+            continue
+        # Values a document verifies come only from that document (the form may correct editable ones).
+        spec = specs.get(update.field)
+        if spec is not None and spec.verified_by is not None:
+            results.append(UpdateResult(field=update.field, accepted=False, reason="from_documents_only"))
             continue
 
         # Must have a value if not confirming

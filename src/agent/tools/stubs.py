@@ -121,6 +121,7 @@ class StubData:
                     type=FieldType(f["type"]),
                     required=f.get("required", True),
                     verified_by=f.get("verified_by"),
+                    editable=bool(f.get("editable", False)),
                     identity=f.get("identity", False),
                     min=Decimal(str(f["min"])) if "min" in f else None,
                     max=Decimal(str(f["max"])) if "max" in f else None,

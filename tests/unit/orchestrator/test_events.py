@@ -473,12 +473,11 @@ def test_full_happy_path_with_scripted_model(orchestrator_factory):
     assert (resp.progress.stage, resp.awaiting.kind) == ("collecting_information", "text")
     assert store.get(sid).application.fields["full_name"].value == "Alex Morgan"
 
+    # The last stated field completes the inputs: code runs eligibility in the same turn.
     resp = say("Sunt angajată de 4 ani la FICTIV Employer's Studio 1, câștig 8500 lei, fără rate")
-    assert (resp.progress.stage, resp.awaiting.kind) == ("eligibility", "text")
-
-    resp = say("Verifică eligibilitatea")
     assert (resp.progress.stage, resp.awaiting.kind) == ("documents", "document")
     assert resp.awaiting.document_types == ["id_card", "payslip", "bank_statement"]
+    assert store.get(sid).application.eligibility is not None
 
     resp = orch.handle(sid, CUSTOMER, upload("id_card"))
     assert resp.awaiting.document_types == ["payslip", "bank_statement"]
@@ -488,10 +487,8 @@ def test_full_happy_path_with_scripted_model(orchestrator_factory):
     assert (resp.progress.stage, resp.awaiting.kind) == ("documents", "text")
     assert store.get(sid).application.conflicts == []
 
+    # Confirming makes eligibility stale; code re-runs it on verified inputs, then the model prices.
     resp = say("Datele sunt corecte")
-    assert (resp.progress.stage, resp.awaiting.kind) == ("eligibility", "text")
-
-    resp = say("Vreau ofertele")
     assert (resp.progress.stage, resp.awaiting.kind) == ("offer_selection", "offer_choice")
     app = store.get(sid).application
     assert app.eligibility.verified_inputs is True

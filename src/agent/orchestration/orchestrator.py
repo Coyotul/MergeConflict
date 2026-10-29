@@ -47,6 +47,7 @@ from src.agent.orchestration.fields import (
 from src.agent.orchestration.progress import (
     NeedKind,
     all_verified,
+    can_run_eligibility,
     eligibility_input_names,
     fingerprint,
     next_needs,
@@ -96,7 +97,17 @@ FALLBACK_GREETING = (
     "Hi! I'm your credit assistant. How can I help?"
 )
 INVALID_ACTION_NOTICE = "INVALID_ACTION: {error}. Return exactly one JSON object matching the schema."
+ELIGIBILITY_UPDATED_NOTICE = (
+    "ELIGIBILITY_UPDATED: your field updates completed the eligibility inputs and the check ran "
+    "(see TOOL_RESULT run_eligibility_check). Write the reply again, explaining this result."
+)
 SESSION_STARTED_EVENT = "SESSION_STARTED"
+
+def _purpose(app: ApplicationState) -> str | None:
+    """The stated loan purpose, normalised so a restatement is not a change."""
+    field = app.fields.get("purpose")
+    return " ".join(str(field.value).split()).casefold() if field is not None else None
+
 
 # ---- language detection ---------------------------------------------------
 
@@ -135,6 +146,7 @@ class _Turn:
     history: list[StoredMessage]
     trace: TurnTrace
     new_messages: list[StoredMessage] = field(default_factory=list)
+    eligibility_ran: bool = False  # set when code re-ran eligibility during the current step
 
     @property
     def transcript(self) -> list[StoredMessage]:
@@ -357,6 +369,7 @@ class Orchestrator(CodeEventsMixin):
         pending = list(notices)
         parse_failed = False
         reasked = False
+        eligibility_explained = False
         self._sync_application(turn)
 
         no_reply = "step_cap"  # trace outcome when no reply was given
@@ -380,6 +393,7 @@ class Orchestrator(CodeEventsMixin):
                 continue
 
             self._route_intent(state, action.intent)
+            turn.eligibility_ran = False
             rejected = self._apply_updates(turn, action.field_updates)
             rejection_notice = _rejection_notice(rejected) if rejected else None
 
@@ -396,6 +410,13 @@ class Orchestrator(CodeEventsMixin):
                 reasked = True
                 pending.append(rejection_notice)
                 self._log_step(turn, step, started, "respond", None, "reask")
+                continue
+
+            if turn.eligibility_ran and not eligibility_explained and step < self._max_steps:
+                # The reply was written before the result it should explain existed.
+                eligibility_explained = True
+                pending.append(ELIGIBILITY_UPDATED_NOTICE)
+                self._log_step(turn, step, started, "respond", None, "reask_eligibility")
                 continue
 
             self._add_reply(turn, action.action)
@@ -465,6 +486,7 @@ class Orchestrator(CodeEventsMixin):
         # product_code first: its requirements define the specs the other updates need.
         product_updates = [u for u in updates if u.field == "product_code"]
         other_updates = [u for u in updates if u.field != "product_code"]
+        previous_purpose = _purpose(app)
         results: list[UpdateResult] = []
         for batch in (product_updates, other_updates):
             if not batch:
@@ -475,8 +497,26 @@ class Orchestrator(CodeEventsMixin):
             )
             offer_ids = {o.offer_id for o in app.offers.offers} if app.offers and offers_current(app) else set()
             results += apply_field_updates(app, batch, specs, offer_ids=offer_ids, now=turn.ctx.now)
+            if batch is other_updates:
+                product_chosen = any(r.field == "product_code" and r.accepted for r in results)
+                if not product_chosen and previous_purpose is not None and _purpose(app) != previous_purpose:
+                    self._reset_product(app)
             self._sync_application(turn)
         return results
+
+    @staticmethod
+    def _reset_product(app: ApplicationState) -> None:
+        """A new purpose reopens the product choice; nothing computed for the old product survives.
+
+        Stated field values and uploaded documents are kept, so nothing is asked again.
+        """
+        app.product_code = None
+        app.requirements = None
+        app.eligibility = None
+        app.offers = None
+        app.selected_offer_id = None
+        app.summary = None
+        app.draft_application_id = None
 
     def _execute_model_tool(self, turn: _Turn, action: ModelAction) -> ToolCallOutcome:
         call = action.action
@@ -652,7 +692,22 @@ class Orchestrator(CodeEventsMixin):
             if any(spec.identity for spec in requirements.fields):
                 self._code_tool(turn, "get_customer_profile", {})
         self._refresh_document_verification(turn)
+        self._sync_eligibility(turn)
         self._sync_summary(turn)
+
+    def _sync_eligibility(self, turn: _Turn) -> None:
+        """Re-run the deterministic eligibility check whenever it is stale and can run.
+
+        The model no longer has to remember this step; a run either matches the current
+        inputs or records verified inputs, so the need it answers cannot repeat.
+        """
+        if any(n.kind == NeedKind.run_eligibility for n in next_needs(turn.state)) \
+                and can_run_eligibility(turn.state) is None:
+            outcome, output = self._run_code_tool(turn, "run_eligibility_check", {})
+            if output is not None:
+                # The model must explain a result it did not request; show it like its own calls.
+                self._add_message(turn, "tool", outcome.as_message())
+                turn.eligibility_ran = True
 
     def _sync_summary(self, turn: _Turn) -> None:
         app = turn.state.application

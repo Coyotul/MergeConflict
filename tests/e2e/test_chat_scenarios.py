@@ -141,8 +141,9 @@ def test_happy_path_alex_morgan(client):
     assert stage(chat.say("67")) == "collecting_information"
     assert stage(chat.say("7000")) == "collecting_information"
     assert stage(chat.say("FICTIV Employer's Studio 1")) == "collecting_information"
-    body = chat.say("0")
-    assert stage(body) == "eligibility"
+    body = chat.say("0")  # the last required field: eligibility runs in this turn
+    assert stage(body) == "documents"
+    assert block(body, "eligibility_result")["result"]["status"] == "satisfied"
 
     body = chat.upload("id_card")
     assert stage(body) == "documents"
@@ -185,9 +186,9 @@ def test_happy_path_alex_morgan(client):
 def test_not_eligible_andrei_stan(client):
     chat = Chat(client, "cust-andrei-stan")
     answer_discovery(chat)
-    for text in ("employed", "67", "2300", "FICTIV Employer's Studio 1", "0"):
+    for text in ("employed", "67", "2300", "FICTIV Employer's Studio 1"):
         chat.say(text)
-    body = chat.say("ok")
+    body = chat.say("0")  # the last required field: eligibility runs and is explained in this turn
     assert stage(body) == "not_eligible"
     assert body["awaiting"]["kind"] == "text"
     assert block(body, "eligibility_result")["result"]["status"] == "not_satisfied"

@@ -43,10 +43,12 @@ class ModelAction(BaseModel):
     @field_validator("intent", mode="before")
     @classmethod
     def unknown_intent_is_other(cls, value: Any) -> Any:
-        """An invented label (e.g. "choose_offer") must not discard a valid action; "other" routes nothing."""
-        if isinstance(value, str) and value not in Intent._value2member_map_:
-            return Intent.other
-        return value
+        """Near misses ("Credit_Application") are normalised; an invented label (e.g. "choose_offer")
+        must not discard a valid action, so it becomes "other", which routes nothing."""
+        if not isinstance(value, str):
+            return value
+        normalised = value.strip().lower().replace("-", "_").replace(" ", "_")
+        return normalised if normalised in Intent._value2member_map_ else Intent.other
 
 
 class ActionParseError(ValueError):

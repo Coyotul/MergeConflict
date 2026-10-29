@@ -85,6 +85,13 @@ def test_unknown_intent_keeps_the_action_as_other():
     assert result.action.message == "Here are your offers."
 
 
+@pytest.mark.parametrize("label", ["Credit_Application", "credit application", "credit-application"])
+def test_near_miss_intent_is_normalised_not_dropped(label):
+    """A near-miss label must still start the credit flow, not fall back to "other"."""
+    text = f'{{"intent":"{label}","action":{{"type":"respond","message":"ok"}}}}'
+    assert parse_model_output(text).intent == Intent.credit_application
+
+
 def test_parse_requires_intent():
     """Parser still rejects output without an intent."""
     text = '{"action":{"type":"respond","message":"test"}}'

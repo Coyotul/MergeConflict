@@ -2,16 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, CreditCard, FileClock, LayoutDashboard, LogOut, MessageCircle, Settings2, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ArrowUpRight, FileClock, LogOut, MessageCircle, Settings2, ShieldCheck } from "lucide-react";
 import { useDemo } from "@banking/demo/react";
 import { Logo } from "@banking/ui/primitives";
 import { cn } from "@banking/ui/utils";
 
 export const customerNavigation = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/", label: "AI assistant", icon: MessageCircle },
-  { href: "/products", label: "Explore loans", icon: SlidersHorizontal },
-  { href: "/loans", label: "My loans", icon: CreditCard },
   { href: "/applications", label: "Applications", icon: FileClock },
 ];
 
@@ -50,14 +47,6 @@ export function CustomerSidebar() {
           </Link>
         ))}
       </nav>
-      <div className="mt-4 hidden rounded-2xl border border-white/10 bg-white/5 p-3.5 2xl:block">
-        <Sparkles className="mb-2 size-4 text-primary" />
-        <p className="text-xs font-medium text-white">A little clarity goes a long way.</p>
-        <p className="mt-1 text-[11px] leading-relaxed text-white/55">Let’s find the next step that works for you.</p>
-        <Link href="/?topic=support" className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
-          Talk to someone<ArrowUpRight className="size-3" />
-        </Link>
-      </div>
       <div className="mt-auto space-y-1 pt-4">
         <Link
           href="/settings"

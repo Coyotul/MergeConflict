@@ -10,7 +10,6 @@ import { Button } from "@banking/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@banking/ui/dialog";
 import { StartingCards } from "./guided-options";
 import { Composer } from "./composer";
-import { ContextPanel } from "./context-panel";
 import { OrchestratorConversation } from "./orchestrator/conversation";
 import { QuickSuggestions } from "./orchestrator/quick-suggestions";
 
@@ -163,7 +162,6 @@ export function AssistantWorkspace() {
           </div>
         </div>
       </div>
-      <ContextPanel />
       <Dialog open={ending} onOpenChange={setEnding}>
         <DialogContent>
           <DialogHeader>

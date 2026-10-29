@@ -5,6 +5,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from src.models.document_processing import ExtractedIncome
+from src.parsers.extraction.amounts import parse_document_amount
 
 
 def _parse_date_ro(d_str: str) -> Optional[date]:
@@ -19,12 +20,7 @@ def _parse_date_ro(d_str: str) -> Optional[date]:
 
 def _parse_money(val_str: str) -> float:
     """Parse Romanian currency format: 8.500,00 -> 8500.0."""
-    clean = val_str.replace(" ", "").replace("lei", "").replace("RON", "").replace("X", "").strip()
-    clean = clean.replace(".", "").replace(",", ".")
-    try:
-        return float(clean)
-    except ValueError:
-        return 0.0
+    return parse_document_amount(val_str)
 
 
 class IncomeCertificateExtractor:
@@ -79,6 +75,14 @@ class IncomeCertificateExtractor:
         start_match = re.search(r"(?:din data de|CIM nr\.[^\n]+din)\s*(\d{2,4}[.\-/]\d{2}[.\-/]\d{2,4})", text, re.IGNORECASE)
         if start_match:
             extracted.employment_start_date = _parse_date_ro(start_match.group(1))
+        else:
+            start_match = re.search(
+                r"(?:Contractului Individual de Munc[aă]|CIM)[^\n]{0,50}?"
+                r"(?:/|din)\s*(\d{2,4}[.\-/]\d{2}[.\-/]\d{2,4})",
+                text, re.IGNORECASE,
+            )
+            if start_match:
+                extracted.employment_start_date = _parse_date_ro(start_match.group(1))
 
         # 8. Date of issue
         issue_match = re.search(r"Data\s*emiterii[^\d\n]*(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4})", text, re.IGNORECASE)
@@ -92,12 +96,20 @@ class IncomeCertificateExtractor:
         if avg_match:
             extracted.average_net_income = _parse_money(avg_match.group(1))
 
-        net_matches = re.findall(r"([\d.,]+)\s*(?:lei|RON)\b", text)
+        net_match = re.search(r"Venit(?:ul)?\s+net\s+(?:lunar|lunar mediu)(?:\s+de)?[:\s]+([\d.,]+)\s*(?:RON|lei)\b", text, re.IGNORECASE)
+        if net_match:
+            extracted.monthly_net_income = _parse_money(net_match.group(1))
+        # For column-oriented OCR, amounts under the explicit net-income column
+        # are evidence; arbitrary last monetary figures or gross pay are not.
+        net_column = re.search(
+            r"Venit Net [ÎI]ncasat\s*\n"
+            r"((?:[\d.,]+\s*(?:lei|RON)\s*\n)+)", text, re.IGNORECASE,
+        )
+        net_matches = re.findall(r"([\d.,]+)\s*(?:lei|RON)\b", net_column.group(1)) if net_column else []
         if net_matches:
-            # Pick the most plausible net income values if not already found
-            parsed_amounts = [_parse_money(m) for m in net_matches if 1500.0 <= _parse_money(m) <= 100000.0]
-            if parsed_amounts:
-                extracted.monthly_net_income = extracted.average_net_income or parsed_amounts[-1]
+            parsed_amounts = [_parse_money(m) for m in net_matches]
+            if len(set(parsed_amounts)) == 1:
+                extracted.monthly_net_income = extracted.monthly_net_income or parsed_amounts[0]
 
         if extracted.average_net_income and not extracted.monthly_net_income:
             extracted.monthly_net_income = extracted.average_net_income

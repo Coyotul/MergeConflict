@@ -5,7 +5,7 @@ from typing import Any
 
 from src.agent.orchestration.fields import DISCOVERY_FIELDS
 from src.agent.orchestration.progress import Need, NeedKind, derive_stage
-from src.agent.orchestration.state import SessionState, StoredMessage
+from src.agent.orchestration.state import DocumentStatus, FieldSource, SessionState, StoredMessage
 from src.agent.tools.registry import ToolSpec
 from src.integrations.llm.chat import ChatMessage
 from src.models.credit import DocumentRequirement, FieldSpec, FieldType
@@ -70,6 +70,9 @@ def build_context(
     # Add application-specific data
     if state.application is not None:
         app = state.application
+        unusable_document_ids = {
+            doc.document_id for doc in app.documents if doc.status != DocumentStatus.accepted or doc.human_review_required
+        }
 
         # Fields
         context["fields"] = {
@@ -79,6 +82,7 @@ def build_context(
                 "confirmed": field.confirmed
             }
             for name, field in app.fields.items()
+            if field.source != FieldSource.document or field.document_id not in unusable_document_ids
         }
 
         # Conflicts
@@ -89,6 +93,7 @@ def build_context(
                 "document_value": c.document_value
             }
             for c in app.conflicts
+            if c.document_id not in unusable_document_ids
         ]
 
         # Documents (only doc_type, status, rejection_reason - no filenames or IDs)
@@ -96,10 +101,13 @@ def build_context(
             {
                 "doc_type": doc.doc_type,
                 "status": doc.status,
-                "rejection_reason": doc.rejection_reason
+                "rejection_reason": doc.rejection_reason,
+                "human_review_required": doc.human_review_required,
             }
             for doc in app.documents
         ]
+        if app.document_verification is not None:
+            context["document_verification"] = app.document_verification.model_dump(mode="json")
 
         # Eligibility
         if app.eligibility is not None:

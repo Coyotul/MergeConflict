@@ -279,3 +279,23 @@ Implemented under `src/services/document_processing/`, `src/parsers/`, and `src/
 - **Stage 3 (Validation & Verification)**: `DocumentValidator` verifies Romanian banking norms (BNR Regulations 17/2012 and 12/2018), Modulo 11 CNP & CUI algorithms, ISO 7064 MOD 97-10 IBAN checksums, income recency (<= 30 days), employment stability (>= 3 months, indefinite contract), and bank statement balance integrity.
 - **Stage 4 (Cross-Document Reconciliation)**: Evaluates identity consistency (name, CNP) across all submitted documents and reconciles declared net income against detected statement salary deposits.
 - See ADR 007 (`docs/decisions/007-document-processing-pipeline.md`) and specification table (`docs/reference/document-processing-specification.md`).
+
+### Orchestrator integration
+
+The chat composition now shares `SecureDocumentStore` with
+`DocumentProcessingService`. `process_document` is a server-only adapter to real
+OCR/extraction/validation; `read_document_extraction` and
+`verify_application_documents` give the assistant read-only, customer/session-bound
+access to safe evidence summaries. The latter is also invoked automatically before
+progress/submission and on replacement, so integrity/recency/reconciliation gates
+do not depend on model behavior. Both real and mock conversational modes process
+actual uploaded files, with no chat CNP-checksum waiver or guessed amounts.
+
+Originals use generated MIME-derived filenames under a SHA-256-derived customer
+folder (avoiding Windows case-folding/reserved-name collisions). Atomic registry
+writes and local-worker locking protect metadata persistence; failed uncommitted
+uploads are removed without deleting already-referenced evidence. Rejected or
+review-required evidence cannot count as verified or unlock offers/submission.
+This remains an unencrypted synthetic local prototype, not an authenticity check,
+production authentication boundary or malware-scanning system. See
+`docs/runbooks/orchestrator-documents.md` for supported extraction and test commands.

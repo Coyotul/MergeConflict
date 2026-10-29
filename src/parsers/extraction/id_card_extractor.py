@@ -65,8 +65,6 @@ class IdCardExtractor:
                         if cs not in ("RO", "NR", "CN", "ID", "CJ", "IS", "TM", "BV"):
                             extracted.series = cs
                             break
-                    if not extracted.series:
-                        extracted.series = "RX"
 
         if not extracted.series or not extracted.number:
             mrz_sn = re.search(r"([A-Z]{2})(\d{6})<0ROU", text)

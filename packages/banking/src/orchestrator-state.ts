@@ -7,7 +7,12 @@ import type {
   ChatMessageView,
 } from "./orchestrator";
 
-export const SYNTHETIC_CUSTOMERS = ["cust-001", "cust-002", "cust-003"] as const;
+export const SYNTHETIC_CUSTOMERS = [
+  "cust-001",
+  "cust-002",
+  "cust-003",
+  "customer-alex",
+] as const;
 
 export function pickCustomer(random: () => number = Math.random): string {
   const index = Math.floor(random() * SYNTHETIC_CUSTOMERS.length);

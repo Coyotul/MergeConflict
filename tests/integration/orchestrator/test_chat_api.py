@@ -30,6 +30,7 @@ from src.integrations.llm.chat import FakeChatModel
 from src.models.credit import ProductRequirements, FieldSpec, FieldType, DocumentRequirement, Money, LoanOffer
 from src.models.knowledge import Product
 from src.services.conversations.store import InMemorySessionStore
+from tests.fixtures.documents import pdf_bytes
 
 
 @pytest.fixture
@@ -242,7 +243,7 @@ def test_model_unavailable_503_retryable(client, customer_id, orchestrator, fake
     assert "api." not in data["message"].lower()
 
 
-def test_upload_wrong_type_415_and_too_large_413(client, customer_id, test_uploads_dir):
+def test_upload_wrong_type_415_and_too_large_413(client, customer_id, test_uploads_dir, store):
     """Test upload validation: wrong content type returns 415, too large returns 413."""
     # Create session
     create_response = client.post(
@@ -252,6 +253,13 @@ def test_upload_wrong_type_415_and_too_large_413(client, customer_id, test_uploa
     )
     assert create_response.status_code == 201
     session_id = create_response.json()["session_id"]
+
+    state = store.get(session_id)
+    state.application = ApplicationState(requirements=ProductRequirements(
+        product_code=Product.personal_loan, fields=[],
+        documents=[DocumentRequirement(doc_type="identity_card", label="Identity Card")],
+    ))
+    store.save(state, state.version)
 
     # Test wrong content type - should not write to disk
     files = {"file": ("test.txt", io.BytesIO(b"plain text"), "text/plain")}
@@ -346,7 +354,7 @@ def test_upload_accepted_returns_checklist(client, customer_id, orchestrator, st
     store.create(state)
 
     # Now upload a document
-    files = {"file": ("id_card.jpg", io.BytesIO(b"fake jpeg data"), "image/jpeg")}
+    files = {"file": ("id_card.pdf", io.BytesIO(pdf_bytes("Synthetic identity document")), "application/pdf")}
     response = client.post(
         f"/chat/sessions/{session_id}/documents",
         data={"doc_type": "identity_card"},

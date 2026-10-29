@@ -1,11 +1,14 @@
 """Stub tool implementations for the orchestrator."""
+import logging
 import math
+
+logger = logging.getLogger("src.agent.tools.stubs")
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, UTC, date
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 import yaml
 
 from src.agent.orchestration.progress import (
@@ -62,6 +65,9 @@ from src.models.credit import (
     LoanOffer,
 )
 from src.models.knowledge import Product, SearchQuery, SearchStatus, PassageFlag
+
+if TYPE_CHECKING:
+    from src.services.document_processing.service import DocumentProcessingService
 
 
 def annuity_installment(principal: Decimal, annual_rate_percent: Decimal, months: int) -> Decimal:
@@ -216,7 +222,9 @@ class StubData:
         )
 
 
-def build_stub_registry(data: StubData, policy_search: PolicySearch) -> ToolRegistry:
+def build_stub_registry(
+    data: StubData, policy_search: PolicySearch, *, document_service: "DocumentProcessingService | None" = None,
+) -> ToolRegistry:
     """Build a tool registry with stub implementations.
 
     Args:
@@ -377,6 +385,15 @@ def build_stub_registry(data: StubData, policy_search: PolicySearch) -> ToolRegi
         app = ctx.state.application
         if app is None or app.product_code is None:
             raise ValueError("No application or product selected")
+
+        # Try real ANAF eligibility service bridge first
+        try:
+            from src.services.eligibility.orchestrator_bridge import assess_session_eligibility
+            real_result = assess_session_eligibility(ctx, data)
+            if real_result is not None:
+                return real_result
+        except Exception as exc:
+            logger.warning(f"Eligibility service bridge evaluation failed, using fallback: {exc}")
 
         product_code = app.product_code
         if product_code not in data.eligibility_rules:
@@ -792,4 +809,7 @@ def build_stub_registry(data: StubData, policy_search: PolicySearch) -> ToolRegi
         handler=handle_request_review
     ))
 
+    if document_service is not None:
+        from src.agent.tools.documents import register_document_tools
+        register_document_tools(registry, document_service, data.customers)
     return registry

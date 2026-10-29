@@ -8,12 +8,13 @@ submit_application succeeds, and its reply (also for a repeated confirmation)
 is always the fixed "submitted" text: the model is never asked to describe it.
 """
 from dataclasses import dataclass
+import json
 from typing import TYPE_CHECKING, Literal, Union
 
 from src.agent.orchestration.blocks import all_specs
-from src.agent.orchestration.fields import merge_document_extraction
+from src.agent.orchestration.fields import FieldValueError, field_type_to_kind, merge_document_extraction, parse_field_value
 from src.agent.orchestration.progress import NeedKind, next_needs, offers_current
-from src.agent.orchestration.state import DocumentRecord, DocumentStatus, SessionState
+from src.agent.orchestration.state import DocumentRecord, DocumentStatus, FieldSource, FieldValue, SessionState
 from src.core.errors import InvalidUpload, ModelUnavailable
 from src.models.chat import TurnResponse
 
@@ -71,6 +72,10 @@ EVENT_TEXTS: dict[str, dict[str, str]] = {
     "document_rejected": {
         "en": "We couldn't use your {label}: {reason}",
         "ro": "Nu am putut folosi documentul {label}: {reason}",
+    },
+    "document_review": {
+        "en": "Your {label} needs human verification: {reason} Offers and submission are blocked until the evidence is resolved.",
+        "ro": "Documentul {label} necesită verificare umană: {reason} Ofertele și trimiterea cererii sunt blocate până la clarificarea dovezilor.",
     },
     "offer_selected": {
         "en": "You chose the {term}-month option.",
@@ -137,6 +142,15 @@ class CodeEventsMixin:
         """Raise SessionNotFound / SessionAccessDenied / InvalidUpload before a file is stored."""
         requested_document(self._load_owned(session_id, customer_id), doc_type)
 
+    def references_document(self, session_id: str, customer_id: str, document_id: str) -> bool:
+        """Cleanup must not remove evidence after state was committed but logging failed."""
+        try:
+            state = self._load_owned(session_id, customer_id)
+        except Exception:
+            # An unavailable state store is not proof that it is safe to delete evidence.
+            return True
+        return bool(state.application and any(d.document_id == document_id for d in state.application.documents))
+
     # ---- handlers ---------------------------------------------------------
 
     def _handle_document_uploaded(self, turn: "_Turn", event: DocumentUploaded) -> TurnResponse:
@@ -146,7 +160,15 @@ class CodeEventsMixin:
         app = state.application
 
         # A re-upload replaces the earlier record of this type.
+        previous_ids = {d.document_id for d in app.documents if d.doc_type == event.doc_type}
         app.documents = [d for d in app.documents if d.doc_type != event.doc_type]
+        # A replacement invalidates downstream decisions, even if values are unchanged.
+        app.eligibility = None
+        app.offers = None
+        app.selected_offer_id = None
+        app.summary = None
+        app.document_verification = None
+        app.document_verification_complete = False
         record = DocumentRecord(
             document_id=event.document_id,
             doc_type=event.doc_type,
@@ -168,21 +190,62 @@ class CodeEventsMixin:
             record.status = DocumentStatus(output.status)
             record.rejection_reason = output.rejection_reason
             record.extracted_fields = dict(output.extracted_fields)
+            record.human_review_required = output.human_review_required
+            record.validation = output.validation
+            record.extracted_data = output.extracted_data
+            record.sha256_hash = output.sha256_hash
+            # Only safe, relevant evidence goes to the model, never raw OCR text,
+            # identifiers, file paths, or detailed validation of the original document.
+            self._add_message(turn, "tool", "TOOL_RESULT process_document: " + json.dumps({
+                "status": output.status, "rejection_reason": output.rejection_reason,
+                "extracted_fields": {name: value.model_dump() for name, value in output.extracted_fields.items()},
+                "human_review_required": output.human_review_required, "simulated": output.simulated,
+            }))
+        self._refresh_document_verification(turn)
+        if app.document_verification and app.document_verification.human_review_required and record.status == DocumentStatus.accepted:
+            record.human_review_required = True
+            record.rejection_reason = "; ".join(app.document_verification.reasons)
+            record.extracted_fields = {}
+        if record.human_review_required:
+            record.status = DocumentStatus.rejected
         if record.status == DocumentStatus.accepted:
             merge_document_extraction(app, record, all_specs(app), now=turn.ctx.now)
             text = event_text("document_accepted", state.language, label=label)
             self._add_message(turn, "event", f"DOCUMENT_PROCESSED {event.doc_type}: accepted")
             turn.trace.code_event("upload", "accepted", doc_type=event.doc_type)
         else:
+            # Preserve the customer's earlier statement, if known, but never its old
+            # document verification. This also keeps a meaningful conflict on a retry.
+            specs = all_specs(app)
+            for name, value in list(app.fields.items()):
+                if value.document_id not in previous_ids:
+                    continue
+                del app.fields[name]
+                conflict = next((c for c in app.conflicts if c.field == name and c.document_id in previous_ids), None)
+                if conflict is not None and name in specs:
+                    try:
+                        stated = parse_field_value(specs[name], conflict.customer_value)
+                    except FieldValueError:
+                        continue
+                    app.fields[name] = FieldValue(
+                        kind=field_type_to_kind(specs[name].type), value=stated,
+                        source=FieldSource.customer, confirmed=True, updated_at=turn.ctx.now,
+                    )
+            app.conflicts = [conflict for conflict in app.conflicts if conflict.document_id not in previous_ids]
             reason = record.rejection_reason or ""
             text = event_text("document_rejected", state.language, label=label, reason=reason)
             turn.trace.code_event("upload", "rejected", doc_type=event.doc_type, reason=reason)
             self._add_message(turn, "event", f"DOCUMENT_PROCESSED {event.doc_type}: rejected {reason}".rstrip())
+            if record.human_review_required:
+                text = event_text("document_review", state.language, label=label, reason=reason)
+                # A model explanation cannot conceal a deterministic review gate.
+                return self._fixed_reply(turn, loaded, text)
         return self._explain(turn, loaded, text)
 
     def _handle_offer_selected(self, turn: "_Turn", event: OfferSelected) -> TurnResponse:
         state = turn.state
         loaded = state.model_copy(deep=True)
+        self._refresh_document_verification(turn)
         app = state.application
         offer = None
         if app is not None and app.application_id is None and app.offers is not None and offers_current(app):

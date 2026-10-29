@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -40,6 +40,7 @@ from src.agent.orchestration.fields import (
     FieldValueError,
     UpdateResult,
     apply_field_updates,
+    merge_document_extraction,
     field_type_to_kind,
     parse_field_value,
 )
@@ -55,6 +56,7 @@ from src.agent.orchestration.progress import (
 from src.agent.orchestration.prompting import build_context, build_messages
 from src.agent.orchestration.state import (
     ApplicationState,
+    DocumentStatus,
     EligibilityRecord,
     FieldSource,
     FieldValue,
@@ -74,6 +76,9 @@ from src.models.credit import FieldSpec, FieldType
 from src.services.conversations.store import SessionStore
 
 logger = logging.getLogger("src.agent.orchestration")
+
+if TYPE_CHECKING:
+    from src.services.document_processing.service import DocumentProcessingService
 
 
 def utcnow() -> datetime:
@@ -164,6 +169,11 @@ class Orchestrator(CodeEventsMixin):
         self._new_id = new_id
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
+
+    def configure_document_tools(self, service: "DocumentProcessingService", profiles: dict[str, dict]) -> None:
+        """Bind the API's upload store, including for an injected test orchestrator."""
+        from src.agent.tools.documents import register_document_tools
+        register_document_tools(self._registry, service, profiles)
 
     # ---- public API -------------------------------------------------------
 
@@ -536,6 +546,53 @@ class Orchestrator(CodeEventsMixin):
                 app.selected_offer_id = None
         elif name == "get_customer_profile":
             self._apply_profile(app, output, turn.ctx.now)
+        elif name == "verify_application_documents":
+            app.document_verification = output.cross_validation
+            app.document_verification_complete = output.complete
+            for item in output.documents:
+                records = [doc for doc in app.documents if doc.doc_type == item.doc_type]
+                if not records:
+                    continue
+                doc = max(records, key=lambda record: record.uploaded_at)
+                was_accepted = doc.status == DocumentStatus.accepted
+                fields_changed = doc.extracted_fields != item.extracted_fields
+                doc.human_review_required = item.human_review_required
+                if item.status in ("accepted", "rejected"):
+                    doc.status = DocumentStatus(item.status)
+                    doc.rejection_reason = "; ".join(item.reasons) if item.reasons else None
+                if output.cross_validation.human_review_required:
+                    doc.status = DocumentStatus.rejected
+                    doc.human_review_required = True
+                    doc.rejection_reason = "; ".join(output.cross_validation.reasons)
+                elif doc.status == DocumentStatus.accepted:
+                    doc.extracted_fields = item.extracted_fields
+                    if not was_accepted or fields_changed:
+                        merge_document_extraction(app, doc, all_specs(app), now=turn.ctx.now)
+                        app.eligibility = None
+                        app.offers = None
+                        app.selected_offer_id = None
+                        app.summary = None
+            if not output.ready_for_application:
+                app.offers = None
+                app.selected_offer_id = None
+                app.summary = None
+
+    def _refresh_document_verification(self, turn: _Turn) -> None:
+        """Fail closed when evidence changes; this gate is independent of model actions."""
+        app = turn.state.application
+        if not app or not app.requirements or not app.documents or app.application_id is not None:
+            return
+        if self._registry.get("verify_application_documents") is None:
+            return  # Standalone stub registries are only used by isolated unit tests.
+        output = self._code_tool(turn, "verify_application_documents", {})
+        if output is None:
+            for doc in app.documents:
+                doc.status = DocumentStatus.rejected
+                doc.human_review_required = True
+                doc.rejection_reason = "Document verification is unavailable; human review is required."
+            app.offers = None
+            app.selected_offer_id = None
+            app.summary = None
 
     def _apply_profile(self, app: ApplicationState, profile: CustomerProfileOutput, now: datetime) -> None:
         """Profile values fill required identity fields not already set by a document."""
@@ -574,6 +631,7 @@ class Orchestrator(CodeEventsMixin):
             app.requirements = requirements
             if any(spec.identity for spec in requirements.fields):
                 self._code_tool(turn, "get_customer_profile", {})
+        self._refresh_document_verification(turn)
         self._sync_summary(turn)
 
     def _sync_summary(self, turn: _Turn) -> None:

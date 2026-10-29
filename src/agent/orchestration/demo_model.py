@@ -21,8 +21,54 @@ _EVENT_PREFIX = "EVENT: "
 _TOOL_LINE = re.compile(r"^(TOOL_RESULT|TOOL_REJECTED) (\w+): ?(.*)$", re.DOTALL)
 _CREDIT_WORDS = re.compile(r"\b(?:credit\w*|loan\w*|împrumut\w*|imprumut\w*)", re.IGNORECASE)
 _NUMBER = re.compile(r"\d[\d.,]*")
-_YES = {"da", "yes", "ok", "corect", "correct"}
+_YES = {
+    "da", "yes", "ok", "corect", "correct", "sigur", "confirm", "de acord",
+    "in regula", "în regulă", "e ok", "e bine", "sure"
+}
 OFFER_TERM_OPTIONS = [36, 48]
+
+FIELD_QUESTIONS: dict[str, dict[str, str]] = {
+    "purpose": {
+        "ro": "Pentru ce anume ai nevoie de acest credit? (de exemplu: achiziție mașină, renovare, cheltuieli personale)",
+        "en": "What will you be using the loan for? (for example: buying a car, home renovation, personal expenses)",
+    },
+    "amount": {
+        "ro": "Ce sumă dorești să împrumuți? ({label} în RON, de exemplu: 30.000)",
+        "en": "What loan amount would you like to request? ({label} in RON, for example: 30,000)",
+    },
+    "term_months": {
+        "ro": "Pe ce perioadă ai dori creditul? ({label}, între 12 și 60 de luni)",
+        "en": "What loan term would you prefer? ({label}, between 12 and 60 months)",
+    },
+    "employment_type": {
+        "ro": "Care este statutul tău profesional actual? ({label}: salariat, liber profesionist / PFA, pensionar)",
+        "en": "What is your current employment status? ({label}: employed, self-employed, or retired)",
+    },
+    "monthly_net_income": {
+        "ro": "Care este venitul tău lunar net aproximativ? ({label} în RON)",
+        "en": "What is your approximate monthly net income? ({label} in RON)",
+    },
+    "employer_name": {
+        "ro": "Cum se numește angajatorul sau compania ta actuală? ({label})",
+        "en": "What is the name of your current employer? ({label})",
+    },
+    "monthly_obligations": {
+        "ro": "Ai alte rate sau obligații lunare în derulare? ({label}: dacă nu ai alte credite, poți scrie 0 sau „nu am”)",
+        "en": "Do you have any existing monthly loan installments or obligations? ({label}: if none, you can enter 0)",
+    },
+    "tenure_months": {
+        "ro": "De câte luni lucrezi la angajatorul actual? ({label})",
+        "en": "How many months have you been with your current employer? ({label})",
+    },
+    "employment_months": {
+        "ro": "De câte luni lucrezi la angajatorul actual? ({label}, de exemplu: 24 sau „2 ani”)",
+        "en": "How many months have you been with your current employer? ({label}, e.g. 24 or '2 years')",
+    },
+    "existing_monthly_obligations": {
+        "ro": "Ai alte rate sau obligații lunare în derulare? ({label}: dacă nu ai alte credite, poți scrie 0 sau „nu am”)",
+        "en": "Do you have any existing monthly loan installments or obligations? ({label}: if none, enter 0)",
+    },
+}
 
 # ---- texts ------------------------------------------------------------------
 
@@ -201,7 +247,7 @@ class _Turn:
                 kind, name, payload = match.groups()
                 self.tools[name] = json.loads(payload) if kind == "TOOL_RESULT" else None
 
-        self.lang: str = self.context.get("language") or "ro"
+        self.lang: str = self.context.get("language") or "en"
         self.needs: list[dict] = self.context.get("needs") or []
         self.has_application = self.context.get("stage") is not None
         self.notices: list[str] = self.context.get("notices") or []
@@ -275,13 +321,23 @@ class DemoChatModel:
                 following = t.needs[1] if len(t.needs) > 1 else None
                 if following is not None and following["kind"] == "choose_product":
                     return intent, updates, _call("get_credit_products", {})
-                text = _text("thanks", t.lang)
+                text = self._field_ack(first["target"], value, t.lang)
                 if following is not None:
                     text += " " + self._ask(t, following)
                 return intent, updates, _respond(text)
 
         if kind in ("confirm_extracted", "resolve_conflict") and t.customer_text and t.first_step:
-            if " ".join(_words(t.customer_text)) in _YES:
+            text_lower = t.customer_text.lower()
+            words_str = " ".join(_words(t.customer_text))
+            is_confirmed = (
+                words_str in _YES
+                or any(w in words_str.split() for w in ("yes", "da", "correct", "corect", "confirm", "sigur", "ok"))
+                or "is correct" in text_lower
+                or "use document value" in text_lower
+                or "document value" in text_lower
+                or "confirm" in text_lower
+            )
+            if is_confirmed:
                 updates = [
                     {"field": n["target"], "confirm": True}
                     for n in t.needs if n["kind"] in ("confirm_extracted", "resolve_conflict")
@@ -371,8 +427,11 @@ class DemoChatModel:
         lang = t.lang
         kind = need["kind"]
         if kind == "missing_field":
-            text = _text("ask_field", lang, label=need.get("label") or need.get("target"))
-            if need.get("options"):
+            target = need.get("target") or ""
+            label = need.get("label") or target
+            custom = FIELD_QUESTIONS.get(target, {}).get(lang)
+            text = custom.format(label=label) if custom else _text("ask_field", lang, label=label)
+            if need.get("options") and "Options:" not in text and "Variante:" not in text:
                 text += _text("options", lang, options=", ".join(need["options"]))
             return text
         if kind == "choose_product":
@@ -430,6 +489,26 @@ class DemoChatModel:
                 return product
         return products[0]
 
+    @staticmethod
+    def _field_ack(target: str, value: object, lang: str) -> str:
+        if target == "purpose":
+            return f"Am notat scopul ({value})." if lang == "ro" else f"Got it, for {value}!"
+        if target == "amount":
+            return f"Am notat suma de {value} RON." if lang == "ro" else f"Got it, {value} RON."
+        if target == "term_months":
+            return f"Am notat perioada de {value} luni." if lang == "ro" else f"Got it, {value} months."
+        if target == "employment_type":
+            return "Am reținut statutul profesional." if lang == "ro" else "Got it."
+        if target in ("employment_months", "tenure_months"):
+            return f"Am reținut vechimea de {value} luni." if lang == "ro" else f"Got it, {value} months duration."
+        if target in ("existing_monthly_obligations", "monthly_obligations"):
+            return f"Am notat obligațiile lunare ({value} RON)." if lang == "ro" else f"Got it, {value} RON obligations."
+        if target == "monthly_net_income":
+            return f"Am notat venitul net lunar ({value} RON)." if lang == "ro" else f"Got it, {value} RON net income."
+        if target == "employer_name":
+            return f"Am notat angajatorul ({value})." if lang == "ro" else f"Got it, employer {value}."
+        return _text("thanks", lang)
+
     def _extract(self, need: dict, text: str) -> str | int | None:
         """A value for the need from the customer's message that passes validation, or None."""
         name = need["target"]
@@ -441,23 +520,47 @@ class DemoChatModel:
             except (KeyError, ValueError, TypeError):
                 return None
         candidate: str | int | None = None
+        lower_text = text.lower().strip()
         if spec.type == FieldType.money:
-            numbers = []
-            for raw in _NUMBER.findall(text):
-                try:
-                    numbers.append((raw.rstrip(".,"), parse_money(raw.rstrip(".,"))))
-                except FieldValueError:
-                    continue
-            big = [raw for raw, value in numbers if value >= 100]
-            candidate = big[0] if big else (numbers[0][0] if numbers else None)
+            if name in ("existing_monthly_obligations", "monthly_obligations") and any(
+                w in lower_text for w in ("nu", "nu am", "niciun", "niciuna", "zero", "fara", "none", "no", "nimic")
+            ):
+                candidate = "0"
+            else:
+                k_match = re.search(r"(\d+)\s*k\b", lower_text)
+                if k_match:
+                    candidate = str(int(k_match.group(1)) * 1000)
+                else:
+                    numbers = []
+                    for raw in _NUMBER.findall(text):
+                        try:
+                            clean_raw = raw.rstrip(".,")
+                            numbers.append((clean_raw, parse_money(clean_raw)))
+                        except FieldValueError:
+                            continue
+                    big = [raw for raw, value in numbers if value >= 100]
+                    candidate = big[0] if big else (numbers[0][0] if numbers else None)
         elif spec.type == FieldType.integer:
-            match = re.search(r"\d+", text)
-            candidate = int(match.group()) if match else None
+            if name in ("term_months", "employment_months"):
+                years_match = re.search(r"(\d+)\s*(?:ani|an|years|year|yrs|yr)\b", lower_text)
+                if years_match:
+                    candidate = int(years_match.group(1)) * 12
+            if candidate is None:
+                match = re.search(r"\d+", text)
+                candidate = int(match.group()) if match else None
         elif spec.type == FieldType.enum:
-            normalised = "_".join(_words(text))
-            # longest option first, so "self employed" is not read as "employed"
-            options = sorted(spec.options or [], key=len, reverse=True)
-            candidate = next((o for o in options if o.lower() in normalised), None)
+            if name == "employment_type":
+                if any(w in lower_text for w in ("self employed", "self_employed", "self-employed", "pfa", "freelancer", "independent", "liber profesionist")):
+                    candidate = "self_employed" if "self_employed" in (spec.options or []) else None
+                elif any(w in lower_text for w in ("salariat", "angajat", "angajata", "salariata", "contract de munca", "cim", "employee", "employed")):
+                    candidate = "employed" if "employed" in (spec.options or []) else None
+                elif any(w in lower_text for w in ("pensionar", "pensionara", "pensie", "retired")):
+                    candidate = "retired" if "retired" in (spec.options or []) else None
+
+            if candidate is None:
+                normalised = "_".join(_words(text))
+                options = sorted(spec.options or [], key=len, reverse=True)
+                candidate = next((o for o in options if o.lower() in normalised), None)
         else:
             candidate = text.strip()
         if candidate is None:

@@ -217,6 +217,9 @@ def _extracted_fields(app: ApplicationState) -> list[ExtractedFieldView]:
     for name, value in app.fields.items():
         if value.source != FieldSource.document:
             continue
+        document = next((doc for doc in app.documents if doc.document_id == value.document_id), None)
+        if document is not None and (document.status != DocumentStatus.accepted or document.human_review_required):
+            continue
         spec = specs.get(name)
         conflict = conflicts.get(name)
         views.append(ExtractedFieldView(

@@ -437,7 +437,7 @@ def test_config_files_load():
     assert Product.mortgage_casa_ta in data.products
 
     # Check customers
-    assert len(data.customers) == 3
+    assert len(data.customers) >= 3
     assert "cust-001" in data.customers
     assert "cust-002" in data.customers
     assert "cust-003" in data.customers

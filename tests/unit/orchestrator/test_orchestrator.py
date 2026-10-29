@@ -481,6 +481,7 @@ def test_view_returns_chat_messages_and_latest(orchestrator_factory):
 def test_step_logging(orchestrator_factory, caplog):
     orch, _, _ = orchestrator_factory([GREET, call("get_credit_products", intent="product_info"), respond("Avem")])
     sid = orch.start_session(CUSTOMER).session_id
+    caplog.clear()
     with caplog.at_level(logging.INFO, logger="src.agent.orchestration"):
         orch.handle(sid, CUSTOMER, CustomerMessage("Ce credite aveți?"))
     lines = [json.loads(r.getMessage().split(" ", 1)[1]) for r in caplog.records

@@ -5,7 +5,7 @@
   "messages": [
     {
       "role": "assistant",
-      "text": "Mulțumesc. Te rog să-mi spui: Term (months).",
+      "text": "Am notat suma de 30000 RON. Pe ce perioadă ai dori creditul? (Term (months), între 12 și 60 de luni)",
       "citations": [],
       "created_at": "2026-10-28T09:00:00Z"
     }

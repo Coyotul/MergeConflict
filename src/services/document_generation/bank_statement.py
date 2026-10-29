@@ -217,6 +217,9 @@ def _render_statement_sheet(profile: CustomerDocumentProfile) -> tuple[Image.Ima
     draw.text((70, curr_y), f"Număr total operațiuni înregistrate în perioada curentă: {len(transactions)}", fill="#64748B", font=font_regular_sm)
     curr_y += 20
     draw.text((70, curr_y), "Sumele sunt exprimate în moneda oficială a contului (RON). Dobânda este calculată zilnic și capitalizată lunar.", fill="#64748B", font=font_regular_sm)
+    curr_y += 20
+    total_obligations = sum(abs(l.monthly_installment_ron) for l in profile.existing_loans)
+    draw.text((70, curr_y), f"Obligații lunare credite existente: {_format_money(total_obligations)} RON", fill="#475569", font=font_bold_sm)
 
     # 8. Disclaimer & Legal Footer
     curr_y = height - 100

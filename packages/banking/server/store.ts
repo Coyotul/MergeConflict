@@ -9,7 +9,8 @@ export class FileStore {
   static async open(path: string) {
     let state: DemoStore;
     try {
-      state = JSON.parse(await readFile(path, "utf8"));
+      // Alex's id changed from "customer-alex"; rename it everywhere so his seeded loans and application follow.
+      state = JSON.parse((await readFile(path, "utf8")).replaceAll('"customer-alex"', '"cust-alex-morgan"'));
       if (state.version !== 1 || !Array.isArray(state.applications) || !Array.isArray(state.customers) || !Array.isArray(state.products) || !Array.isArray(state.loans) || !state.messages || !state.consents || !Array.isArray(state.audit) || !Array.isArray(state.notifications) || !Array.isArray(state.idempotency)) throw new Error("Invalid demo store structure. Restore or move the file explicitly; it will not be silently reset.");
       // Older stores predate one-sign-in-per-customer: add any missing demo customer profiles.
       for (const customer of seedCustomers()) {

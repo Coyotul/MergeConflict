@@ -122,3 +122,36 @@ def test_load_bindings(tmp_path):
     path.write_text(f"bindings:\n  - customer_id: cust-radu-mihai\n    cnp: '{CNP}'\n    persona_tag: DEMO_RADU_MIHAI\n",
                     encoding="utf-8")
     assert load_bindings(path)["cust-radu-mihai"].cnp == CNP
+
+
+def run_sql(db, sql):
+    with closing(sqlite3.connect(db)) as conn:
+        conn.executescript(sql)
+        conn.commit()
+
+
+def test_loan_closing_after_as_of_is_still_active(db):
+    run_sql(db, "UPDATE credit_products SET status = 'CLOSED', closed_on = '2026-12-01' WHERE id = 1;")
+    report = sources(db).bureau("cust-radu-mihai")
+    assert report.active_products == 1 and report.monthly_instalments == Decimal("200.00")
+
+
+def test_debt_assignment_event_counts_as_assigned(db):
+    run_sql(db, "INSERT INTO credit_events (product, event_date, event_type) VALUES (1, '2026-09-15', 'DEBT_ASSIGNMENT');")
+    assert sources(db).bureau("cust-radu-mihai").written_off_or_assigned
+
+
+def test_active_loan_without_history_is_unknown(db):
+    run_sql(db, "DELETE FROM payment_history;")
+    report = sources(db).bureau("cust-radu-mihai")
+    assert report.unknown_obligations == 1 and report.has_history
+
+
+def test_stale_salary_is_not_current_income(db):
+    run_sql(db, f"""DELETE FROM monthly_salary_declarations WHERE month >= '2026-07-01';
+        INSERT INTO monthly_salary_declarations VALUES ('{CNP}', 1, '2026-03-01', 5000, 3000, 2000);
+        INSERT INTO income_records (cnp, fiscal_year, income_type, source_name, gross_amount_ron, net_amount_ron)
+            VALUES ('{CNP}', 2025, 'SALARY', 'Acme', 40000, 24000), ('{CNP}', 2026, 'SALARY', 'Acme', 9000, 6000);""")
+    report = sources(db).anaf("cust-radu-mihai")
+    # Completed 2025 only: the unfinished 2026 year is ignored.
+    assert report.income_basis == "annual_average" and report.net_monthly_income == Decimal("2000.00")

@@ -174,3 +174,9 @@ def test_no_credit_history_is_neutral():
 def test_age_at_maturity_rejects():
     result = run(fields(age=66, term_months=60))
     assert "age_out_of_range" in codes(result)
+
+
+def test_unknown_obligation_reviews():
+    result = run(b=bureau(active_products=1, unknown_obligations=1, has_history=True))
+    assert result.status == EligibilityStatus.manual_review
+    assert "bureau_obligation_unknown" in codes(result)

@@ -53,6 +53,8 @@ class BureauReport(BaseModel):
     open_insolvency: bool = False
     events_12m: list[str] = []
     fraud_records: int = 0
+    unknown_obligations: int = 0
+    has_history: bool = False
     score: int | None = None
     score_status: Literal["SCORED", "NO_SCORE", "NONE"] = "NONE"
     as_of: date

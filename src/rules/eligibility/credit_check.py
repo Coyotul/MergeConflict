@@ -139,6 +139,9 @@ def evaluate(fields: dict[str, Any], product: CreditProduct, rule: EligibilityRu
         if REVIEW_EVENTS & set(bureau.events_12m):
             review.append(ReasonItem(code="bureau_recent_restructuring",
                                      message="A loan was restructured or suspended in the last 12 months."))
+        if bureau.unknown_obligations:
+            review.append(ReasonItem(code="bureau_obligation_unknown", message=(
+                f"{bureau.unknown_obligations} active loan(s) have no payment history; the monthly amount is unknown.")))
         if bureau.fraud_records:
             review.append(ReasonItem(code="bureau_fraud_record", message="A card-fraud record is on file."))
         if bureau.score_status == "SCORED" and bureau.score is not None and bureau.score < rule.min_score:
@@ -146,7 +149,7 @@ def evaluate(fields: dict[str, Any], product: CreditProduct, rule: EligibilityRu
                 f"Credit score {bureau.score} is below {rule.min_score}.")))
         if bureau.score_status != "SCORED":
             info.append(ReasonItem(code="no_score", message="No credit score is available; this is neutral."))
-        if bureau.active_products == 0:
+        if bureau.active_products == 0 and not bureau.has_history:
             info.append(ReasonItem(code="no_credit_history", message="No active loans in the credit bureau; this is neutral."))
         else:
             info.append(ReasonItem(code="bureau_obligations_counted", message=(

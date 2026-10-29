@@ -15,7 +15,8 @@ from src.integrations.credit_sources.models import AnafReport, BureauReport, Cus
 from src.rules.eligibility.calendar import add_months
 
 CENT = Decimal("0.01")
-DEBTOR_PRODUCTS = """SELECT p.id, p.status FROM credit_products p
+# Status as of the report date: a closure after D is not yet effective (as in v_bureau_products).
+DEBTOR_PRODUCTS = """SELECT p.id, CASE WHEN p.closed_on > ? THEN 'ACTIVE' ELSE p.status END FROM credit_products p
     JOIN product_participants pp ON pp.product = p.id
     WHERE pp.cnp = ? AND pp.role IN ('DEBTOR', 'CODEBTOR') AND p.opened_on <= ?"""
 
@@ -64,14 +65,16 @@ class SqliteCreditSources:
             return AnafReport(status="not_found", as_of=as_of)
         iso = as_of.isoformat()
         income, basis = None, None
-        month = conn.execute("SELECT max(month) FROM monthly_salary_declarations WHERE cnp = ? AND month < ?",
-                             (cnp, as_of.replace(day=1).isoformat())).fetchone()[0]
+        # Monthly basis only for a declaration in the last three completed months.
+        month = conn.execute("SELECT max(month) FROM monthly_salary_declarations WHERE cnp = ? AND month >= ? AND month < ?",
+                             (cnp, add_months(as_of.replace(day=1), -3).isoformat(),
+                              as_of.replace(day=1).isoformat())).fetchone()[0]
         if month:
             total = conn.execute("SELECT sum(net_ron) FROM monthly_salary_declarations WHERE cnp = ? AND month = ?",
                                  (cnp, month)).fetchone()[0]
             income, basis = _money(total), "monthly_salary"
         year = conn.execute("SELECT max(fiscal_year) FROM income_records WHERE cnp = ? AND fiscal_year BETWEEN ? AND ?",
-                            (cnp, as_of.year - 3, as_of.year)).fetchone()[0]
+                            (cnp, as_of.year - 3, as_of.year - 1)).fetchone()[0]
         by_kind = dict(conn.execute(
             "SELECT income_type, sum(net_amount_ron) FROM income_records WHERE cnp = ? AND fiscal_year = ? "
             "GROUP BY income_type", (cnp, year)).fetchall()) if year else {}
@@ -94,8 +97,8 @@ class SqliteCreditSources:
         if cnp is None:
             return BureauReport(status="not_found", as_of=as_of)
         iso, window_start = as_of.isoformat(), add_months(as_of, -12).isoformat()
-        products = conn.execute(DEBTOR_PRODUCTS, (cnp, iso)).fetchall()
-        instalments, current_dpd, max_12m = Decimal("0"), 0, 0
+        products = conn.execute(DEBTOR_PRODUCTS, (iso, cnp, iso)).fetchall()
+        instalments, current_dpd, max_12m, unknown = Decimal("0"), 0, 0, 0
         active = [pid for pid, status in products if status != "CLOSED"]
         for pid in active:
             latest = conn.execute("SELECT instalment_due, days_past_due FROM payment_history "
@@ -103,6 +106,8 @@ class SqliteCreditSources:
             if latest:
                 instalments += _money(latest[0])
                 current_dpd = max(current_dpd, latest[1])
+            else:
+                unknown += 1  # Active exposure without history is unknown, never zero debt.
         for pid, _status in products:
             dpd = conn.execute("SELECT max(days_past_due) FROM payment_history WHERE product = ? AND month > ? AND month <= ?",
                                (pid, window_start, iso)).fetchone()[0]
@@ -114,15 +119,19 @@ class SqliteCreditSources:
         insolvency = conn.execute(
             "SELECT 1 FROM insolvency_records WHERE cnp = ? AND opened_on <= ? AND (closed_on IS NULL OR closed_on > ?)",
             (cnp, iso, iso)).fetchone() is not None
-        fraud = conn.execute("SELECT count(*) FROM card_fraud_records WHERE cnp = ? AND recorded_on <= ?",
-                             (cnp, iso)).fetchone()[0]
+        fraud = conn.execute("SELECT count(*) FROM card_fraud_records WHERE cnp = ? AND recorded_on BETWEEN ? AND ?",
+                             (cnp, add_months(as_of, -84).isoformat(), iso)).fetchone()[0]
         score = conn.execute("SELECT score, status FROM fico_scores WHERE cnp = ? AND calculated_on <= ? "
                              "ORDER BY calculated_on DESC LIMIT 1", (cnp, iso)).fetchone()
         statuses = {status for _pid, status in products}
+        assigned = bool(ids) and conn.execute(
+            f"SELECT 1 FROM credit_events WHERE product IN ({','.join('?' * len(ids))}) "
+            "AND event_type = 'DEBT_ASSIGNMENT' AND event_date <= ?", (*ids, iso)).fetchone() is not None
         return BureauReport(
             status="found", active_products=len(active), monthly_instalments=instalments.quantize(CENT),
             current_max_dpd=current_dpd, max_dpd_12m=max(max_12m, current_dpd),
-            written_off_or_assigned=bool(statuses & {"WRITTEN_OFF", "ASSIGNED"}),
+            written_off_or_assigned=assigned or bool(statuses & {"WRITTEN_OFF", "ASSIGNED"}),
+            unknown_obligations=unknown, has_history=bool(products),
             open_insolvency=insolvency or "IN_INSOLVENCY_PROCEDURE" in statuses,
             events_12m=events, fraud_records=fraud,
             score=score[0] if score else None, score_status=score[1] if score else "NONE", as_of=as_of)

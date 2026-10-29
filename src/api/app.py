@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from src.agent.orchestration.orchestrator import Orchestrator
+from src.agent.orchestration.orchestrator import Orchestrator, utcnow
 from src.api.application.chat import create_chat_router
 from src.core.composition import build_orchestrator
 from src.agent.tools.stubs import StubData
@@ -26,6 +26,8 @@ from src.models.chat import ErrorBody
 from src.services.document_processing.service import DocumentProcessingService
 from src.storage.secure_documents.store import SecureDocumentStore
 from src.services.human_review.store import ReviewStore
+from src.services.human_review.service import ReviewService
+from src.api.application.reviews import create_review_router
 
 
 logger = logging.getLogger("src.api")
@@ -86,12 +88,16 @@ def create_app(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type", "X-Customer-Id"],
+        allow_headers=["Content-Type", "X-Customer-Id", "X-Reviewer-Id"],
         allow_credentials=False,
     )
 
     app.state.documents = documents
     app.state.review_store = review_store
+    review_service = ReviewService(
+        review_store, DocumentProcessingService(documents), StubData.load(settings.config_dir), clock=utcnow,
+    )
+    app.state.review_service = review_service
     app.state.orchestrator = orchestrator
 
     # Register chat router
@@ -101,6 +107,7 @@ def create_app(
         max_upload_bytes=settings.max_upload_bytes
     )
     app.include_router(chat_router)
+    app.include_router(create_review_router(review_service, max_upload_bytes=settings.max_upload_bytes))
 
     # Health endpoint
     @app.get("/health")

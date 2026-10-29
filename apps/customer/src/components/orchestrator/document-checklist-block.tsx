@@ -22,17 +22,8 @@ export function DocumentChecklistBlockComponent({
 }) {
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  const canUpload = (docType: string) => {
-    return (
-      awaiting.kind === "document" &&
-      awaiting.document_types?.includes(docType)
-    );
-  };
-
   const anyUpload = block.items.some(
-    (item) =>
-      canUpload(item.doc_type) &&
-      (item.status === "requested" || item.status === "rejected")
+    (item) => item.status === "requested" || item.status === "rejected"
   );
 
   return (
@@ -46,12 +37,19 @@ export function DocumentChecklistBlockComponent({
         const isAccepted = item.status === "accepted";
         const isRejected = item.status === "rejected";
         const isRequested = item.status === "requested";
-        const uploadEnabled = canUpload(item.doc_type);
+        const isAwaitingNow =
+          awaiting.kind === "document" &&
+          (awaiting.document_types?.includes(item.doc_type) ?? false);
+        const canUploadNow = isRequested || isRejected;
 
         return (
           <div
             key={item.doc_type}
-            className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"
+            className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 transition-colors ${
+              isAwaitingNow
+                ? "border-primary/60 bg-brand-soft/20 ring-1 ring-primary/40"
+                : "border-slate-200 bg-white"
+            }`}
           >
             <span
               className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
@@ -59,13 +57,22 @@ export function DocumentChecklistBlockComponent({
                   ? "bg-emerald-50 text-emerald-600"
                   : isRejected
                     ? "bg-red-50 text-red-600"
-                    : "bg-slate-50 text-slate-400"
+                    : isAwaitingNow
+                      ? "bg-primary/20 text-ink"
+                      : "bg-slate-50 text-slate-400"
               }`}
             >
               <FileText className="size-5" strokeWidth={1.6} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold">{item.label}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold">{item.label}</p>
+                {isAwaitingNow && (
+                  <Pill tone="amber" className="px-1.5 py-0 text-[9px]">
+                    Required now
+                  </Pill>
+                )}
+              </div>
               {isRejected && item.rejection_reason && (
                 <p className="mt-1 text-[10px] text-red-600">
                   {item.rejection_reason}
@@ -76,20 +83,25 @@ export function DocumentChecklistBlockComponent({
                   Accepted
                 </Pill>
               )}
+              {isRequested && !isAwaitingNow && (
+                <p className="mt-0.5 text-[10px] text-slate-400">
+                  Ready for upload
+                </p>
+              )}
             </div>
             {isAccepted && <CircleCheck className="size-4 text-emerald-500" />}
             {isRejected && <XCircle className="size-4 text-red-500" />}
-            {uploadEnabled && (isRequested || isRejected) && (
+            {canUploadNow && (
               <>
                 <Button
-                  variant="secondary"
+                  variant={isAwaitingNow ? "default" : "secondary"}
                   size="sm"
                   disabled={disabled}
                   onClick={() =>
                     fileInputRefs.current[item.doc_type]?.click()
                   }
                 >
-                  <UploadCloud />
+                  <UploadCloud className="size-3.5" />
                   Upload {item.label}
                 </Button>
                 <input
@@ -110,9 +122,6 @@ export function DocumentChecklistBlockComponent({
                   }}
                 />
               </>
-            )}
-            {!isAccepted && !uploadEnabled && (
-              <Pill tone="slate">Pending</Pill>
             )}
           </div>
         );

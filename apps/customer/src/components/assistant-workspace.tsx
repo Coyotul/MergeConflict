@@ -12,6 +12,7 @@ import { StartingCards } from "./guided-options";
 import { Composer } from "./composer";
 import { ContextPanel } from "./context-panel";
 import { OrchestratorConversation } from "./orchestrator/conversation";
+import { QuickSuggestions } from "./orchestrator/quick-suggestions";
 
 const TOPIC_QUERIES: Record<string, string> = {
   support: "I need human support",
@@ -143,11 +144,20 @@ export function AssistantWorkspace() {
                 <PilotNotice />
               </div>
             ) : (
-              <div className="mb-2 flex items-center justify-end gap-3">
-                <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <ShieldCheck className="size-3.5 text-slate-400" />Synthetic data · simulated, based on public conditions
-                </span>
-              </div>
+              <>
+                <div className="mb-1.5 flex items-center justify-end gap-3">
+                  <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <ShieldCheck className="size-3.5 text-slate-400" />Synthetic data · simulated, based on public conditions
+                  </span>
+                </div>
+                <QuickSuggestions
+                  state={state}
+                  disabled={disabled}
+                  onSelect={(val) => {
+                    void send(val);
+                  }}
+                />
+              </>
             )}
             <Composer disabled={disabled} onSend={send} />
           </div>

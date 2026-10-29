@@ -58,6 +58,7 @@ def test_rag_citation_mapping():
     # Build a fake passage with section path
     citation = Citation(
         publisher="Raiffeisen Bank",
+        canonical_key="/demo/doc",
         title="Credite de nevoi personale",
         url="https://www.raiffeisen.ro/persoane-fizice/credite/nevoi-personale/",
         section_path=["Costuri", "Comisioane"],
@@ -124,6 +125,7 @@ def test_campaign_warning_in_text():
     """Test that campaign_ended and teaser_figure warnings are appended to text."""
     citation = Citation(
         publisher="Synthetic stub",
+        canonical_key="/demo/doc",
         title="Test page",
         url="https://example.com",
         section_path=["Promotii"],
@@ -183,6 +185,7 @@ def test_superseded_withdrawn_filtered_unless_only_ones():
     # Create three passages: one superseded, one withdrawn, one normal
     citation1 = Citation(
         publisher="Synthetic stub",
+        canonical_key="/demo/doc",
         title="Old doc",
         url="https://example.com/old",
         section_path=[],
@@ -207,6 +210,7 @@ def test_superseded_withdrawn_filtered_unless_only_ones():
 
     citation2 = Citation(
         publisher="Synthetic stub",
+        canonical_key="/demo/doc",
         title="Withdrawn doc",
         url="https://example.com/withdrawn",
         section_path=[],
@@ -231,6 +235,7 @@ def test_superseded_withdrawn_filtered_unless_only_ones():
 
     citation3 = Citation(
         publisher="Synthetic stub",
+        canonical_key="/demo/doc",
         title="Current doc",
         url="https://example.com/current",
         section_path=[],
@@ -308,6 +313,7 @@ def test_conflicts_become_notice():
     """Test that conflicts are converted to notice entries."""
     citation = Citation(
         publisher="Synthetic stub",
+        canonical_key="/demo/doc",
         title="Test doc",
         url="https://example.com",
         section_path=[],
@@ -428,12 +434,8 @@ def test_rag_mode_without_service_raises_configuration_error(monkeypatch):
     original_import = builtins.__import__
 
     def mock_import(name, *args, **kwargs):
-        if "src.services.retrieval.service" in name:
-            raise ImportError("No module named 'src.services.retrieval.service'")
-        if "src.services.retrieval.connect" in name:
-            raise ImportError("No module named 'src.services.retrieval.connect'")
-        if "src.services.retrieval.embedder" in name:
-            raise ImportError("No module named 'src.services.retrieval.embedder'")
+        if "src.services.retrieval.factory" in name:
+            raise ImportError("No module named 'src.services.retrieval.factory'")
         return original_import(name, *args, **kwargs)
 
     monkeypatch.setattr("builtins.__import__", mock_import)
@@ -441,7 +443,7 @@ def test_rag_mode_without_service_raises_configuration_error(monkeypatch):
     with pytest.raises(ConfigurationError) as exc_info:
         build_policy_search(settings)
 
-    assert "ORCHESTRATOR_RETRIEVAL=rag needs the RAG retrieval service (feat/rag-service) to be merged" in str(exc_info.value)
+    assert "ORCHESTRATOR_RETRIEVAL=rag needs the RAG retrieval service (src/services/retrieval)" in str(exc_info.value)
 
 
 def test_build_policy_search_stub_mode():
@@ -479,3 +481,15 @@ def test_rag_policy_search_has_no_simulated_attribute():
 
     assert result is expected_result  # Same object reference
     mock_service.search.assert_called_once_with(query)
+
+
+def test_rag_mode_builds_the_real_retrieval_service_without_loading_the_model():
+    """RAG mode wires src/services/retrieval/factory; the embedder stays lazy until the first search."""
+    from src.agent.tools.retrieval import RagPolicySearch
+    from src.services.retrieval.service import RetrievalService
+
+    search = build_policy_search(OrchestratorSettings(retrieval="rag"))
+
+    assert isinstance(search, RagPolicySearch)
+    assert isinstance(search.service, RetrievalService)
+    assert getattr(search.service.embedder, "_model", None) is None

@@ -2,6 +2,7 @@
 from datetime import datetime, UTC, date
 from pathlib import Path
 from typing import Protocol, TYPE_CHECKING
+from urllib.parse import urlparse
 import yaml
 
 from src.models.knowledge import (
@@ -78,6 +79,7 @@ class StubPolicySearch:
                 publisher=item["publisher"],
                 title=item["header"],
                 url=item["url"],
+                canonical_key=item.get("canonical_key") or urlparse(item["url"]).path,
                 section_path=item["section_path"],
                 effective_date=effective_date,
                 fetched_at=fetched_at
@@ -232,22 +234,14 @@ def build_policy_search(settings: "OrchestratorSettings") -> PolicySearch:
     elif settings.retrieval == "rag":
         # Lazy import to avoid ImportError when RAG service is not available
         try:
-            from src.services.retrieval.service import RetrievalService
-            from src.services.retrieval.connect import build_connection
-            from src.services.retrieval.embedder import build_embedder
-            from src.core.settings import load_rag_settings
+            from src.services.retrieval.factory import build_retrieval_service
         except ImportError:
             raise ConfigurationError(
-                "ORCHESTRATOR_RETRIEVAL=rag needs the RAG retrieval service (feat/rag-service) to be merged"
+                "ORCHESTRATOR_RETRIEVAL=rag needs the RAG retrieval service (src/services/retrieval)"
             )
 
-        # Build RAG dependencies
-        rag_settings = load_rag_settings()
-        connection = build_connection(rag_settings)
-        embedder = build_embedder(rag_settings)
-
-        # Create and return RAG service
-        service = RetrievalService(connection, embedder, rag_settings)
+        # The factory loads RAG settings and builds a lazy BGE-M3 embedder; the model loads on first search.
+        service = build_retrieval_service()
         return RagPolicySearch(service)
     else:
         raise ConfigurationError(f"Unknown retrieval mode: {settings.retrieval}")

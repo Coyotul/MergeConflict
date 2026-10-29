@@ -58,3 +58,21 @@ def test_authority_map_complete():
     assert set(AUTHORITY_BY_DOC_KIND) == set(DocKind)
     assert AUTHORITY_BY_DOC_KIND[DocKind.article] is Authority.low
     assert AUTHORITY_BY_DOC_KIND[DocKind.category_hub] is Authority.low
+
+
+@pytest.mark.parametrize("text", [None, 5, ["dae"]])
+def test_query_text_must_be_a_string(text):
+    with pytest.raises(ValidationError):
+        SearchQuery(text=text)
+
+
+def test_query_json_schema_carries_the_constraints():
+    props = SearchQuery.model_json_schema()["properties"]
+    assert props["text"]["minLength"] == 1 and props["text"]["maxLength"] == 1000
+    assert props["top_k"]["minimum"] == 1 and props["top_k"]["maximum"] == 20 and props["top_k"]["default"] == 6
+
+
+def test_empty_filter_lists_behave_like_none():
+    q = SearchQuery(text="dae", products=[], topics=[], doc_kinds=[])
+    assert (q.products, q.topics, q.doc_kinds) == (None, None, None)
+    assert q.effective_topics == CREDIT_TOPICS

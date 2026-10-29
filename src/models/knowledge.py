@@ -1,8 +1,8 @@
 """Shared knowledge models and taxonomies for RAG retrieval."""
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 from datetime import date, datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 
 class DocKind(StrEnum):
@@ -139,32 +139,23 @@ class SearchStatus(StrEnum):
 
 class SearchQuery(BaseModel):
     """A search query for the knowledge base."""
-    text: str
+    # Stripped first, then 1-1000 characters; a non-string is a ValidationError.
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+    # An empty list means no filter, like None.
     products: list[Product] | None = None
     topics: list[Topic] | None = None
     doc_kinds: list[DocKind] | None = None
-    top_k: int = 6
+    top_k: int = Field(6, ge=1, le=20)
     as_of: date = Field(default_factory=date.today)
     include_superseded: bool = False
     include_withdrawn: bool = False
     expand_context: bool = False
 
-    @field_validator("text", mode="before")
+    @field_validator("products", "topics", "doc_kinds")
     @classmethod
-    def validate_text(cls, v: str) -> str:
-        """Strip text and validate length."""
-        v = v.strip()
-        if not v or len(v) > 1000:
-            raise ValueError("text must be 1-1000 characters after stripping")
-        return v
-
-    @field_validator("top_k")
-    @classmethod
-    def validate_top_k(cls, v: int) -> int:
-        """Validate top_k is between 1 and 20."""
-        if v < 1 or v > 20:
-            raise ValueError("top_k must be between 1 and 20")
-        return v
+    def empty_filter_is_none(cls, v: list | None) -> list | None:
+        """An empty filter list would match nothing; treat it as no filter."""
+        return v or None
 
     @property
     def effective_topics(self) -> frozenset[Topic]:

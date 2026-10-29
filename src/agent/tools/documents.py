@@ -1,4 +1,5 @@
 """Real, owner-scoped OCR/extraction tools; the model cannot accept or store evidence."""
+from datetime import date
 from decimal import Decimal
 from typing import Mapping
 
@@ -25,6 +26,11 @@ DOCUMENT_KINDS = {
     "bank_statement": DocumentKind.STATEMENT,
 }
 MIN_EXTRACTION_CONFIDENCE = 0.85
+
+
+def completed_months(start: date, today: date) -> int:
+    """Whole months worked; the current month counts only once its start day is reached."""
+    return (today.year - start.year) * 12 + today.month - start.month - (today.day < start.day)
 
 
 class DocumentTools:
@@ -91,6 +97,11 @@ class DocumentTools:
                 "employer_name": income.employer_name,
                 "monthly_net_income": str(Decimal(str(income.monthly_net_income)).quantize(Decimal("0.01"))),
             }
+            # Only indefinite contracts pass validation, so an accepted payslip proves employment.
+            if income.contract_type:
+                values["employment_type"] = "employed"
+            if income.employment_start_date:
+                values["employment_months"] = str(completed_months(income.employment_start_date, ctx.now.date()))
         elif doc_type == "bank_statement":
             statement = ExtractedStatement.model_validate(data)
             if not statement.account_holder:

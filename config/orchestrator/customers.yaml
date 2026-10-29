@@ -18,6 +18,8 @@ customers:
       payslip:
         employer_name: "TechCorp SRL"
         monthly_net_income: 6200
+        employment_type: "employed"
+        employment_months: 48
 
       bank_statement:
         existing_monthly_obligations: 400
@@ -39,6 +41,8 @@ customers:
       payslip:
         employer_name: "AutoService SA"
         monthly_net_income: 2100
+        employment_type: "employed"
+        employment_months: 24
 
       bank_statement:
         existing_monthly_obligations: 0
@@ -60,6 +64,8 @@ customers:
       payslip:
         employer_name: "Dumitru Consulting PFA"
         monthly_net_income: 8000
+        employment_type: "self_employed"
+        employment_months: 36
 
       bank_statement:
         existing_monthly_obligations: 1000
@@ -84,6 +90,8 @@ customers:
       payslip:
         employer_name: "Northstar Studio S.R.L"
         monthly_net_income: 8500
+        employment_type: "employed"
+        employment_months: 66
 
       bank_statement:
         existing_monthly_obligations: 1237.50
@@ -105,6 +113,8 @@ customers:
       payslip:
         employer_name: "Northstar Studio S.R.L"
         monthly_net_income: 8500
+        employment_type: "employed"
+        employment_months: 66
 
       bank_statement:
         existing_monthly_obligations: 1237.50

@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.orchestration.state import DocumentRecord, DocumentStatus, Flow, SessionState
+from src.agent.orchestration.fields import merge_document_extraction
+from src.agent.orchestration.blocks import all_specs
+from src.agent.orchestration.state import DocumentRecord, DocumentStatus, FieldSource, Flow, SessionState
 from src.agent.tools.registry import ToolContext
 from src.agent.tools.retrieval import StubPolicySearch
 from src.agent.tools.stubs import StubData, build_stub_registry
@@ -153,3 +155,42 @@ def test_read_only_extraction_rechecks_the_hash_instead_of_replaying_stale_field
     outcome, read = tools[1].execute("read_document_extraction", {"doc_type": "payslip"}, tools[2], caller="model")
     assert outcome.ok and read.document.status == "rejected"
     assert not read.document.extracted_fields
+
+def test_accepted_payslip_verifies_employment_type_and_tenure(tools):
+    """Start date 01.04.2021 is 66 whole months before NOW (2026-10-28)."""
+    arguments = stage(tools, "payslip", income_text())
+    _, output = tools[1].execute("process_document", arguments, tools[2], caller="code")
+    assert output.status == "accepted"
+    assert output.extracted_fields["employment_type"].value == "employed"
+    assert output.extracted_fields["employment_months"].value == "66"
+
+
+def test_employment_tenure_counts_only_completed_months(tools):
+    text = income_text().replace("01.04.2021", "29.04.2021")
+    arguments = stage(tools, "payslip", text)
+    _, output = tools[1].execute("process_document", arguments, tools[2], caller="code")
+    assert output.extracted_fields["employment_months"].value == "65"
+
+
+def test_payslip_without_employment_start_date_is_not_accepted(tools):
+    text = income_text().replace("Angajat din data de 01.04.2021\n", "")
+    arguments = stage(tools, "payslip", text)
+    _, output = tools[1].execute("process_document", arguments, tools[2], caller="code")
+    assert output.status == "rejected"
+    assert "employment_months" not in output.extracted_fields
+
+
+def test_payslip_fills_the_empty_employment_fields_in_session_state(tools):
+    arguments = stage(tools, "payslip", income_text())
+    _, output = tools[1].execute("process_document", arguments, tools[2], caller="code")
+    app = tools[2].state.application
+    doc = app.documents[-1]
+    doc.status = DocumentStatus.accepted
+    doc.extracted_fields = dict(output.extracted_fields)
+    for name in ("employment_type", "employment_months"):
+        app.fields.pop(name, None)
+    merge_document_extraction(app, doc, all_specs(app), now=NOW)
+    assert app.fields["employment_type"].value == "employed"
+    assert app.fields["employment_months"].value == 66
+    assert app.fields["employment_months"].source == FieldSource.document
+    assert app.fields["employment_months"].confirmed is False

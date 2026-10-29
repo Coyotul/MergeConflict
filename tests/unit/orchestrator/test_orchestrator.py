@@ -529,7 +529,9 @@ def test_blocks_for_document_stage(stub_data):
     assert statuses["offer_selection"] == statuses["submitted"] == "todo"
     extracted = next(b for b in resp.blocks if b.type == "extracted_fields")
     by_field = {f.field: f for f in extracted.fields}
-    assert set(by_field) == {"monthly_net_income", "employer_name", "existing_monthly_obligations"}
+    assert set(by_field) == {
+        "monthly_net_income", "employer_name", "employment_type", "employment_months", "existing_monthly_obligations",
+    }
     assert by_field["monthly_net_income"].needs_confirmation is True
     assert by_field["monthly_net_income"].value == "6200"
     assert by_field["employer_name"].needs_confirmation is False

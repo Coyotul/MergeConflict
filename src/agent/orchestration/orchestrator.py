@@ -68,7 +68,7 @@ from src.agent.orchestration.state import (
 from src.agent.orchestration.trace import NullTracer, Tracer
 from src.agent.orchestration.turn_trace import TurnTrace, record_session_started
 from src.agent.tools.contracts import CustomerProfileOutput
-from src.agent.tools.registry import ToolCallOutcome, ToolContext, ToolRegistry
+from src.agent.tools.registry import ToolCallOutcome, ToolContext, ToolErrorCode, ToolRegistry
 from src.core.errors import ModelUnavailable, SessionAccessDenied, SessionBusy
 from src.integrations.llm.chat import ChatModel
 from src.models.chat import ChatMessageView, CitationRef, SessionView, TurnResponse
@@ -484,6 +484,10 @@ class Orchestrator(CodeEventsMixin):
         outcome, output = turn.trace.execute(self._registry, call.tool, call.arguments, turn.ctx, caller="model")
         if outcome.ok:
             self._store_output(turn, call.tool, output)
+        elif call.tool == "calculate_loan_offer" and outcome.error_code in (
+            ToolErrorCode.tool_failed, ToolErrorCode.tool_unavailable,
+        ):
+            self._clear_pricing(turn.state.application)
         self._add_message(turn, "tool", outcome.as_message())
         self._sync_application(turn)
         return outcome
@@ -517,6 +521,10 @@ class Orchestrator(CodeEventsMixin):
         """Run a tool as code. Failures are logged and reported to the model."""
         outcome, output = turn.trace.execute(self._registry, name, arguments, turn.ctx, caller="code")
         if not outcome.ok:
+            if name == "calculate_loan_offer" and outcome.error_code in (
+                ToolErrorCode.tool_failed, ToolErrorCode.tool_unavailable,
+            ):
+                self._clear_pricing(turn.state.application)
             logger.warning("code_tool_failed %s", json.dumps({
                 "session_id": turn.state.session_id, "turn_id": turn.turn_id,
                 "tool": name, "error_code": outcome.error_code, "error": outcome.error_message,
@@ -541,9 +549,13 @@ class Orchestrator(CodeEventsMixin):
                 verified_inputs=all_verified(app),
             )
         elif name == "calculate_loan_offer":
+            if output.status != "ok" or not output.offers:
+                self._clear_pricing(app)
+                return
             app.offers = OffersRecord(offers=output.offers, input_fingerprint=fingerprint(app, offer_input_names(app)))
             if app.selected_offer_id not in {o.offer_id for o in output.offers}:
                 app.selected_offer_id = None
+                app.summary = None
         elif name == "get_customer_profile":
             self._apply_profile(app, output, turn.ctx.now)
         elif name == "verify_application_documents":
@@ -590,6 +602,14 @@ class Orchestrator(CodeEventsMixin):
                 doc.status = DocumentStatus.rejected
                 doc.human_review_required = True
                 doc.rejection_reason = "Document verification is unavailable; human review is required."
+            app.offers = None
+            app.selected_offer_id = None
+            app.summary = None
+
+    @staticmethod
+    def _clear_pricing(app: ApplicationState | None) -> None:
+        """A failed recalculation cannot leave an old offer ready for confirmation."""
+        if app is not None and app.application_id is None:
             app.offers = None
             app.selected_offer_id = None
             app.summary = None

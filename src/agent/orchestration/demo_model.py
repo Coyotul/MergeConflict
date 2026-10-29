@@ -414,6 +414,9 @@ class DemoChatModel:
                     text += f" {reasons}."
             parts.append(text)
         offers = self._ctx_list(t, "offers")
+        pricing = t.tools.get("calculate_loan_offer")
+        if pricing and pricing.get("status") == "invalid":
+            parts.append(" ".join(f"{error['code']}: {error['message']}" for error in pricing.get("errors", [])))
         if t.tools.get("calculate_loan_offer") and offers:
             items = "; ".join(
                 _text("offer_item", lang, term=o["term_months"], installment=o["monthly_installment"],
@@ -421,6 +424,16 @@ class DemoChatModel:
                 for o in offers
             )
             parts.append(_text("offers", lang, items=items))
+            # Keep deterministic engine disclosures customer-visible in mock mode
+            # as well as in the offer blocks; never calculate figures here.
+            disclosures = [list(dict.fromkeys(offer.get("assumptions") or [])) for offer in offers]
+            common = set(disclosures[0]).intersection(*(set(items) for items in disclosures[1:]))
+            parts.extend(text for text in disclosures[0] if text in common)
+            for offer, details in zip(offers, disclosures):
+                unique = [text for text in details if text not in common]
+                if unique:
+                    term_label = "luni" if lang == "ro" else "months"
+                    parts.append(f"{offer['term_months']} {term_label}: " + " ".join(unique))
         return parts
 
     def _ask(self, t: _Turn, need: dict) -> str:

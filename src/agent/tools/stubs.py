@@ -1,23 +1,16 @@
-"""Stub tool implementations for the orchestrator."""
+"""Synthetic session tools, with deterministic pricing delegated to its service."""
 import logging
 import math
 
 logger = logging.getLogger("src.agent.tools.stubs")
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, UTC, date
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 import yaml
 
-from src.agent.orchestration.progress import (
-    can_run_eligibility,
-    can_calculate_offers,
-    fingerprint,
-    eligibility_input_names,
-    offer_input_names,
-)
+from src.agent.orchestration.progress import can_run_eligibility
 from src.agent.orchestration.state import (
     SessionState,
     ExtractedField,
@@ -36,8 +29,6 @@ from src.agent.tools.contracts import (
     RunEligibilityInput,
     ProcessDocumentInput,
     ProcessDocumentOutput,
-    CalculateOffersInput,
-    CalculateOffersOutput,
     CreateApplicationInput,
     CreateApplicationOutput,
     SubmitApplicationInput,
@@ -49,6 +40,7 @@ from src.agent.tools.contracts import (
     RequestHumanReviewOutput,
 )
 from src.agent.tools.registry import ToolRegistry, ToolSpec, ToolContext, Flow
+from src.agent.tools.pricing import priced_catalog_product, register_pricing_tool
 from src.agent.tools.retrieval import PolicySearch
 from src.core.errors import ToolUnavailable, KnowledgeStoreUnavailable, EmbeddingModelUnavailable
 from src.models.chat import CitationRef
@@ -62,7 +54,6 @@ from src.models.credit import (
     EligibilityResult,
     EligibilityStatus,
     ReasonItem,
-    LoanOffer,
 )
 from src.models.knowledge import Product, SearchQuery, SearchStatus, PassageFlag
 
@@ -344,7 +335,7 @@ def build_stub_registry(
 
     # Handler for get_credit_products
     def handle_get_products(input: GetCreditProductsInput, ctx: ToolContext) -> GetCreditProductsOutput:
-        products = list(data.products.values())
+        products = [priced_catalog_product(product) for product in data.products.values()]
 
         # Filter by purpose if provided
         if input.purpose:
@@ -541,87 +532,6 @@ def build_stub_registry(
             simulated=True
         )
 
-    # Handler for calculate_loan_offer
-    def handle_calculate_offers(input: CalculateOffersInput, ctx: ToolContext) -> CalculateOffersOutput:
-        app = ctx.state.application
-        if app is None or app.product_code is None:
-            raise ValueError("No application or product selected")
-
-        product_code = app.product_code
-        product = data.products[product_code]
-
-        # Get amount and term_months from application
-        amount = Decimal(str(app.fields["amount"].value))
-        term_months = int(app.fields["term_months"].value)
-
-        # Build list of terms: [term_months] + input options, maintaining order
-        # Customer's term_months is always first
-        terms_list = [term_months]
-
-        # Add options in order, clamping each to product range
-        if input.term_options_months:
-            for opt in input.term_options_months:
-                # Clamp to product range
-                clamped = max(product.min_term_months, min(product.max_term_months, opt))
-                terms_list.append(clamped)
-
-        # Clamp customer's term too
-        terms_list[0] = max(product.min_term_months, min(product.max_term_months, terms_list[0]))
-
-        # Dedupe while maintaining order, take up to 3
-        seen = set()
-        deduped_terms = []
-        for t in terms_list:
-            if t not in seen:
-                seen.add(t)
-                deduped_terms.append(t)
-                if len(deduped_terms) >= 3:
-                    break
-
-        sorted_terms = deduped_terms
-
-        # Build offers
-        offers = []
-        input_fingerprint = fingerprint(app, offer_input_names(app))
-
-        for term in sorted_terms:
-            # Calculate installment
-            rate = product.indicative_annual_rate_percent
-            monthly_installment = annuity_installment(amount, rate, term)
-
-            # Calculate totals
-            total_repayment = monthly_installment * Decimal(term)
-            total_cost = total_repayment - amount
-            fees = Decimal("0")
-
-            # Build offer ID
-            offer_id = f"{product_code.value}-{term}m-{input_fingerprint[:6]}"
-
-            # Assumptions
-            assumptions = [
-                f"Illustrative annual interest rate: {rate}%",
-                "Fees: 0 RON",
-                "Simulated, based on public conditions; not an offer from Raiffeisen Bank"
-            ]
-
-            offers.append(LoanOffer(
-                offer_id=offer_id,
-                product_code=product_code,
-                amount=Money(amount=amount, currency="RON"),
-                term_months=term,
-                annual_interest_rate_percent=rate,
-                monthly_installment=Money(amount=monthly_installment, currency="RON"),
-                total_repayment=Money(amount=total_repayment, currency="RON"),
-                total_cost=Money(amount=total_cost, currency="RON"),
-                fees=Money(amount=fees, currency="RON"),
-                assumptions=assumptions,
-                indicative=True,
-                simulated=True
-            ))
-
-        ctx.state.used_stubs = True
-        return CalculateOffersOutput(offers=offers, simulated=True)
-
     # Handler for create_loan_application
     def handle_create_application(input: CreateApplicationInput, ctx: ToolContext) -> CreateApplicationOutput:
         draft_id = f"DRAFT-{secrets.token_hex(4)}"
@@ -758,16 +668,7 @@ def build_stub_registry(
         handler=handle_process_document
     ))
 
-    registry.register(ToolSpec(
-        name="calculate_loan_offer",
-        description="Calculate loan offers",
-        input_model=CalculateOffersInput,
-        output_model=CalculateOffersOutput,
-        model_callable=True,
-        flows=frozenset([Flow.credit_application]),
-        handler=handle_calculate_offers,
-        precondition=can_calculate_offers
-    ))
+    register_pricing_tool(registry)
 
     registry.register(ToolSpec(
         name="create_loan_application",

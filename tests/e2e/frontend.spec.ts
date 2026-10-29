@@ -153,6 +153,57 @@ test("assistant runs on the orchestrator", async ({ page }, testInfo) => {
   expect(errors).toEqual([]);
 });
 
+test("orchestrator pricing disclosures survive offer selection and explicit confirmation", async ({ page }) => {
+  await login(page, "customer");
+  const headers = { "X-Customer-Id": "cust-001" };
+  const created = await page.request.post(`${ORCHESTRATOR_URL}/chat/sessions`, { headers, data: {} });
+  expect(created.status()).toBe(201);
+  const { session_id: sessionId } = await created.json() as { session_id: string };
+  const base = `${ORCHESTRATOR_URL}/chat/sessions/${sessionId}`;
+  // Reach verified pricing via the real offline API/model; no seeded offer numbers.
+  for (const text of ["Vreau un credit", "pentru renovare", "30000 lei", "60 luni", "employed", "48", "7000", "TechCorp SRL", "400"]) {
+    const response = await page.request.post(`${base}/messages`, { headers, data: { text } });
+    expect(response.status()).toBe(200);
+  }
+  for (const docType of ["id_card", "payslip", "bank_statement"]) {
+    const response = await page.request.post(`${base}/documents`, {
+      headers,
+      multipart: { doc_type: docType, file: { name: `${docType}.pdf`, mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 synthetic") } },
+    });
+    expect(response.status()).toBe(200);
+  }
+  const calculated = await page.request.post(`${base}/messages`, { headers, data: { text: "da" } });
+  expect(calculated.status()).toBe(200);
+  expect((await calculated.json()).awaiting.kind).toBe("offer_choice");
+  await page.evaluate(([key, value]) => sessionStorage.setItem(key, value), [`luma-orchestrator-chat-v1-${CUSTOMER_ACTOR.id}`, JSON.stringify({ sessionId, customerId: "cust-001" })]);
+  await page.reload();
+
+  const choose = page.getByRole("button", { name: "Choose 60-month offer (621.22 RON/month)", exact: true });
+  await expect(choose).toBeVisible();
+  // Verify the actual offer details, not just the assistant's narrative.
+  const detailsToggle = page.getByRole("button", { name: "Show assumptions", exact: true }).first();
+  const detailsId = await detailsToggle.getAttribute("aria-controls");
+  expect(detailsId).toBeTruthy();
+  await detailsToggle.click();
+  const details = page.locator(`[id="${detailsId}"]`);
+  await expect(details).toContainText("DAE/APR: 9.58%");
+  await expect(details).toContainText("Net amount paid out: 29800.00 RON");
+  await expect(details).toContainText("ANALYSIS_FEE: 200.00 RON");
+  await expect(details).toContainText("not an offer, an approval or an authoritative settlement amount");
+  await choose.click();
+  const confirm = page.getByRole("button", { name: "Confirm & submit for human review", exact: true });
+  await expect(confirm).toBeVisible();
+  const selected = await page.request.get(base, { headers });
+  expect((await selected.json()).latest.awaiting.kind).toBe("confirmation");
+  await expect(page.getByText("Submitted for human review — no decision yet.", { exact: false })).not.toBeVisible();
+  await confirm.click();
+  await expect(page.getByText("Submitted for human review — no decision yet.", { exact: false })).toBeVisible();
+  const submitted = await page.request.get(base, { headers });
+  const latest = (await submitted.json()).latest;
+  expect(latest.progress.stage).toBe("submitted");
+  expect(latest.simulated).toBe(true);
+});
+
 test("assistant shows a retryable alert while the orchestrator is down", async ({ page }) => {
   await page.route(`${ORCHESTRATOR_URL}/**`, (route) => route.abort());
   await login(page, "customer");

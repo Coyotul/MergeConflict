@@ -11,7 +11,7 @@ from src.integrations.llm.chat import ChatMessage
 from src.models.credit import DocumentRequirement, FieldSpec, FieldType
 
 
-PROMPT_VERSION = "orchestrator-v1"
+PROMPT_VERSION = "orchestrator-v2-pricing"
 
 
 def load_system_prompt() -> str:
@@ -126,7 +126,15 @@ def build_context(
                     "offer_id": offer.offer_id,
                     "term_months": offer.term_months,
                     "monthly_installment": str(offer.monthly_installment.amount),
-                    "total_cost": str(offer.total_cost.amount)
+                    "total_cost": str(offer.total_cost.amount),
+                    "amount": str(offer.amount.amount),
+                    "currency": offer.amount.currency,
+                    "annual_interest_rate_percent": str(offer.annual_interest_rate_percent),
+                    "total_repayment": str(offer.total_repayment.amount),
+                    "fees": str(offer.fees.amount),
+                    "assumptions": list(offer.assumptions),
+                    "indicative": offer.indicative,
+                    "simulated": offer.simulated,
                 }
                 for offer in app.offers.offers
             ]

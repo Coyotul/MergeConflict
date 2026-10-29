@@ -1,8 +1,12 @@
 """Factory functions for building orchestrator components."""
+from pathlib import Path
+from datetime import datetime
+from typing import Callable
+
 import psycopg
 
 from src.agent.orchestration.demo_model import DemoChatModel
-from src.agent.orchestration.orchestrator import Orchestrator
+from src.agent.orchestration.orchestrator import Orchestrator, utcnow
 from src.agent.orchestration.trace import FileTracer, NullTracer, Tracer
 from src.agent.tools.registry import ToolRegistry
 from src.agent.tools.retrieval import PolicySearch, build_policy_search
@@ -82,6 +86,7 @@ def build_orchestrator(
     store: SessionStore | None = None,
 tracer: Tracer | None = None,
     documents: SecureDocumentStore | None = None,
+    clock: Callable[[], datetime] = utcnow,
 ) -> Orchestrator:
     """Build an orchestrator with all dependencies.
 
@@ -91,6 +96,7 @@ tracer: Tracer | None = None,
         store: Optional pre-built session store (for testing)
 tracer: Optional pre-built tracer (for testing)
         documents: Optional shared upload store; always uses real OCR/extraction
+        clock: Server-owned clock; explicitly injectable for reproducible simulations
 
     Returns:
         Configured Orchestrator instance
@@ -123,7 +129,7 @@ tracer: Optional pre-built tracer (for testing)
         catalog_codes=catalog_codes,
         max_steps=settings.max_steps,
         history_window=settings.history_window,
-        tracer=tracer,
-        # Allow-list for the trace's session_started event (never the settings object).
+tracer=tracer,
         model_info={"model": settings.model, "temperature": settings.temperature, "json_mode": settings.json_mode},
+        clock=clock,
     )

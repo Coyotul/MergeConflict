@@ -56,7 +56,7 @@ class DummyOutput(BaseModel):
 
 def test_prompt_version():
     """PROMPT_VERSION constant is defined."""
-    assert PROMPT_VERSION == "orchestrator-v1"
+    assert PROMPT_VERSION == "orchestrator-v2-pricing"
 
 
 def test_load_system_prompt():
@@ -502,6 +502,10 @@ def test_context_offers_serialized():
     assert isinstance(offer["monthly_installment"], str)
     assert offer["total_cost"] == "7710.00"
     assert isinstance(offer["total_cost"], str)
+    assert offer["assumptions"] == ["Assumes good credit"]
+    assert offer["fees"] == "0.00"
+    assert offer["annual_interest_rate_percent"] == "9.5"
+    assert offer["indicative"] and offer["simulated"]
 
 
 def test_context_stage_from_derive_stage():

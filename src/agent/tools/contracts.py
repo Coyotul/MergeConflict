@@ -1,6 +1,6 @@
 """Tool input and output contracts for the orchestrator."""
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
 from src.agent.orchestration.state import ExtractedField
 from src.models.credit import CreditProduct, ProductRequirements, EligibilityResult, LoanOffer
@@ -134,7 +134,9 @@ class VerifyDocumentsOutput(BaseModel):
 
 class CalculateOffersInput(BaseModel):
     """Input for calculate_offers tool."""
-    term_options_months: list[int] | None = None
+    # Amount, product, income, rates and date are server-owned/session inputs.
+    model_config = ConfigDict(extra="forbid")
+    term_options_months: list[StrictInt] | None = None
 
     @field_validator("term_options_months")
     @classmethod
@@ -150,9 +152,18 @@ class CalculateOffersInput(BaseModel):
         return v
 
 
+class OfferCalculationError(BaseModel):
+    """A rejected pricing scenario, not an eligibility decision."""
+    code: str
+    message: str
+    term_months: int | None = None
+
+
 class CalculateOffersOutput(BaseModel):
     """Output for calculate_offers tool."""
     offers: list[LoanOffer]
+    status: Literal["ok", "invalid"] = "ok"
+    errors: list[OfferCalculationError] = []
     simulated: bool = True
 
 
@@ -242,6 +253,7 @@ __all__ = [
     "ReadDocumentExtractionOutput",
     "CalculateOffersInput",
     "CalculateOffersOutput",
+    "OfferCalculationError",
     "CreateApplicationInput",
     "CreateApplicationOutput",
     "SubmitApplicationInput",

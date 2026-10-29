@@ -21,13 +21,23 @@ from src.core.settings import OrchestratorSettings, load_orchestrator_settings
 
 @pytest.fixture
 def test_tmp_dir():
-    """Create a temporary directory in the worktree."""
-    tmp_dir = Path(__file__).parent / ".test_tmp" / uuid4().hex
+    """Create a temporary directory in the worktree (separate from test_store's .test_tmp)."""
+    tmp_dir = Path(__file__).parent / ".test_tmp_trace" / uuid4().hex
     tmp_dir.mkdir(parents=True, exist_ok=True)
     yield tmp_dir
-    # Cleanup
+    # Cleanup with permission restoration
     if tmp_dir.exists():
-        shutil.rmtree(tmp_dir)
+        try:
+            # Restore write permissions in case test modified them
+            import os
+            for root, dirs, files in os.walk(tmp_dir):
+                os.chmod(root, 0o755)
+                for fname in files:
+                    os.chmod(os.path.join(root, fname), 0o644)
+            shutil.rmtree(tmp_dir)
+        except Exception:
+            # If cleanup fails, at least try basic rmtree
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 @pytest.fixture

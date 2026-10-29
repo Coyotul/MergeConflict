@@ -26,8 +26,8 @@ def generate_realistic_fixture(orchestrator_factory) -> list[dict]:
 
 @pytest.fixture
 def tmp_test_dir():
-    """Create a temporary test directory using .test_tmp pattern."""
-    tmp_dir = Path(__file__).parent / ".test_tmp" / uuid4().hex
+    """Create a temporary test directory (separate from test_store's .test_tmp)."""
+    tmp_dir = Path(__file__).parent / ".test_tmp_trace" / uuid4().hex
     tmp_dir.mkdir(parents=True, exist_ok=True)
     yield tmp_dir
     shutil.rmtree(tmp_dir, ignore_errors=True)

@@ -267,3 +267,57 @@ def test_fake_model_unavailable_marker():
     messages = [ChatMessage(role="user", content="test")]
     with pytest.raises(ModelUnavailable):
         fake.complete(messages)
+
+
+def test_featherless_last_usage_per_thread():
+    """FeatherlessChatModel stores last_usage per thread."""
+    import threading
+    import time
+
+    settings = OrchestratorSettings(featherless_api_key="test-key")
+
+    # Create mock responses for each thread
+    def create_mock_response(content: str, tokens: tuple[int, int, int]):
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message = Mock()
+        mock_response.choices[0].message.content = content
+        mock_response.usage = Mock(
+            prompt_tokens=tokens[0],
+            completion_tokens=tokens[1],
+            total_tokens=tokens[2]
+        )
+        return mock_response
+
+    mock_client = Mock()
+    model = FeatherlessChatModel(settings, client=mock_client)
+
+    # Storage for results from each thread
+    results = {}
+
+    def thread_worker(thread_id: int, tokens: tuple[int, int, int]):
+        # Each thread makes its own call with different token counts
+        mock_client.chat.completions.create.return_value = create_mock_response(
+            f"response-{thread_id}", tokens
+        )
+        model.complete([ChatMessage(role="user", content=f"test-{thread_id}")])
+
+        # Store the usage for this thread
+        results[thread_id] = model.last_usage
+
+    # Start two threads with different token counts
+    thread1 = threading.Thread(target=thread_worker, args=(1, (100, 20, 120)))
+    thread2 = threading.Thread(target=thread_worker, args=(2, (200, 40, 240)))
+
+    thread1.start()
+    thread2.start()
+    thread1.join()
+    thread2.join()
+
+    # Each thread should have recorded its own usage
+    assert results[1] == {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}
+    assert results[2] == {"prompt_tokens": 200, "completion_tokens": 40, "total_tokens": 240}
+
+    # Main thread should still have None (or whatever it had before)
+    # Since we haven't called complete in the main thread
+    assert model.last_usage is None

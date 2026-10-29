@@ -339,3 +339,68 @@ def test_truncate_payload_returns_string_for_complex():
     assert isinstance(value, str)
     assert len(value) == 100
     assert truncated is True
+
+
+def test_file_tracer_keeps_trying_after_failure(test_tmp_dir, valid_session_id, caplog):
+    """FileTracer keeps trying to write after a transient failure."""
+    from unittest.mock import patch, mock_open
+
+    tracer = FileTracer(test_tmp_dir)
+    trace_file = test_tmp_dir / f"{valid_session_id}.jsonl"
+
+    # Mock open to fail twice, then succeed
+    call_count = {"count": 0}
+    original_open = open
+
+    def mock_open_fn(path, *args, **kwargs):
+        if str(path).endswith(".jsonl") and call_count["count"] < 2:
+            call_count["count"] += 1
+            raise OSError("Simulated write failure")
+        return original_open(path, *args, **kwargs)
+
+    with caplog.at_level(logging.WARNING, logger="src.agent.trace"):
+        with patch("builtins.open", side_effect=mock_open_fn):
+            # First write should fail and log
+            tracer.record(valid_session_id, "turn_1", 1, "test_event", data="first")
+            assert len(caplog.records) == 1
+
+            # Second write should also fail but NOT log again (already warned)
+            caplog.clear()
+            tracer.record(valid_session_id, "turn_1", 2, "test_event", data="second")
+            assert len(caplog.records) == 0
+
+        # Third write should succeed (no more mock)
+        tracer.record(valid_session_id, "turn_1", 3, "test_event", data="third")
+
+    # Verify the third event was written
+    assert trace_file.exists()
+    with open(trace_file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    # Should have only the third event (first two failed)
+    assert len(lines) == 1
+    event = json.loads(lines[0])
+    assert event["data"] == "third"
+
+
+def test_file_tracer_validates_session_id_in_needs_system_prompt(test_tmp_dir, invalid_session_id):
+    """needs_system_prompt returns False for invalid session IDs without touching filesystem."""
+    tracer = FileTracer(test_tmp_dir)
+
+    # Should return False for invalid session ID
+    assert tracer.needs_system_prompt(invalid_session_id, "v1.0") is False
+
+    # Should not create any files
+    assert not (test_tmp_dir / f"{invalid_session_id}.jsonl").exists()
+
+
+def test_file_tracer_validates_session_id_in_load_prompt_version(test_tmp_dir, invalid_session_id):
+    """_load_prompt_version returns None for invalid session IDs without touching filesystem."""
+    tracer = FileTracer(test_tmp_dir)
+
+    # Should return None for invalid session ID
+    result = tracer._load_prompt_version(invalid_session_id)
+    assert result is None
+
+    # Should not attempt to read any files
+    assert not (test_tmp_dir / f"{invalid_session_id}.jsonl").exists()

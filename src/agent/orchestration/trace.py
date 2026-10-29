@@ -184,8 +184,8 @@ class FileTracer:
         """
         self.root = root
         self.clock = clock
-        # Track which sessions we've failed to write to (log once per session)
-        self._failed_sessions: set[str] = set()
+        # Track which sessions we've warned about (log once per session)
+        self._warned_sessions: set[str] = set()
         # Track prompt versions per session
         self._prompt_versions: dict[str, str] = {}
 
@@ -204,9 +204,15 @@ class FileTracer:
     def _load_prompt_version(self, session_id: str) -> str | None:
         """Load the current prompt version from the trace file.
 
+        Validates session_id format before reading.
+
         Returns:
             The prompt version if found, None otherwise
         """
+        # Validate session ID before accessing filesystem
+        if not self._validate_session_id(session_id):
+            return None
+
         trace_path = self._trace_path(session_id)
         if not trace_path.exists():
             return None
@@ -240,14 +246,11 @@ class FileTracer:
         """Record event to file.
 
         Validates session_id and swallows all errors (logging once per session).
+        After a failed write, keeps trying on later events.
         """
         try:
             # Validate session ID
             if not self._validate_session_id(session_id):
-                return
-
-            # Skip if we've already failed to write to this session
-            if session_id in self._failed_sessions:
                 return
 
             # Build event
@@ -278,26 +281,31 @@ class FileTracer:
                 f.flush()
 
         except Exception as e:
-            # Log warning once per session
-            if session_id not in self._failed_sessions:
+            # Log warning once per session, but keep trying on future events
+            if session_id not in self._warned_sessions:
                 logger.warning(
                     "Failed to write trace event for session %s: %s",
                     session_id, str(e)
                 )
-                self._failed_sessions.add(session_id)
+                self._warned_sessions.add(session_id)
 
     def needs_system_prompt(self, session_id: str, prompt_version: str) -> bool:
         """Check if system prompt needs to be written.
 
+        Validates session_id format before reading. Invalid session_id returns False (skip).
         Reads from file on first use for this session to handle tracer restarts.
         Swallows all errors and returns True (safe default: write the prompt).
         """
         try:
+            # Validate session ID format before doing anything
+            if not self._validate_session_id(session_id):
+                return False  # Skip: don't write prompt for invalid session IDs
+
             # Check memory cache first
             if session_id in self._prompt_versions:
                 return self._prompt_versions[session_id] != prompt_version
 
-            # Load from file
+            # Load from file (will return None for invalid session_id)
             current = self._load_prompt_version(session_id)
             if current is not None:
                 self._prompt_versions[session_id] = current

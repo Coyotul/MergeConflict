@@ -1,5 +1,6 @@
 """LLM chat adapter for Featherless and testing."""
 import logging
+import threading
 from typing import Callable, Literal, Protocol
 
 import openai
@@ -10,6 +11,27 @@ from src.core.settings import OrchestratorSettings
 
 
 logger = logging.getLogger("src.integrations.llm")
+
+
+class ThreadLocalUsage:
+    """Thread-local storage for token usage with a simple attribute interface.
+
+    Stores usage per thread while exposing it as a single `value` attribute
+    that the orchestrator can read with getattr.
+    """
+
+    def __init__(self):
+        self._local = threading.local()
+
+    @property
+    def value(self) -> dict[str, int] | None:
+        """Get the usage for the current thread."""
+        return getattr(self._local, "usage", None)
+
+    @value.setter
+    def value(self, usage: dict[str, int] | None) -> None:
+        """Set the usage for the current thread."""
+        self._local.usage = usage
 
 
 class ChatMessage(BaseModel):
@@ -65,8 +87,18 @@ class FeatherlessChatModel:
             )
         else:
             self.client = client
-        # Token usage of the last completed request (None if the provider sent none).
-        self.last_usage: dict[str, int] | None = None
+        # Token usage stored per thread, accessed via last_usage attribute
+        self._usage_storage = ThreadLocalUsage()
+
+    @property
+    def last_usage(self) -> dict[str, int] | None:
+        """Get token usage of the last completed request for the current thread."""
+        return self._usage_storage.value
+
+    @last_usage.setter
+    def last_usage(self, value: dict[str, int] | None) -> None:
+        """Set token usage for the current thread."""
+        self._usage_storage.value = value
 
     def complete(self, messages: list[ChatMessage]) -> str:
         """Generate a completion using Featherless API.

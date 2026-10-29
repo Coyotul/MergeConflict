@@ -1,0 +1,1 @@
+"""Independent synthetic eligibility demonstration journeys."""

@@ -1,0 +1,44 @@
+{
+  "product_id": "refinancing_fixed",
+  "version": "2026-10-15",
+  "name": "Refinancing Loan (fixed rate)",
+  "kind": "refinancing",
+  "currency": "RON",
+  "note": "Synthetic product. Fixed rate 'from 5.55%' and 18-120 month term mirror the public Raiffeisen Bank Romania refinancing page (28.10.2026). Fee and discount structure is ASSUMED to match the personal loan; verify before relying on it.",
+  "sources": [
+    "https://www.raiffeisen.ro/ro/persoane-fizice/produsele-noastre/credite/credit-de-refinantare-fara-ipoteca.html"
+  ],
+  "amount": {"min": "2500", "max": "250000"},
+  "term_months": {"min": 18, "max": 120},
+  "repayment_methods": ["annuity", "decreasing"],
+  "interest": {
+    "type": "fixed",
+    "base_annual_rate": {"min": "8.55", "max": "17.95"},
+    "discounts": [
+      {"code": "SALARY_ACCOUNT", "percentage_points": "1.00", "condition": "salary_account_standard",
+       "description": "Monthly income of at least 2,000 RON received in an account with the bank"},
+      {"code": "SALARY_ACCOUNT_PREMIUM", "percentage_points": "1.20", "condition": "salary_account_premium",
+       "description": "Premium client receiving income in an account with the bank"},
+      {"code": "LIFE_INSURANCE", "percentage_points": "2.00", "condition": "insurance",
+       "description": "Optional life and unemployment insurance"}
+    ]
+  },
+  "upfront_fees": [
+    {"code": "ANALYSIS_FEE", "fixed": "200", "financed": true}
+  ],
+  "monthly_charges": [
+    {"code": "ADMINISTRATION_FEE", "fixed": "5"}
+  ],
+  "insurance": {
+    "code": "LIFE_UNEMPLOYMENT_SINGLE_PREMIUM",
+    "single_premium_percent_per_month": "0.12",
+    "financed": true,
+    "included_in_dae": true
+  },
+  "early_repayment": {
+    "fee_percent_more_than_12_months_left": "1.00",
+    "fee_percent_12_months_or_less_left": "0.50",
+    "only_during_fixed_rate": true,
+    "cap_at_interest_saved": true
+  }
+}

@@ -4,11 +4,18 @@
 
 # Core & Environment
 python-dotenv
-pydantic
+pydantic>=2.11,<3
+
+# Selected backend framework (SPECIFICATION.md); eligibility demo uses stdlib unittest/SQLite
+fastapi>=0.115.12,<1
+uvicorn>=0.34,<1
 
 # Data & Documents (useful for banking documents & tabular records)
 pandas
 openpyxl
+pillow>=12.0.0
+pypdf>=6.0.0
+winocr>=0.0.15; sys_platform == 'win32'
 
 # LLM / AI integrations (optional depending on chosen stack, e.g. openai, google-genai, langchain)
 # openai
@@ -23,6 +30,10 @@ beautifulsoup4>=4.12
 pymupdf>=1.24
 httpx>=0.27
 pyyaml>=6.0
+
+# Orchestrator (fastapi/uvicorn pinned above)
+openai>=1.40
+python-multipart>=0.0.9
 
 # Testing
 pytest>=8.0

@@ -1,0 +1,274 @@
+{
+  "$defs": {
+    "EvidenceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "document_kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "IDENTITY",
+                "INCOME",
+                "BANK_STATEMENT"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document Kind"
+        },
+        "evidence_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "expires_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires On"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "title": "Recorded At",
+          "type": "string"
+        },
+        "simulated": {
+          "const": true,
+          "title": "Simulated",
+          "type": "boolean"
+        },
+        "source": {
+          "$ref": "#/$defs/EvidenceSource"
+        },
+        "source_version": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Source Version",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/EvidenceStatus"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "source",
+        "recorded_at",
+        "status",
+        "source_version",
+        "simulated"
+      ],
+      "title": "EvidenceReference",
+      "type": "object"
+    },
+    "EvidenceSource": {
+      "enum": [
+        "CUSTOMER_PROFILE",
+        "DOCUMENT",
+        "ANAF",
+        "CREDIT_BUREAU",
+        "INTERNAL_LOANS",
+        "PRICING"
+      ],
+      "title": "EvidenceSource",
+      "type": "string"
+    },
+    "EvidenceStatus": {
+      "enum": [
+        "VERIFIED",
+        "UNVERIFIED",
+        "INVALID"
+      ],
+      "title": "EvidenceStatus",
+      "type": "string"
+    },
+    "IncomeBasis": {
+      "enum": [
+        "MONTHLY_SALARY",
+        "ANNUAL_AVERAGE"
+      ],
+      "title": "IncomeBasis",
+      "type": "string"
+    },
+    "IncomeKind": {
+      "enum": [
+        "SALARY",
+        "PENSION",
+        "SELF_EMPLOYED",
+        "RENTAL",
+        "DIVIDENDS",
+        "FOREIGN_SALARY",
+        "OTHER"
+      ],
+      "title": "IncomeKind",
+      "type": "string"
+    },
+    "IncomeVerificationData": {
+      "additionalProperties": false,
+      "properties": {
+        "customer_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+          "title": "Customer Id",
+          "type": "string"
+        },
+        "fiscal_year": {
+          "anyOf": [
+            {
+              "maximum": 9999,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fiscal Year"
+        },
+        "income_basis": {
+          "$ref": "#/$defs/IncomeBasis",
+          "default": "MONTHLY_SALARY"
+        },
+        "income_kind": {
+          "$ref": "#/$defs/IncomeKind"
+        },
+        "net_monthly_income_ron": {
+          "decimal_places": 2,
+          "ge": 0,
+          "max_digits": 14,
+          "title": "Net Monthly Income Ron",
+          "type": "string"
+        },
+        "observed_salary_months": {
+          "default": [],
+          "items": {
+            "format": "date",
+            "type": "string"
+          },
+          "title": "Observed Salary Months",
+          "type": "array"
+        },
+        "period_end": {
+          "format": "date",
+          "title": "Period End",
+          "type": "string"
+        },
+        "recurring": {
+          "title": "Recurring",
+          "type": "boolean"
+        },
+        "reference_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Date"
+        },
+        "reported_income_types": {
+          "default": [],
+          "items": {
+            "enum": [
+              "SALARY",
+              "INDEPENDENT_ACTIVITY",
+              "PENSION",
+              "SOCIAL_INSURANCE",
+              "RENTAL",
+              "INVESTMENT",
+              "OTHER"
+            ],
+            "type": "string"
+          },
+          "title": "Reported Income Types",
+          "type": "array"
+        }
+      },
+      "required": [
+        "customer_id",
+        "income_kind",
+        "net_monthly_income_ron",
+        "period_end",
+        "recurring"
+      ],
+      "title": "IncomeVerificationData",
+      "type": "object"
+    },
+    "VerificationStatus": {
+      "enum": [
+        "SUCCESS",
+        "NOT_FOUND",
+        "UNAVAILABLE",
+        "TIMEOUT",
+        "INVALID_RESPONSE",
+        "NOT_AUTHORIZED",
+        "PENDING"
+      ],
+      "title": "VerificationStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "customer_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Customer Id",
+      "type": "string"
+    },
+    "data": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IncomeVerificationData"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "evidence": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvidenceReference"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "provider": {
+      "$ref": "#/$defs/EvidenceSource"
+    },
+    "simulated": {
+      "const": true,
+      "title": "Simulated",
+      "type": "boolean"
+    },
+    "status": {
+      "$ref": "#/$defs/VerificationStatus"
+    }
+  },
+  "required": [
+    "provider",
+    "customer_id",
+    "status",
+    "simulated"
+  ],
+  "title": "VerificationResult[IncomeVerificationData]",
+  "type": "object"
+}

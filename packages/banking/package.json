@@ -1,0 +1,10 @@
+{
+  "name": "@banking/demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { "./*": "./src/*.ts", "./react": "./src/react.tsx", "./orchestrator-react": "./src/orchestrator-react.tsx" },
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": { "decimal.js": "10.6.0", "zod": "4.6.7" },
+  "peerDependencies": { "react": "^19.0.0" }
+}

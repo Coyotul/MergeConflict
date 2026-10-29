@@ -1,0 +1,62 @@
+{
+  "scenario_name": "Cazuri Respinse și Validări Limită Reglementară / Politică Produs",
+  "description": "Set de simulări invalide care testează refuzul determinist al parametrilor nepermisi",
+  "cases": [
+    {
+      "test_case": "AMOUNT_BELOW_MINIMUM",
+      "request": {
+        "product_id": "personal_loan_fixed",
+        "amount": "1000.00",
+        "term_months": 60
+      },
+      "expected_error_code": "AMOUNT_OUT_OF_RANGE",
+      "expected_message_substring": "between 2500 and 250000 RON"
+    },
+    {
+      "test_case": "AMOUNT_ABOVE_MAXIMUM",
+      "request": {
+        "product_id": "personal_loan_fixed",
+        "amount": "300000.00",
+        "term_months": 60
+      },
+      "expected_error_code": "AMOUNT_OUT_OF_RANGE",
+      "expected_message_substring": "between 2500 and 250000 RON"
+    },
+    {
+      "test_case": "TERM_ABOVE_MAXIMUM",
+      "request": {
+        "product_id": "personal_loan_fixed",
+        "amount": "50000.00",
+        "term_months": 72
+      },
+      "expected_error_code": "TERM_OUT_OF_RANGE",
+      "expected_message_substring": "between 18 and 60 months"
+    },
+    {
+      "test_case": "PREPAYMENT_EXCEEDS_BALANCE",
+      "type": "early_repayment",
+      "loan_request": {
+        "product_id": "personal_loan_fixed",
+        "amount": "50000.00",
+        "term_months": 60
+      },
+      "after_month": 12,
+      "repayment_amount": "60000.00",
+      "expected_error_code": "AMOUNT_ABOVE_BALANCE",
+      "expected_message_substring": "outstanding balance"
+    },
+    {
+      "test_case": "PREPAYMENT_MONTH_OUT_OF_RANGE",
+      "type": "early_repayment",
+      "loan_request": {
+        "product_id": "personal_loan_fixed",
+        "amount": "50000.00",
+        "term_months": 60
+      },
+      "after_month": 70,
+      "repayment_amount": "5000.00",
+      "expected_error_code": "MONTH_OUT_OF_RANGE",
+      "expected_message_substring": "after_month must be between 1 and 59"
+    }
+  ]
+}

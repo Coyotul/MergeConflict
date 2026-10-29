@@ -1,0 +1,143 @@
+{
+  "session_id": "example-session-1",
+  "turn_id": "example-turn-13",
+  "session_version": 12,
+  "messages": [
+    {
+      "role": "assistant",
+      "text": "Am primit documentul (bank_statement). Rezultatul verificării preliminare (simulat, pe baza condițiilor publice): condițiile preliminare sunt îndeplinite. Te rog verifică valorile din documente: Full Name: Ana Popescu; Age: 34; Employer Name: TechCorp SRL; Existing Monthly Obligations: 400.00; Monthly Net Income: documentul arată 6200, tu ai spus 7000.00. Răspunde „da” dacă valorile din documente sunt corecte.",
+      "citations": [],
+      "created_at": "2026-10-28T09:00:00Z"
+    }
+  ],
+  "awaiting": {
+    "kind": "text",
+    "document_types": [],
+    "summary_version": null
+  },
+  "progress": {
+    "flow": "credit_application",
+    "stage": "documents",
+    "steps": [
+      {
+        "stage": "discovery",
+        "status": "done"
+      },
+      {
+        "stage": "collecting_information",
+        "status": "done"
+      },
+      {
+        "stage": "eligibility",
+        "status": "done"
+      },
+      {
+        "stage": "documents",
+        "status": "current"
+      },
+      {
+        "stage": "offer_selection",
+        "status": "todo"
+      },
+      {
+        "stage": "awaiting_confirmation",
+        "status": "todo"
+      },
+      {
+        "stage": "submitted",
+        "status": "todo"
+      }
+    ]
+  },
+  "blocks": [
+    {
+      "type": "document_checklist",
+      "items": [
+        {
+          "doc_type": "id_card",
+          "label": "ID Card",
+          "status": "accepted",
+          "rejection_reason": null
+        },
+        {
+          "doc_type": "payslip",
+          "label": "Payslip (last 3 months)",
+          "status": "accepted",
+          "rejection_reason": null
+        },
+        {
+          "doc_type": "bank_statement",
+          "label": "Bank Statement (last 6 months)",
+          "status": "accepted",
+          "rejection_reason": null
+        }
+      ]
+    },
+    {
+      "type": "extracted_fields",
+      "fields": [
+        {
+          "field": "full_name",
+          "label": "Full Name",
+          "value": "Ana Popescu",
+          "source": "document",
+          "confidence": 0.95,
+          "needs_confirmation": true,
+          "conflict_with": null
+        },
+        {
+          "field": "age",
+          "label": "Age",
+          "value": "34",
+          "source": "document",
+          "confidence": 0.95,
+          "needs_confirmation": true,
+          "conflict_with": null
+        },
+        {
+          "field": "monthly_net_income",
+          "label": "Monthly Net Income",
+          "value": "6200.00",
+          "source": "document",
+          "confidence": 0.95,
+          "needs_confirmation": true,
+          "conflict_with": "7000.00"
+        },
+        {
+          "field": "employer_name",
+          "label": "Employer Name",
+          "value": "TechCorp SRL",
+          "source": "document",
+          "confidence": 0.95,
+          "needs_confirmation": true,
+          "conflict_with": null
+        },
+        {
+          "field": "existing_monthly_obligations",
+          "label": "Existing Monthly Obligations",
+          "value": "400.00",
+          "source": "document",
+          "confidence": 0.95,
+          "needs_confirmation": true,
+          "conflict_with": null
+        }
+      ]
+    },
+    {
+      "type": "eligibility_result",
+      "result": {
+        "status": "satisfied",
+        "reasons": [
+          {
+            "code": "all_preliminary_rules_passed",
+            "message": "All preliminary rules passed"
+          }
+        ],
+        "rule_version": "stub-2026-10-28",
+        "missing_fields": [],
+        "simulated": true
+      }
+    }
+  ],
+  "simulated": true
+}

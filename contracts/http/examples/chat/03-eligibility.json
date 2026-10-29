@@ -1,0 +1,78 @@
+{
+  "session_id": "example-session-1",
+  "turn_id": "example-turn-10",
+  "session_version": 9,
+  "messages": [
+    {
+      "role": "assistant",
+      "text": "Mulțumesc. Am toate datele pentru o verificare preliminară (simulată, pe baza condițiilor publice). Scrie „ok” ca s-o rulez sau încarcă documentele: ID Card, Payslip (last 3 months), Bank Statement (last 6 months).",
+      "citations": [],
+      "created_at": "2026-10-28T09:00:00Z"
+    }
+  ],
+  "awaiting": {
+    "kind": "text",
+    "document_types": [],
+    "summary_version": null
+  },
+  "progress": {
+    "flow": "credit_application",
+    "stage": "eligibility",
+    "steps": [
+      {
+        "stage": "discovery",
+        "status": "done"
+      },
+      {
+        "stage": "collecting_information",
+        "status": "done"
+      },
+      {
+        "stage": "eligibility",
+        "status": "current"
+      },
+      {
+        "stage": "documents",
+        "status": "todo"
+      },
+      {
+        "stage": "offer_selection",
+        "status": "todo"
+      },
+      {
+        "stage": "awaiting_confirmation",
+        "status": "todo"
+      },
+      {
+        "stage": "submitted",
+        "status": "todo"
+      }
+    ]
+  },
+  "blocks": [
+    {
+      "type": "document_checklist",
+      "items": [
+        {
+          "doc_type": "id_card",
+          "label": "ID Card",
+          "status": "requested",
+          "rejection_reason": null
+        },
+        {
+          "doc_type": "payslip",
+          "label": "Payslip (last 3 months)",
+          "status": "requested",
+          "rejection_reason": null
+        },
+        {
+          "doc_type": "bank_statement",
+          "label": "Bank Statement (last 6 months)",
+          "status": "requested",
+          "rejection_reason": null
+        }
+      ]
+    }
+  ],
+  "simulated": true
+}

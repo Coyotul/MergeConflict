@@ -1,0 +1,41 @@
+{
+  "scenario_name": "Refinanțare și Consolidare Datorii cu Bani În Plus",
+  "description": "Consolidare a două credite scumpe (card credit 24% și credit nevoi 14.5%) într-un singur credit fix pe 5 ani, plus 5.000 RON lichidități",
+  "request": {
+    "product_id": "refinancing_fixed",
+    "term_months": 60,
+    "salary_account": "standard",
+    "with_insurance": true,
+    "extra_cash": "5000.00",
+    "net_monthly_income": "7500.00",
+    "simulation_date": "2026-10-28",
+    "existing_loans": [
+      {
+        "label": "Card de Credit Alfa",
+        "outstanding_balance": "10000.00",
+        "annual_rate": "24.00",
+        "remaining_months": 24,
+        "monthly_charges": "0.00",
+        "early_repayment_fee_percent": "0.00"
+      },
+      {
+        "label": "Credit de Nevoi Personale Beta",
+        "outstanding_balance": "25000.00",
+        "annual_rate": "14.50",
+        "remaining_months": 36,
+        "monthly_charges": "0.00",
+        "early_repayment_fee_percent": "1.00"
+      }
+    ]
+  },
+  "expected_results": {
+    "status": "ok",
+    "current_monthly_payment": "1389.23",
+    "new_monthly_payment": "838.59",
+    "monthly_savings": "550.64",
+    "outcome": "LOWER_MONTHLY_HIGHER_TOTAL_COST",
+    "early_repayment_fees_on_current_loans": "250.00",
+    "new_loan_amount": "43618.35",
+    "extra_cash_received": "5000.00"
+  }
+}

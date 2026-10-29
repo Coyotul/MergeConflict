@@ -1,0 +1,11 @@
+{
+  "version": "2026-10-28",
+  "description": "Maximum debt service-to-income ratio (grad de indatorare): all monthly credit payments divided by net monthly income. BNR Regulation 17/2012 art. 19, consolidated 25.10.2022. Lenders may exceed the limit for a capped share of new lending; that exception is not modelled.",
+  "sources": ["https://legislatie.just.ro/Public/DetaliiDocument/143876"],
+  "max_debt_service_ratio": {
+    "RON": "0.40",
+    "RON_first_home": "0.45",
+    "FX": "0.20",
+    "FX_first_home": "0.25"
+  }
+}

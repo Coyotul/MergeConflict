@@ -79,9 +79,9 @@
         {
           "field": "full_name",
           "label": "Full Name",
-          "value": "Ana Popescu",
+          "value": "ANA POPESCU",
           "source": "document",
-          "confidence": 0.95,
+          "confidence": 0.9,
           "needs_confirmation": false,
           "conflict_with": null
         },
@@ -90,7 +90,7 @@
           "label": "Age",
           "value": "34",
           "source": "document",
-          "confidence": 0.95,
+          "confidence": 0.9,
           "needs_confirmation": false,
           "conflict_with": null
         },
@@ -99,7 +99,7 @@
           "label": "Monthly Net Income",
           "value": "6200.00",
           "source": "document",
-          "confidence": 0.95,
+          "confidence": 1.0,
           "needs_confirmation": false,
           "conflict_with": null
         },
@@ -108,7 +108,7 @@
           "label": "Employer Name",
           "value": "TechCorp SRL",
           "source": "document",
-          "confidence": 0.95,
+          "confidence": 1.0,
           "needs_confirmation": false,
           "conflict_with": null
         },
@@ -117,7 +117,7 @@
           "label": "Existing Monthly Obligations",
           "value": "400.00",
           "source": "document",
-          "confidence": 0.95,
+          "confidence": 1.0,
           "needs_confirmation": false,
           "conflict_with": null
         }
@@ -131,9 +131,21 @@
           {
             "code": "all_preliminary_rules_passed",
             "message": "All preliminary rules passed"
+          },
+          {
+            "code": "anaf_salary_verified",
+            "message": "Verified monthly net income from ANAF: 5000.33 RON (recurring salary)."
+          },
+          {
+            "code": "dti_within_limit",
+            "message": "Estimated DTI ratio: 20.6%, comfortably within the 40% maximum limit."
+          },
+          {
+            "code": "bureau_history_clean",
+            "message": "Credit Bureau check passed: no overdue obligations or defaults reported."
           }
         ],
-        "rule_version": "stub-2026-10-28",
+        "rule_version": "2026-10-28.1",
         "missing_fields": [],
         "simulated": true
       }
@@ -142,7 +154,7 @@
       "type": "offers",
       "offers": [
         {
-          "offer_id": "personal_loan-60m-024716537320d7c4",
+          "offer_id": "personal_loan-60m-ed8af0a62ca8a236",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -186,7 +198,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-36m-ac22325792d3336c",
+          "offer_id": "personal_loan-36m-a1d9b7bd42355d0f",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -230,7 +242,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-48m-1ba78cecf69a1dc5",
+          "offer_id": "personal_loan-48m-1c9e37fbeaa3a2c1",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -274,7 +286,7 @@
           "simulated": true
         }
       ],
-      "selected_offer_id": "personal_loan-60m-024716537320d7c4"
+      "selected_offer_id": "personal_loan-60m-ed8af0a62ca8a236"
     },
     {
       "type": "application_submitted",

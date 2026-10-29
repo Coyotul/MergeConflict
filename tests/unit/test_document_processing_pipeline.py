@@ -68,7 +68,7 @@ class DocumentProcessingPipelineTests(unittest.TestCase):
 
     def test_id_card_validator_rules(self) -> None:
         id_data = ExtractedIdentity(
-            cnp="1920515410012",
+            cnp="1920515410017",
             first_name="Alex",
             last_name="Morgan",
             series="RX",
@@ -132,13 +132,13 @@ class DocumentProcessingPipelineTests(unittest.TestCase):
 
     def test_cross_document_consistency(self) -> None:
         id_doc = ExtractedIdentity(
-            cnp="1920515410012",
+            cnp="1920515410017",
             first_name="Alex",
             last_name="Morgan",
         )
         inc_doc = ExtractedIncome(
             employee_name="Alex Morgan",
-            employee_cnp="1920515410012",
+            employee_cnp="1920515410017",
             monthly_net_income=8500.00,
         )
         stmt_doc = ExtractedStatement(
@@ -208,7 +208,7 @@ class DocumentProcessingPipelineTests(unittest.TestCase):
 
             self.assertEqual(processed.kind, DocumentKind.IDENTITY)
             self.assertTrue(processed.validation.valid)
-            self.assertEqual(processed.extracted_data["cnp"], "1920515410012")
+            self.assertEqual(processed.extracted_data["cnp"], "1920515410017")
             self.assertEqual(processed.extracted_data["series"], "RX")
             self.assertEqual(processed.extracted_data["number"], "781920")
 

@@ -459,17 +459,17 @@ def test_checks_on_recorded_demo_trace(work_dir):
     app.state.orchestrator._clock = lambda: datetime(2026, 10, 28, 12, tzinfo=UTC)
     chat = Chat(TestClient(app), "cust-alex-morgan")
     answer_discovery(chat)
-    for text in ("employed", "67", "7000", "FICTIV Employer's Studio 1", "0"):
-        chat.say(text)
     for doc_type in ("id_card", "payslip", "bank_statement"):
         chat.upload(doc_type)
-    body = chat.say("da")
+    body = chat.review()
     body = chat.select_offer(block(body, "offers")["offers"][0]["offer_id"])
     assert body["progress"]["stage"] == "awaiting_confirmation"  # agreement is asked for in chat
 
     events = load_events(work_dir / "traces" / f"{chat.session_id}.jsonl")
     assert events, "trace file expected"
-    results = {r.check: r for r in run_checks(ALL_SPECS, events)}
+    # Eligibility runs as a code step once the review form is confirmed.
+    specs = [dict(spec, caller="any") if spec["check"] == "tool_called" else spec for spec in ALL_SPECS]
+    results = {r.check: r for r in run_checks(specs, events)}
     assert results["tool_order"].status == "pass", results["tool_order"].evidence
     assert results["no_failed_turns"].status == "pass", results["no_failed_turns"].evidence
     assert results["intent_seen"].status == "pass"

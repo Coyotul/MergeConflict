@@ -146,6 +146,10 @@ def is_verified(app: ApplicationState, spec: FieldSpec) -> bool:
     if not spec.must_verify:
         return True
 
+    # Editable fields corrected by the customer on the review form count as reviewed
+    if spec.editable and field.source == FieldSource.customer and field.confirmed:
+        return True
+
     # Identity fields from profile count as verified
     if spec.identity and field.source == FieldSource.profile:
         return True

@@ -71,6 +71,7 @@ def test_review_confirms_values_and_applies_allowed_edit(at_documents):
     assert all(v.confirmed for v in app.fields.values())
     assert app.fields["employer_name"].value == "Northstar Studio SRL"
     assert NeedKind.review_extracted not in kinds(store, sid)
+    assert app.eligibility is not None and app.eligibility.verified_inputs  # runs right after the form
 
 
 def test_edit_to_read_only_field_is_refused(at_documents):

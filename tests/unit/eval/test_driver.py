@@ -188,11 +188,14 @@ def test_search_results_carry_passage_excerpts_for_the_judge():
 
 
 def test_driver_stops_when_eligibility_shown(work_dir, credit_db):
-    customer = ScriptedCustomer([{"type": "say", "text": t} for t in ALEX_ANSWERS])
-    result = run(work_dir, credit_db, customer, max_turns=15, stop_when="eligibility_result")
-    assert result.stop_reason == "stop_when"
-    # The orchestrator runs eligibility itself in the turn that supplies the last required field.
-    assert len(result.transcript) == len(ALEX_ANSWERS) - 1
+    """Discovery answers, three uploads, the review form (OK pressed by the driver), then eligibility."""
+    steps = ([{"type": "say", "text": t} for t in ALEX_ANSWERS[:4]]
+             + [{"type": "upload", "doc_type": d} for d in ("id_card", "payslip", "bank_statement")])
+    customer = ScriptedCustomer(steps)
+    docs = customer_documents("cust-alex-morgan", CONFIG_DIR, credit_db, BINDINGS)
+    result = run(work_dir, credit_db, customer, max_turns=15, stop_when="eligibility_result", documents=docs)
+    assert result.stop_reason == "stop_when", result.error
+    assert result.transcript[-1]["customer"] == "[pressed OK on the review form]"
     assert "run_eligibility_check (code) ok" in result.transcript[-1]["tool_results"]
     assert "missing_field purpose" in result.transcript[1]["awaiting_before"]
     assert any(b.startswith("eligibility_result: ") for b in result.transcript[-1]["blocks"])

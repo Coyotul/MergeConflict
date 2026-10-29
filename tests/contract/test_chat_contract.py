@@ -57,9 +57,9 @@ def test_examples_cover_main_stages():
     stages = set()
     for path in EXAMPLES_DIR.glob("[0-9][0-9]-*.json"):
         stages.add(json.loads(path.read_text(encoding="utf-8"))["progress"]["stage"])
-    # Eligibility now runs in the same turn that completes its inputs, so the happy path
-    # never rests at that stage; it remains a progress step, not a turn outcome.
-    assert set(MAIN_STAGES) - {"eligibility"} <= stages
+    # Documents fill every document-verified field, so the happy path goes from discovery
+    # straight to documents; eligibility runs in the turn after the review form.
+    assert set(MAIN_STAGES) - {"eligibility", "collecting_information"} <= stages
     assert (EXAMPLES_DIR / "error-503.json").exists()
     assert (EXAMPLES_DIR / "error-422.json").exists()
 

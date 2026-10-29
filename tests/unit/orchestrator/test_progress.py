@@ -669,13 +669,8 @@ def test_unconfirmed_document_fields():
     state = make_session(app)
     needs = next_needs(state)
 
-    # Need to confirm extracted field
-    confirm_need = next((n for n in needs if n.kind == NeedKind.confirm_extracted), None)
-    assert confirm_need is not None
-    assert confirm_need.target == "monthly_net_income"
-
-    # Stage is documents
-    assert derive_stage(state) == Stage.documents
+    # One review of the document values (the form), not a confirmation per field
+    assert [n.kind for n in needs] == [NeedKind.review_extracted]
 
 
 def test_conflict_blocks_offers():
@@ -721,13 +716,8 @@ def test_conflict_blocks_offers():
     state = make_session(app)
     needs = next_needs(state)
 
-    # Need to resolve conflict
-    conflict_need = next((n for n in needs if n.kind == NeedKind.resolve_conflict), None)
-    assert conflict_need is not None
-    assert conflict_need.target == "monthly_net_income"
-
-    # Stage is documents
-    assert derive_stage(state) == Stage.documents
+    # An open conflict is settled on the review form
+    assert [n.kind for n in needs] == [NeedKind.review_extracted]
 
 
 def test_choose_product_need_when_discovery_complete():
@@ -766,7 +756,7 @@ def test_multi_group_needs_missing_discovery_and_choose_product():
 
 
 def test_multi_group_needs_required_fields_and_documents():
-    """Lists both missing required fields and missing documents together."""
+    """Values a document verifies are not asked; only the missing document is."""
     specs = make_specs()
     app = make_app(
         product_code=Product.personal_loan,
@@ -786,16 +776,7 @@ def test_multi_group_needs_required_fields_and_documents():
     state = make_session(app)
     needs = next_needs(state)
 
-    # Should list missing fields, run_eligibility, and document needs together
-    missing_field_needs = [n for n in needs if n.kind == NeedKind.missing_field]
-    run_elig_needs = [n for n in needs if n.kind == NeedKind.run_eligibility]
-    doc_needs = [n for n in needs if n.kind == NeedKind.document]
-
-    assert len(missing_field_needs) == 2
-    assert {n.target for n in missing_field_needs} == {"monthly_net_income", "employer_name"}
-    assert len(run_elig_needs) == 1
-    assert len(doc_needs) == 1
-    assert doc_needs[0].target == "payslip"
+    assert [(n.kind, n.target) for n in needs] == [(NeedKind.document, "payslip")]
 
 
 def test_is_verified_profile_identity_field():

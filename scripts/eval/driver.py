@@ -319,14 +319,18 @@ def run_conversation(app: FastAPI, scenario: Scenario, customer, *, max_turns: i
             transcript=list(chat), awaiting_kind=str(awaiting.get("kind", "text")),
             document_types=requested, offers=offers, feedback=feedback,
         )
-        try:
-            action = customer.next_action(view)
-        except Exception as e:  # simulator failure: reported separately, never an agent result
-            return result("customer_error", session_id, f"{type(e).__name__}: {e}")
-        if action.type == "done":
-            return result("customer_done", session_id)
+        if awaiting.get("kind") == "review_form":
+            # The review form has one button: the simulated customer accepts the document values.
+            action = None
+        else:
+            try:
+                action = customer.next_action(view)
+            except Exception as e:  # simulator failure: reported separately, never an agent result
+                return result("customer_error", session_id, f"{type(e).__name__}: {e}")
+            if action.type == "done":
+                return result("customer_done", session_id)
 
-        problem = _rejection(action, requested, offers, documents)
+        problem = _rejection(action, requested, offers, documents) if action is not None else None
         if problem is not None:
             if rejected:
                 return result("customer_error", session_id, f"rejected customer action twice: {problem}")
@@ -334,7 +338,10 @@ def run_conversation(app: FastAPI, scenario: Scenario, customer, *, max_turns: i
             continue
         feedback = None
 
-        if action.type == "say":
+        if action is None:
+            said = "[pressed OK on the review form]"
+            r = client.post(f"{base}/extracted-fields", json={"edits": {}}, headers=headers)
+        elif action.type == "say":
             said = action.text
             r = client.post(f"{base}/messages", json={"text": action.text}, headers=headers)
         elif action.type == "upload":
@@ -346,12 +353,13 @@ def run_conversation(app: FastAPI, scenario: Scenario, customer, *, max_turns: i
             r = client.post(f"{base}/offer-selection", json={"offer_id": action.offer_id}, headers=headers)
 
         if r.status_code != 200:
-            return result("agent_error", session_id, f"HTTP {r.status_code} on {action.type}: {r.text[:500]}")
+            kind = action.type if action is not None else "review_form"
+            return result("agent_error", session_id, f"HTTP {r.status_code} on {kind}: {r.text[:500]}")
         body = r.json()
         turns += 1
         rejected = False  # two strikes means two rejections in a row
         reply = _agent_text(body)
-        if action.type == "say" and action.switch:
+        if action is not None and action.type == "say" and action.switch:
             switch_turn_ids.append(body["turn_id"])
         transcript.append({"turn": turns, "turn_id": body["turn_id"], "customer": said, "agent": reply,
                            "blocks": _blocks_summary(body), "awaiting_before": [], "tool_results": []})

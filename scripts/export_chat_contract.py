@@ -44,15 +44,10 @@ HAPPY_PATH: list[tuple[str, str | None]] = [
     ("say", "pentru renovare"),
     ("say", "30000 lei"),
     ("say", "60 luni"),
-    ("say", "employed"),
-    ("say", "67"),
-    ("say", "7000"),
-    ("say", "FICTIV Employer's Studio 1"),
-    ("say", "0"),
     ("upload", "id_card"),
     ("upload", "payslip"),
     ("upload", "bank_statement"),
-    ("say", "da"),
+    ("review", None),
     ("select_offer", None),
     ("say", "Da, trimite cererea"),
 ]
@@ -80,6 +75,8 @@ def run_happy_path(client: TestClient, customer_id: str = CUSTOMER_ID) -> list[d
         elif kind == "select_offer":
             offers = next(b for b in last["blocks"] if b["type"] == "offers")["offers"]
             r = client.post(f"{base}/offer-selection", json={"offer_id": offers[0]["offer_id"]}, headers=headers)
+        elif kind == "review":
+            r = client.post(f"{base}/extracted-fields", json={"edits": {}}, headers=headers)
         else:
             raise ValueError(f"unknown happy-path step {kind}")
         responses.append(ok(r))

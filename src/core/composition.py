@@ -1,12 +1,9 @@
 """Factory functions for building orchestrator components."""
-from pathlib import Path
-
 import psycopg
 
 from src.agent.orchestration.demo_model import DemoChatModel
 from src.agent.orchestration.orchestrator import Orchestrator
-from src.agent.tools.registry import ToolRegistry
-from src.agent.tools.retrieval import PolicySearch, build_policy_search
+from src.agent.tools.retrieval import build_policy_search
 from src.agent.tools.stubs import StubData, build_stub_registry
 from src.core.errors import ConfigurationError
 from src.core.settings import OrchestratorSettings
@@ -17,6 +14,8 @@ from src.services.conversations.store import (
     SessionStore,
 )
 from src.services.conversations.postgres_store import PostgresSessionStore
+from src.services.document_processing.service import DocumentProcessingService
+from src.storage.secure_documents.store import SecureDocumentStore
 
 
 def build_chat_model(settings: OrchestratorSettings) -> ChatModel:
@@ -61,7 +60,8 @@ def build_orchestrator(
     settings: OrchestratorSettings,
     *,
     model: ChatModel | None = None,
-    store: SessionStore | None = None
+    store: SessionStore | None = None,
+    documents: SecureDocumentStore | None = None,
 ) -> Orchestrator:
     """Build an orchestrator with all dependencies.
 
@@ -69,6 +69,7 @@ def build_orchestrator(
         settings: Orchestrator settings
         model: Optional pre-built chat model (for testing)
         store: Optional pre-built session store (for testing)
+        documents: Optional shared upload store; always uses real OCR/extraction
 
     Returns:
         Configured Orchestrator instance
@@ -86,7 +87,11 @@ def build_orchestrator(
     policy_search = build_policy_search(settings)
 
     # Build tool registry
-    registry = build_stub_registry(stub_data, policy_search)
+    if documents is None:
+        documents = SecureDocumentStore(settings.uploads_dir, max_file_size_bytes=settings.max_upload_bytes)
+    registry = build_stub_registry(
+        stub_data, policy_search, document_service=DocumentProcessingService(documents),
+    )
 
     return Orchestrator(
         store=store,

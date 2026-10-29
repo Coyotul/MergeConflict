@@ -273,6 +273,25 @@ See [ADR 007](docs/decisions/007-document-processing-pipeline.md) and the [Techn
 
 ## Run the orchestrator
 
+### Real OCR, extraction and document verification
+
+Chat uploads now run the existing real document pipeline, including in mock chat
+mode. The orchestrator can inspect extracted fields with `read_document_extraction`
+and check current rules/integrity/reconciliation with `verify_application_documents`.
+The model cannot store arbitrary files, bypass validators or mark evidence accepted.
+Unclear, inconsistent or unverifiable evidence blocks automatic offers/submission.
+
+Run the plain-language document checks (real synthetic PDFs/scans, no API key needed):
+
+```powershell
+& 'C:\Users\Cosmin\Desktop\MergeConflict\.venv\Scripts\python.exe' 'C:\Users\Cosmin\Desktop\MergeConflict\scripts\check_document_tools.py'
+```
+
+See [the document-tool runbook](docs/runbooks/orchestrator-documents.md) for supported
+formats, test results, safe storage behavior and prototype security limits. Use
+synthetic data only: local storage is not encrypted and the demo identity header
+is not production authentication.
+
 The orchestrator is a conversational AI agent that guides customers through credit applications. It uses Featherless AI (gpt-oss-120b) for natural language understanding and maintains session state across turns.
 
 ### Environment variables

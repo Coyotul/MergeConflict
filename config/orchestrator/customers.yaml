@@ -66,3 +66,45 @@ customers:
 
     low_confidence:
       - monthly_net_income
+
+  customer-alex:
+    profile:
+      full_name: "Alex Morgan"
+      age: 34
+
+    stated:
+      employment_type: "employed"
+      employment_months: 66
+
+    documents:
+      id_card:
+        full_name: "Alex Morgan"
+        age: 34
+
+      payslip:
+        employer_name: "Northstar Studio S.R.L"
+        monthly_net_income: 8500
+
+      bank_statement:
+        existing_monthly_obligations: 1237.50
+
+  alex_morgan:
+    profile:
+      full_name: "Alex Morgan"
+      age: 34
+
+    stated:
+      employment_type: "employed"
+      employment_months: 66
+
+    documents:
+      id_card:
+        full_name: "Alex Morgan"
+        age: 34
+
+      payslip:
+        employer_name: "Northstar Studio S.R.L"
+        monthly_net_income: 8500
+
+      bank_statement:
+        existing_monthly_obligations: 1237.50

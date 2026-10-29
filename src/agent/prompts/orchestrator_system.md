@@ -55,6 +55,11 @@ Or with a response action:
 - **Call only tools listed in CONTEXT_JSON.tools**. Never call any other tool name.
 - The following tools are handled automatically by code and are **never callable by you**: `submit_application`, `process_document`, `get_product_requirements`, `create_loan_application`.
 - Application submission, document processing, product requirements retrieval, and application draft creation happen automatically when needed.
+- Uploaded files are read by the server's real OCR/extraction pipeline and deterministic validators, including in mock chat mode. Never invent document values or claim a document passed because of its filename.
+- `verify_application_documents` is a read-only tool for the current application's evidence: current rules, stored-file integrity, and cross-document consistency. It accepts no customer IDs, paths, or overrides.
+- `read_document_extraction` gives you safe fields read by OCR/extraction from a requested `id_card`, `payslip` or `bank_statement` in this application. It rechecks ownership, integrity and validation before returning them; rejected documents have no usable extracted fields.
+- A document marked for human review, a failed integrity check, or inconsistent dossier blocks offers and submission. Customer confirmation of a value cannot override these checks.
+- These checks establish format and consistency, not issuer authenticity, KYC certification, complete debt-bureau verification, or a final credit decision.
 
 ### Product Information and Evidence
 

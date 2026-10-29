@@ -1,6 +1,5 @@
 """Chat API router for the orchestrator."""
 import logging
-from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
@@ -21,7 +20,8 @@ from src.models.chat import (
     SessionView,
     TurnResponse,
 )
-from src.storage.secure_documents.local import LocalDocumentStorage, sanitize_filename
+from src.storage.secure_documents.local import sanitize_filename
+from src.storage.secure_documents.store import SecureDocumentStore
 
 
 logger = logging.getLogger("src.api")
@@ -36,7 +36,7 @@ ALLOWED_CONTENT_TYPES = {
 
 def create_chat_router(
     orchestrator: Orchestrator,
-    documents: LocalDocumentStorage,
+    documents: SecureDocumentStore,
     max_upload_bytes: int
 ) -> APIRouter:
     """Create the chat API router.
@@ -103,6 +103,9 @@ def create_chat_router(
         Returns:
             200 with TurnResponse
         """
+        # Authorize before reading file bytes or writing any storage.
+        orchestrator.check_upload(session_id, customer_id, doc_type)
+
         # 1. Validate content type
         if file.content_type not in ALLOWED_CONTENT_TYPES:
             raise InvalidUpload(
@@ -118,16 +121,18 @@ def create_chat_router(
                 f"File size exceeds maximum of {max_upload_bytes} bytes"
             )
 
-        # 3. Check if document is requested (before storing)
-        orchestrator.check_upload(session_id, customer_id, doc_type)
-
         # 4. Store document
         document_id = uuid4().hex
         sanitized_filename = sanitize_filename(file.filename or "upload")
-        stored_path: Path | None = None
+        stored = False
 
         try:
-            stored_path = documents.save(session_id, document_id, sanitized_filename, content)
+            documents.store_document(
+                customer_id=customer_id, session_id=session_id, document_id=document_id,
+                filename=sanitized_filename, content_bytes=content, mime_type=file.content_type,
+                doc_kind=doc_type,
+            )
+            stored = True
 
             # 5. Handle upload event
             event = DocumentUploaded(
@@ -138,12 +143,13 @@ def create_chat_router(
             )
             return orchestrator.handle(session_id, customer_id, event)
         except Exception:
-            # If handle() fails after upload was stored, delete the file
-            if stored_path and stored_path.exists():
+            # State may already have committed before message-log persistence failed.
+            # Never delete evidence that the saved application still references.
+            if stored and not orchestrator.references_document(session_id, customer_id, document_id):
                 try:
-                    stored_path.unlink()
+                    documents.delete_document(document_id, customer_id=customer_id, session_id=session_id)
                 except Exception as cleanup_error:
-                    logger.warning(f"Failed to cleanup uploaded file {stored_path}: {cleanup_error}")
+                    logger.warning("Failed to clean up uncommitted upload %s: %s", document_id, type(cleanup_error).__name__)
             raise
 
     @router.post("/sessions/{session_id}/offer-selection", response_model=TurnResponse)

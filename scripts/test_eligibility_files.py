@@ -7,6 +7,7 @@ Usage:
 import sys
 from pathlib import Path
 from decimal import Decimal
+from datetime import date
 
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -24,7 +25,7 @@ def run_document_tests() -> bool:
     print("=" * 78)
 
     service = DocumentProcessingService()
-    base_dir = Path("data/test_samples_eligibility")
+    base_dir = Path(__file__).resolve().parents[1] / "data" / "test_samples_eligibility"
 
     test_cases = [
         {
@@ -44,9 +45,9 @@ def run_document_tests() -> bool:
         {
             "name": "Adeverință ANAF cu Venituri Salariale Optime (Alex Morgan)",
             "file": base_dir / "02_ELIGIBIL_Venit_Optim" / "adeverinta_anaf_venit_ok.pdf",
-            "expected_status": DocumentProcessingStatus.VALIDATED,
+            "expected_status": DocumentProcessingStatus.FLAGGED_FOR_HUMAN_REVIEW,
             "expected_income": 8500.0,
-            "description": "Venit net 8.500 RON/lună confirmat ANAF -> Eligibil pentru creditare",
+            "description": "Venit net 8.500 RON/lună; lipsește data începerii contractului -> verificare umană a vechimii, nu aprobare",
         },
         {
             "name": "Adeverință Salariu Angajator Venituri Optime (Alex Morgan)",
@@ -79,6 +80,7 @@ def run_document_tests() -> bool:
             mime_type="application/pdf",
             customer_id=f"test-cust-{idx}",
             declared_kind=DocumentKind.INCOME,
+            as_of=date(2026, 10, 28),  # Fixed assessment date for archived synthetic examples.
         )
 
         extracted_income = result.extracted_data.get("monthly_net_income") or result.extracted_data.get("average_net_income", 0.0)

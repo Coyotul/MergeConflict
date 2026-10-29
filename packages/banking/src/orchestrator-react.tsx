@@ -52,7 +52,10 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
 
   const startFresh = useCallback(
     (key: string, currentEpoch: number) => {
-      const newCustomerId = pickCustomer();
+      const newCustomerId =
+        lumaCustomerId && isValidCustomerId(lumaCustomerId)
+          ? lumaCustomerId
+          : pickCustomer();
       const client = createOrchestratorClient(newCustomerId);
       client
         .createSession()

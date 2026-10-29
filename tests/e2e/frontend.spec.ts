@@ -1,8 +1,9 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
+import { execFileSync } from "node:child_process";
 import { DEMO_ACCOUNTS } from "../../packages/banking/src/demo-accounts";
 import { CUSTOMER_ACTOR } from "../../packages/banking/src/seed";
 
-const ORCHESTRATOR_URL = "http://127.0.0.1:8000";
+const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_E2E_URL ?? "http://127.0.0.1:8000";
 
 test.describe.configure({ mode: "serial" });
 async function login(page: Page, role: "customer" | "reviewer") {
@@ -139,7 +140,8 @@ test("assistant runs on the orchestrator", async ({ page }, testInfo) => {
   await expect(page.getByRole("button", { name: /^Upload Payslip/ })).toBeVisible();
   const chooser = page.waitForEvent("filechooser");
   await uploadId.click();
-  await (await chooser).setFiles({ name: "synthetic-id-card.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\nSYNTHETIC DEMO ONLY\n%%EOF") });
+  const identityPdf = execFileSync(process.env.ORCHESTRATOR_PYTHON ?? "python", ["-c", "from tests.fixtures.documents import document_bytes; import sys; sys.stdout.buffer.write(document_bytes('id_card'))"]);
+  await (await chooser).setFiles({ name: "synthetic-id-card.pdf", mimeType: "application/pdf", buffer: identityPdf });
   replies += 1;
   await expect(assistantBubbles).toHaveCount(replies);
   await expect(uploadId).not.toBeVisible();

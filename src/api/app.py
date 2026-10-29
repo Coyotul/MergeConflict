@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from src.agent.orchestration.orchestrator import Orchestrator
 from src.api.application.chat import create_chat_router
 from src.core.composition import build_orchestrator
+from src.agent.tools.stubs import StubData
 from src.core.errors import (
     InvalidUpload,
     ModelUnavailable,
@@ -21,7 +22,8 @@ from src.core.errors import (
 )
 from src.core.settings import OrchestratorSettings, load_orchestrator_settings
 from src.models.chat import ErrorBody
-from src.storage.secure_documents.local import LocalDocumentStorage
+from src.services.document_processing.service import DocumentProcessingService
+from src.storage.secure_documents.store import SecureDocumentStore
 
 
 logger = logging.getLogger("src.api")
@@ -37,7 +39,7 @@ def create_app(
     Args:
         settings: Optional orchestrator settings. If None, loads from environment.
         orchestrator: Optional pre-built orchestrator (for testing). If provided,
-                     settings is only used for upload configuration.
+                     its document tools are rebound to the configured upload store.
 
     Returns:
         Configured FastAPI application
@@ -46,9 +48,16 @@ def create_app(
     if settings is None:
         settings = load_orchestrator_settings()
 
+    # Share the same owner-bound storage between uploads and OCR/verification tools.
+    documents = SecureDocumentStore(settings.uploads_dir, max_file_size_bytes=settings.max_upload_bytes)
+
     # Build orchestrator if not provided
     if orchestrator is None:
-        orchestrator = build_orchestrator(settings)
+        orchestrator = build_orchestrator(settings, documents=documents)
+    else:
+        orchestrator.configure_document_tools(
+            DocumentProcessingService(documents), StubData.load(settings.config_dir).customers,
+        )
 
     # Create app
     app = FastAPI(
@@ -66,8 +75,8 @@ def create_app(
         allow_credentials=False,
     )
 
-    # Document storage
-    documents = LocalDocumentStorage(settings.uploads_dir)
+    app.state.documents = documents
+    app.state.orchestrator = orchestrator
 
     # Register chat router
     chat_router = create_chat_router(

@@ -16,7 +16,7 @@ export interface ChatMessageView {
   created_at: string;
 }
 
-export type AwaitingKind = "text" | "document" | "offer_choice" | "none";
+export type AwaitingKind = "text" | "document" | "offer_choice" | "review_form" | "none";
 
 export interface Awaiting {
   kind: AwaitingKind;
@@ -90,6 +90,8 @@ export interface ExtractedFieldView {
   confidence?: number | null;
   needs_confirmation: boolean;
   conflict_with?: string | null;
+  editable?: boolean;
+  document_type?: string | null;
 }
 
 export interface SummaryField {
@@ -308,6 +310,14 @@ export function createOrchestratorClient(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ offer_id: offerId }),
+      });
+    },
+
+    async reviewExtractedFields(sessionId: string, edits: Record<string, string>): Promise<TurnResponse> {
+      return request<TurnResponse>(`/chat/sessions/${sessionId}/extracted-fields`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ edits }),
       });
     },
 

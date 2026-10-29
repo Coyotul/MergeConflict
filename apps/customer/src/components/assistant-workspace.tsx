@@ -27,7 +27,7 @@ const TOPIC_QUERIES: Record<string, string> = {
 
 export function AssistantWorkspace() {
   const { snapshot } = useDemo();
-  const { state, send, upload, chooseOffer, retry, restart } = useOrchestratorChat(snapshot?.customer.id);
+  const { state, send, upload, chooseOffer, reviewFields, retry, restart } = useOrchestratorChat(snapshot?.customer.id);
   const [ending, setEnding] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
   const topicRead = useRef(false);
@@ -104,6 +104,7 @@ export function AssistantWorkspace() {
               onSend={onSend}
               onUpload={(docType, file) => { void upload(docType, file); }}
               onChooseOffer={(offerId) => { void chooseOffer(offerId); }}
+              onReview={(edits) => { void reviewFields(edits); }}
               disabled={disabled}
             />
           )}

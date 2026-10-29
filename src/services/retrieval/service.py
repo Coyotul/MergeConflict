@@ -51,7 +51,10 @@ class RetrievalService:
         self.settings = settings
 
     def search(self, query: SearchQuery) -> SearchResult:
-        """Run a hybrid search; raises EmbeddingModelUnavailable or KnowledgeStoreUnavailable on failure."""
+        """Run a hybrid search; raises EmbeddingModelUnavailable or KnowledgeStoreUnavailable on failure.
+
+        KnowledgeStoreUnavailable also covers an index with no completed ingest run.
+        """
         try:
             embedding = self.embedder.embed_query(query.text)
         except EmbeddingModelUnavailable:
@@ -61,13 +64,19 @@ class RetrievalService:
 
         try:
             conn = self.connect()
-        except psycopg.OperationalError as exc:
+        except psycopg.Error as exc:
             raise KnowledgeStoreUnavailable(f"knowledge store unreachable: {exc}") from exc
         try:
             conn.read_only = True
             register_vector(conn)
             return self._search(conn, query, embedding)
-        except psycopg.OperationalError as exc:
+        except psycopg.errors.SyntaxError:
+            # Every query is parameterized and keyword terms are plain word tokens, so a syntax
+            # error is a bug in this module, not a store problem.
+            raise
+        except psycopg.Error as exc:
+            # Unreachable or dropped connections, missing tables or extensions (an unmigrated or
+            # wrong database), permissions: the store cannot serve the search.
             raise KnowledgeStoreUnavailable(f"knowledge store query failed: {exc}") from exc
         finally:
             conn.close()
@@ -83,6 +92,9 @@ class RetrievalService:
             include_withdrawn=query.include_withdrawn,
         )
         index_info = latest_index_info(conn)
+        if index_info is None:
+            # Without a completed ingest run, "no evidence" would be a false answer.
+            raise KnowledgeStoreUnavailable("knowledge index is empty: run scripts/rag/ingest.py")
         dense = dense_candidates(conn, embedding, filters, s.candidate_k)
         keyword = keyword_candidates(conn, query_terms(query.text), filters, s.candidate_k)
 

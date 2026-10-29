@@ -92,14 +92,15 @@ def insert_chunk_links(conn: Connection, chunk_id: int, links: list[ChunkLinkRec
         )
 
 
-# Per document, the version in force on %(as_of)s: the greatest (effective_from, ingested_at)
-# among versions that are already effective.
+# Per document, the version in force on %(as_of)s: the greatest (effective_from, ingested_at, id)
+# among versions that are already effective. The id breaks ties deterministically: versions written
+# in one transaction share ingested_at.
 IN_FORCE_CTE = """
 in_force AS (
     SELECT DISTINCT ON (v.document_id) v.id
     FROM knowledge_document_versions v
     WHERE v.effective_from <= %(as_of)s
-    ORDER BY v.document_id, v.effective_from DESC, v.ingested_at DESC
+    ORDER BY v.document_id, v.effective_from DESC, v.ingested_at DESC, v.id DESC
 )
 """
 

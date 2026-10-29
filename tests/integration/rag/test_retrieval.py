@@ -26,6 +26,7 @@ from src.services.document_ingestion.sources import load_source_config
 from src.services.retrieval.service import RetrievalService
 from src.storage.document_store.raw_store import save_raw
 from src.storage.document_store.repository import DocumentRepository
+from src.storage.vector_index.repository import fetch_in_force_chunks
 from tests.fixtures.rag.pdf_builders import build_demo_cost_sheet, make_pdf
 from tests.support.fake_embedder import HashingEmbedder
 
@@ -191,7 +192,11 @@ def test_related_links_resolve_only_to_indexed_active_targets(service, db_conn):
     link = cards["Credit Demo fără ipotecă"].related_links[0]
     assert link.link_kind is LinkKind.card
     assert link.title == "Credit Demo" and link.canonical_key == stored_key(db_conn, PAGE_URL)
-    assert cards.get("Overdraft Demo") is None or cards["Overdraft Demo"].related_links == []   # target not indexed
+    # The Overdraft card is returned, but its link target (overdraft.html) is not indexed.
+    overdraft = service.search(SearchQuery(text="Overdraft Demo lichiditate rapidă", doc_kinds=[DocKind.category_hub], as_of=D))
+    overdraft_cards = [p for p in overdraft.passages if p.kind is ChunkKind.hub_card and p.text.startswith("Overdraft Demo")]
+    assert len(overdraft_cards) == 1 and overdraft_cards[0].products == [Product.overdraft]
+    assert overdraft_cards[0].related_links == []
     DocumentRepository(db_conn).mark_withdrawn([canonical_key(PAGE_URL)]); db_conn.commit()
     r2 = service.search(SearchQuery(text="Credit Demo fără ipotecă Aplici ușor", doc_kinds=[DocKind.category_hub], as_of=D))
     assert any(p.kind is ChunkKind.hub_card for p in r2.passages)
@@ -245,3 +250,52 @@ def test_search_raises_typed_errors(settings, db_conn):   # db_conn: skip when t
         return conn
     with pytest.raises(KnowledgeStoreUnavailable):
         RetrievalService(dropped_connection, HashingEmbedder(), settings).search(SearchQuery(text="dae"))
+
+
+def test_empty_index_raises_typed_error(settings, db_conn):
+    # db_conn truncated every table: no completed index run, so "no evidence" would be a lie.
+    with pytest.raises(KnowledgeStoreUnavailable, match="knowledge index is empty"):
+        RetrievalService(lambda: psycopg.connect(TEST_URL), HashingEmbedder(), settings).search(SearchQuery(text="dae"))
+
+
+def test_missing_tables_raise_typed_error(service, settings):
+    # A search_path without the knowledge schema stands in for a database whose tables were dropped.
+    missing = lambda: psycopg.connect(TEST_URL, options="-c search_path=no_such_schema")   # noqa: E731
+    with pytest.raises(KnowledgeStoreUnavailable, match="knowledge store query failed"):
+        RetrievalService(missing, HashingEmbedder(), settings).search(SearchQuery(text="dae"))
+
+
+def test_in_force_tie_goes_to_the_latest_version_id(service, db_conn):
+    # Two fee list versions with the same effective date and ingestion time: the later row wins.
+    db_conn.execute("update knowledge_document_versions v set effective_from = '2026-09-01', "
+                    "ingested_at = '2026-10-20 09:00+00' from knowledge_documents d "
+                    "where d.id = v.document_id and d.source_url = %s", (FEE_URL,))
+    # Rewrite the newer row so a table scan meets it after the older one: without a final id
+    # tie-break the scan order would decide.
+    db_conn.execute("update knowledge_document_versions set raw_path = raw_path where id = "
+                    "(select max(v.id) from knowledge_document_versions v join knowledge_documents d "
+                    "on d.id = v.document_id where d.source_url = %s)", (FEE_URL,))
+    db_conn.commit()
+    texts = [t for key, _, t in fetch_in_force_chunks(db_conn, D) if key == stored_key(db_conn, FEE_URL)]
+    assert any(V2_FEE[0] in t for t in texts) and not any(V1_FEE[0] in t for t in texts)
+
+
+def test_conflict_notice_for_two_documents_of_one_kind_topic_and_product(service, db_conn):
+    # A second personal-loan cost sheet (different document, same kind and topic) in force with the first.
+    other = DOCS + "costuri/costuri-complete-nevoi-personale-demo/20261015-y.pdf"
+    out, msgs = IngestionPipeline(db_conn, HashingEmbedder(), CFG).ingest_one(
+        ManifestEntry(url=other, final_url=other, fetched_at=FETCHED_AT, status_code=200, content_type=None,
+                      sitemap_lastmod=None, sha256="other", raw_path="other.pdf"),
+        build_demo_cost_sheet(footnotes=False))
+    assert out is IngestOutcome.created, msgs
+    # The two sheets are near-identical, so the evidence margin is small; this test is about conflicts.
+    lenient = RetrievalService(lambda: psycopg.connect(TEST_URL), HashingEmbedder(),
+                               RagSettings(database_url=TEST_URL, dense_floor=0.0))
+    r = lenient.search(SearchQuery(text="comision analiză dosar Demoflex", doc_kinds=[DocKind.cost_sheet], top_k=10, as_of=D))
+    sheets = {p.citation.url for p in r.passages if p.doc_kind is DocKind.cost_sheet}
+    assert sheets == {COST_SHEET_URL, other}
+    conflicts = [c for c in r.conflicts if c.doc_kind is DocKind.cost_sheet and c.product is Product.personal_loan]
+    assert len(conflicts) == 1
+    by_id = {p.chunk_id: p for p in r.passages}
+    assert {by_id[i].citation.url for i in conflicts[0].chunk_ids} == {COST_SHEET_URL, other}
+    assert set(conflicts[0].effective_dates) == {date(2026, 10, 1)}

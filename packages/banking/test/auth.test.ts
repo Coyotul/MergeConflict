@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEMO_ACCOUNTS } from "../src/demo-accounts";
-import { CUSTOMER_ACTOR, REVIEWER_ACTOR } from "../src/seed";
+import { DEMO_ACCOUNTS, DEMO_CUSTOMERS } from "../src/demo-accounts";
+import { CUSTOMER_ACTOR, REVIEWER_ACTOR, seedStore } from "../src/seed";
 import { sessionSchema, storedSessionSchema } from "../src/schemas";
 import { DEMO_SESSION_LIFETIME_MS, DemoSessions } from "../server/auth";
 import { DomainError } from "../src/workflow";
@@ -23,6 +23,20 @@ test("demo credentials are validated and bound to the selected customer or bank-
   assert.equal(sessionSchema.safeParse({ role: "reviewer" }).success, false);
   assert.equal(sessionSchema.safeParse({ role: "customer", email: "not-an-email", password: "demo" }).success, false);
   assert.equal(sessionSchema.safeParse({ role: "customer", email: DEMO_ACCOUNTS.customer.email, password: "" }).success, false);
+});
+
+test("each demo customer can sign in and gets its own actor id", () => {
+  const sessions = new DemoSessions();
+  assert.equal(DEMO_CUSTOMERS.length, 9);
+  assert.equal(new Set(DEMO_CUSTOMERS.map((c) => c.email)).size, DEMO_CUSTOMERS.length);
+  for (const customer of DEMO_CUSTOMERS) {
+    const session = sessions.create(sessionSchema.parse({ role: "customer", email: customer.email, password: customer.password }));
+    assert.deepEqual(session.actor, { id: customer.customerId, name: customer.name, role: "customer" });
+    assert.throws(() => sessions.create(sessionSchema.parse({ role: "reviewer", email: customer.email, password: customer.password })), /does not match/);
+  }
+  assert.equal(DEMO_CUSTOMERS[0].customerId, CUSTOMER_ACTOR.id);
+  const store = seedStore();
+  for (const customer of DEMO_CUSTOMERS) assert.ok(store.customers.some((c) => c.id === customer.customerId && c.monthlyIncome === customer.monthlyIncome));
 });
 
 test("opaque demo sessions expire, can be revoked and are not shared across server restarts", () => {

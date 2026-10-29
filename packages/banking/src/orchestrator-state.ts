@@ -7,13 +7,6 @@ import type {
   ChatMessageView,
 } from "./orchestrator";
 
-export const SYNTHETIC_CUSTOMERS = ["cust-001", "cust-002", "cust-003"] as const;
-
-export function pickCustomer(random: () => number = Math.random): string {
-  const index = Math.floor(random() * SYNTHETIC_CUSTOMERS.length);
-  return SYNTHETIC_CUSTOMERS[index];
-}
-
 export interface ChatEntry {
   id: string;
   role: "customer" | "assistant";
@@ -199,7 +192,7 @@ export function shouldStartFresh(error: OrchestratorError): boolean {
 }
 
 export function isValidCustomerId(customerId: string): boolean {
-  return (SYNTHETIC_CUSTOMERS as readonly string[]).includes(customerId);
+  return /^cust-[a-z0-9-]+$/.test(customerId);
 }
 
 export function getRetryAction(state: ChatState): PendingAction | null {

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { useDemo } from "@banking/demo/react";
-import { DEMO_ACCOUNTS } from "@banking/demo/demo-accounts";
+import { DEMO_ACCOUNTS, DEMO_CUSTOMERS } from "@banking/demo/demo-accounts";
 import { Pill } from "@banking/ui/primitives";
 import { SessionGate } from "@banking/ui/session-gate";
 import { Button } from "@banking/ui/button";
@@ -16,7 +16,7 @@ import { CustomerSidebar, customerNavigation } from "./customer-sidebar";
 export function CustomerShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const { snapshot, loading, error, login, refresh, clearError } = useDemo();
-  if (!snapshot) return <SessionGate role="customer" loading={loading} error={error} demoAccount={DEMO_ACCOUNTS.customer} onLogin={login} onClearError={clearError} />;
+  if (!snapshot) return <SessionGate role="customer" loading={loading} error={error} demoAccount={DEMO_ACCOUNTS.customer} demoAccounts={DEMO_CUSTOMERS} onLogin={login} onClearError={clearError} />;
   const title = customerNavigation.find((n) => n.href === path)?.label ?? "Privacy & preferences";
   return (
     <div className="app-backdrop flex h-screen max-h-screen h-dvh max-h-dvh w-full min-h-0 overflow-hidden p-3 gap-3 md:gap-4 md:p-4 lg:gap-5 lg:p-5">

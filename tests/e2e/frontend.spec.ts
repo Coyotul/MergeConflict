@@ -1,14 +1,20 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
-import { DEMO_ACCOUNTS } from "../../packages/banking/src/demo-accounts";
-import { CUSTOMER_ACTOR } from "../../packages/banking/src/seed";
+import { DEMO_ACCOUNTS, DEMO_CUSTOMERS, type DemoCustomerAccount } from "../../packages/banking/src/demo-accounts";
 
 const ORCHESTRATOR_URL = "http://127.0.0.1:8000";
 
 test.describe.configure({ mode: "serial" });
-async function login(page: Page, role: "customer" | "reviewer") {
+const ALEX = DEMO_CUSTOMERS[0];
+const DAN = DEMO_CUSTOMERS.find((c) => c.customerId === "cust-dan-ionescu")!;
+// The customer sign-in lists one button per demo customer ("Name — scenario") that fills the form.
+function demoCustomerButton(page: Page, account: DemoCustomerAccount) {
+  return page.getByRole("list", { name: "Demo customers" }).getByRole("button", { name: `${account.name} — ${account.scenario}` });
+}
+async function login(page: Page, role: "customer" | "reviewer", account: DemoCustomerAccount = ALEX) {
   await page.goto(role === "customer" ? "/" : "http://127.0.0.1:3001");
-  await page.getByRole("button", { name: `Use ${role === "customer" ? "customer" : "bank agent"} demo account` }).click();
-  await expect(page.getByLabel("Email address", { exact: true })).toHaveValue(DEMO_ACCOUNTS[role].email);
+  if (role === "customer") await demoCustomerButton(page, account).click();
+  else await page.getByRole("button", { name: "Use bank agent demo account" }).click();
+  await expect(page.getByLabel("Email address", { exact: true })).toHaveValue(role === "customer" ? account.email : DEMO_ACCOUNTS.reviewer.email);
   await page.getByRole("button", { name: `Sign in as ${role === "customer" ? "customer" : "bank agent"}` }).click();
   await expect(page.getByRole("complementary", { name: role === "customer" ? "Primary navigation" : "Bank agent navigation", exact: true })).toBeVisible();
 }
@@ -50,7 +56,7 @@ test("separate customer and bank-agent sign-in, validation, session restoration 
   await submit.click();
   await expect(page.getByRole("alert", { name: "Sign-in error" })).toContainText("does not match this demo workspace");
   await expect(page.getByRole("heading", { name: "Your applications." })).not.toBeVisible();
-  await page.getByRole("button", { name: "Use customer demo account" }).click();
+  await demoCustomerButton(page, ALEX).click();
   await expect(page.getByRole("alert", { name: "Sign-in error" })).not.toBeVisible();
   await expect(page.getByRole("heading", { name: "Welcome back." })).toBeVisible();
   await page.getByRole("button", { name: "Show password" }).click();
@@ -106,15 +112,11 @@ test("invalid or revoked browser sessions return to sign-in instead of exposing 
 test("assistant runs on the orchestrator", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  // The chat session is created for the signed-in customer, not a random synthetic one.
+  const createdRequest = page.waitForRequest((r) => r.method() === "POST" && r.url() === `${ORCHESTRATOR_URL}/chat/sessions`);
   await login(page, "customer");
+  expect((await createdRequest).headers()["x-customer-id"]).toBe(ALEX.customerId);
   await expect(page.getByRole("heading", { name: /Hey Alex/ })).toBeVisible();
-  // The chat picks a random synthetic customer per conversation, and the mock (demo) model's
-  // outcomes differ per customer. Pin cust-001 deterministically: create its session through the
-  // orchestrator API and store it under the hook's sessionStorage key, so the reload resumes it.
-  const created = await page.request.post(`${ORCHESTRATOR_URL}/chat/sessions`, { headers: { "X-Customer-Id": "cust-001" }, data: {} });
-  expect(created.status()).toBe(201);
-  const { session_id: sessionId } = (await created.json()) as { session_id: string };
-  await page.evaluate(([key, value]) => sessionStorage.setItem(key, value), [`luma-orchestrator-chat-v1-${CUSTOMER_ACTOR.id}`, JSON.stringify({ sessionId, customerId: "cust-001" })]);
   await page.reload();
   await expect(page.getByRole("heading", { name: /Hey Alex/ })).toBeVisible();
   await expect(page.getByLabel("Message the assistant")).toBeVisible();
@@ -131,7 +133,7 @@ test("assistant runs on the orchestrator", async ({ page }, testInfo) => {
   await say("Vreau un credit de 30000 lei pe 60 de luni pentru renovare");
   await expect(page.getByRole("heading", { name: /Hey Alex/ })).not.toBeVisible();
   await expect(page.getByRole("region", { name: "Application progress" })).toBeVisible();
-  // The demo model collects one field per turn: same answers as the cust-001 happy path in
+  // The demo model collects one field per turn: same answers as the eligible happy path in
   // tests/e2e/test_chat_scenarios.py, then "ok" runs the preliminary check and requests documents.
   for (const text of ["pentru renovare", "30000 lei", "60 luni", "employed", "48", "7000", "TechCorp SRL", "400", "ok"]) await say(text);
   const uploadId = page.getByRole("button", { name: "Upload ID Card" });
@@ -149,6 +151,15 @@ test("assistant runs on the orchestrator", async ({ page }, testInfo) => {
   await page.getByRole("dialog").getByRole("button", { name: "End chat & start fresh" }).click();
   await expect(page.getByRole("heading", { name: /Hey Alex/ })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test("each demo customer gets its own orchestrator chat session", async ({ page }) => {
+  const createdRequest = page.waitForRequest((r) => r.method() === "POST" && r.url() === `${ORCHESTRATOR_URL}/chat/sessions`);
+  await login(page, "customer", DAN);
+  expect((await createdRequest).headers()["x-customer-id"]).toBe(DAN.customerId);
+  await expect(page.getByRole("heading", { name: /Hey Dan/ })).toBeVisible();
+  const stored = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)!), `luma-orchestrator-chat-v1-${DAN.customerId}`);
+  expect(stored.customerId).toBe(DAN.customerId);
 });
 
 test("assistant shows a retryable alert while the orchestrator is down", async ({ page }) => {

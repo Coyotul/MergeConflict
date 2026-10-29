@@ -6,7 +6,7 @@ from pathlib import Path
 import psycopg
 import pytest
 
-from src.core.errors import IngestionError
+from src.core.errors import IngestionError, KnowledgeStoreUnavailable
 from src.services.document_ingestion.chunking import CHUNKER_VERSION
 from src.services.document_ingestion.manifest import ManifestEntry
 from src.services.document_ingestion.pipeline import IngestionPipeline, IngestOutcome
@@ -385,3 +385,18 @@ def test_document_is_rekeyed_when_its_folder_becomes_shared_and_back(db_conn, tm
     rep = p.ingest_entries([page, alfa], tmp_path)
     assert list(rep.outcomes.values()) == [IngestOutcome.unchanged, IngestOutcome.unchanged]
     assert keys() == ([folder, folder + "/beta", page_key], [(folder,)])
+
+
+def test_lost_connection_when_recording_the_run_is_a_typed_error(db_conn, tmp_path):
+    class KillsSession(HashingEmbedder):
+        """Terminates the pipeline's own database session while embedding "beta"."""
+
+        def embed_documents(self, texts):
+            if any("beta" in t for t in texts):
+                with psycopg.connect(TEST_DB_URL, autocommit=True) as admin:
+                    admin.execute("select pg_terminate_backend(%s)", (db_conn.info.backend_pid,))
+            return super().embed_documents(texts)
+
+    p = IngestionPipeline(db_conn, KillsSession(), CFG)
+    with pytest.raises(KnowledgeStoreUnavailable, match="index run"):
+        p.ingest_entries(pdf_entries(tmp_path, ["alfa", "beta", "gama"]), tmp_path)

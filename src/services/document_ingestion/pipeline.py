@@ -5,11 +5,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pgvector.psycopg import register_vector
+import psycopg
 from psycopg import Connection
 from psycopg.pq import TransactionStatus
 from pydantic import BaseModel
 
-from src.core.errors import IngestionError
+from src.core.errors import IngestionError, KnowledgeStoreUnavailable
 from src.models.knowledge import AUTHORITY_BY_DOC_KIND, DocKind, Product
 from src.services.document_ingestion.chunking import CHUNKER_VERSION, ChunkDraft, build_header, estimate_tokens
 from src.services.document_ingestion.manifest import ManifestEntry
@@ -238,13 +239,18 @@ class IngestionPipeline:
 
     def _finish_run(self, run_id: int, status: str, outcomes: dict[str, IngestOutcome]) -> None:
         counts = list(outcomes.values())
-        with self.conn.transaction():
-            self.conn.execute(
-                """
-                UPDATE index_runs SET status = %s, finished_at = now(), documents_seen = %s,
-                    versions_created = %s, failures = %s
-                WHERE id = %s
-                """,
-                (status, len(counts), counts.count(IngestOutcome.created),
-                 counts.count(IngestOutcome.failed), run_id),
-            )
+        try:
+            with self.conn.transaction():
+                self.conn.execute(
+                    """
+                    UPDATE index_runs SET status = %s, finished_at = now(), documents_seen = %s,
+                        versions_created = %s, failures = %s
+                    WHERE id = %s
+                    """,
+                    (status, len(counts), counts.count(IngestOutcome.created),
+                     counts.count(IngestOutcome.failed), run_id),
+                )
+        except psycopg.OperationalError as exc:
+            raise KnowledgeStoreUnavailable(
+                f"could not record index run {run_id} as {status} (it stays 'running'): {exc}"
+            ) from exc

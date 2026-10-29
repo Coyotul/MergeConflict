@@ -243,8 +243,9 @@ def test_offers_reach_customer_and_driver_stops_before_confirmation(work_dir, cr
     offer = customer.views[-1].offers[0]
     assert set(offer) == {"offer_id", "term_months", "monthly_installment"}
     assert result.transcript[-1]["customer"] == f"[chose offer {offer['offer_id']}]"
-    assert not any(e["type"] == "turn_started" and (e.get("event") or {}).get("kind") == "confirmation"
-                   for e in map(json.loads, result.trace_path.read_text(encoding="utf-8").splitlines()))
+    # Submission is by agreement in chat, so the run must stop before the customer can agree.
+    events = list(map(json.loads, result.trace_path.read_text(encoding="utf-8").splitlines()))
+    assert not any(e["type"] == "tool_call" and e.get("tool") == "submit_application" for e in events)
 
 
 def test_requested_documents_stay_open_once_requested():

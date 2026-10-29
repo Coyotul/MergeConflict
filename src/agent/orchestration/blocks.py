@@ -20,7 +20,6 @@ from src.agent.orchestration.state import (
 from src.models.chat import (
     ApplicationSubmittedBlock,
     ApplicationSummary,
-    ApplicationSummaryBlock,
     Awaiting,
     AwaitingKind,
     Block,
@@ -42,8 +41,10 @@ from src.models.credit import FieldSpec, LoanOffer
 SUBMITTED_STATUS = "PENDING_HUMAN_REVIEW"
 
 ESCALATION_MESSAGE = {
-    "en": "A human advisor will review your case and contact you.",
-    "ro": "Un consultant va analiza cazul tău și te va contacta.",
+    "en": "This application needs a bank representative. Please contact your branch or call the bank, "
+          "and they will help you continue.",
+    "ro": "Această cerere are nevoie de un reprezentant al băncii. Te rog contactează sucursala sau sună la bancă, "
+          "iar ei te vor ajuta să continui.",
 }
 
 # Main stage a side stage branches from (it takes that slot in progress.steps).
@@ -115,9 +116,6 @@ def build_awaiting(state: SessionState) -> Awaiting:
         return Awaiting(kind=AwaitingKind.document, document_types=types)
     if first.kind == NeedKind.choose_offer:
         return Awaiting(kind=AwaitingKind.offer_choice)
-    if first.kind == NeedKind.confirm_submission:
-        version = app.summary.summary_version if app.summary is not None else None
-        return Awaiting(kind=AwaitingKind.confirmation, summary_version=version)
     return Awaiting(kind=AwaitingKind.text)
 
 
@@ -164,17 +162,11 @@ def build_blocks(state: SessionState) -> list[Block]:
         if app.offers is not None:
             blocks.append(OffersBlock(offers=app.offers.offers, selected_offer_id=app.selected_offer_id))
 
-        if app.summary is not None and derive_stage(state) == Stage.awaiting_confirmation:
-            blocks.append(ApplicationSummaryBlock(summary=app.summary))
-
         if app.application_id is not None:
             blocks.append(ApplicationSubmittedBlock(application_id=app.application_id, status=SUBMITTED_STATUS))
 
-    if state.escalation is not None:
-        blocks.append(EscalationBlock(
-            ticket_id=state.escalation.ticket_id,
-            message=ESCALATION_MESSAGE[state.language],
-        ))
+    if state.escalation is not None or derive_stage(state) in (Stage.manual_review, Stage.escalated):
+        blocks.append(EscalationBlock(message=ESCALATION_MESSAGE[state.language]))
     return blocks
 
 

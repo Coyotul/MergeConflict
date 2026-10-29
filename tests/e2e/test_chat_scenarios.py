@@ -103,12 +103,6 @@ class Chat:
             f"/chat/sessions/{self.session_id}/offer-selection", json={"offer_id": offer_id}, headers=self.headers
         ))
 
-    def confirm(self, summary_version: str, decision: str = "confirm") -> dict:
-        return self._ok(self.client.post(
-            f"/chat/sessions/{self.session_id}/confirmation",
-            json={"summary_version": summary_version, "decision": decision}, headers=self.headers,
-        ))
-
     def view(self) -> dict:
         r = self.client.get(f"/chat/sessions/{self.session_id}", headers=self.headers)
         assert r.status_code == 200, r.text
@@ -165,13 +159,12 @@ def test_happy_path_alex_morgan(client):
     reply = body["messages"][-1]["text"]
     assert offers[0]["monthly_installment"]["amount"] in reply  # summarised from CONTEXT_JSON
 
+    # Submission is by explicit agreement in chat: the agent asks, the customer agrees in words.
     body = chat.select_offer(offers[0]["offer_id"])
     assert stage(body) == "awaiting_confirmation"
-    assert body["awaiting"]["kind"] == "confirmation"
-    version = body["awaiting"]["summary_version"]
-    assert block(body, "application_summary")["summary"]["summary_version"] == version
+    assert body["awaiting"]["kind"] == "text"
 
-    body = chat.confirm(version)
+    body = chat.say("Da, trimite cererea")
     assert stage(body) == "submitted"
     assert body["awaiting"]["kind"] == "none"
     submitted = block(body, "application_submitted")

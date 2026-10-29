@@ -172,34 +172,6 @@ test("client tolerates unknown block types", async () => {
   } finally { await f.close(); }
 });
 
-test("confirm sends summary_version and decision", async () => {
-  const f = await fixture();
-  try {
-    f.setHandler((req, res) => {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        session_id: "sess_1",
-        turn_id: "turn_3",
-        session_version: 3,
-        messages: [{ role: "assistant", text: "Confirmed", citations: [], created_at: new Date().toISOString() }],
-        awaiting: { kind: "none" },
-        progress: { flow: "credit_application", stage: "submitted", steps: [] },
-        blocks: [],
-        simulated: true,
-      }));
-    });
-
-    const client = createOrchestratorClient("customer-123", f.url);
-    await client.confirm("sess_1", "v1", "confirm");
-
-    assert.equal(f.logs.length, 1);
-    const log = f.logs[0];
-    assert.equal(log.method, "POST");
-    assert.equal(log.url, "/chat/sessions/sess_1/confirmation");
-    assert.deepEqual(JSON.parse(log.body), { summary_version: "v1", decision: "confirm" });
-  } finally { await f.close(); }
-});
-
 test("client maps 2xx invalid JSON to invalid_response", async () => {
   const f = await fixture();
   try {

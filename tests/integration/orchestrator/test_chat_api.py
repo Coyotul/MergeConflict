@@ -8,6 +8,8 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
+from src.services.human_review.store import ReviewStore
 from fastapi.testclient import TestClient
 
 from src.agent.orchestration.orchestrator import Orchestrator
@@ -68,11 +70,11 @@ def store():
 
 
 @pytest.fixture
-def orchestrator(config_dir, fake_model, store):
+def orchestrator(config_dir, fake_model, store, tmp_path):
     """Create an orchestrator with in-memory store for testing."""
     stub_data = StubData.load(config_dir)
     policy_search = StubPolicySearch(config_dir)
-    registry = build_stub_registry(stub_data, policy_search)
+    registry = build_stub_registry(stub_data, policy_search, review_store=ReviewStore(tmp_path / "applications.sqlite3"))
     catalog_codes = list(stub_data.products.keys())
 
     return Orchestrator(
@@ -374,30 +376,6 @@ def test_upload_accepted_returns_checklist(client, customer_id, orchestrator, st
     assert len(identity_items) == 1
     # Document was processed (status could be accepted, processing, or rejected depending on stub)
     assert identity_items[0]["doc_type"] == "identity_card"
-
-
-def test_confirmation_flow_over_http(client, customer_id):
-    """Test confirmation endpoint exists and handles requests."""
-    # Create a session
-    create_response = client.post(
-        "/chat/sessions",
-        json={},
-        headers={"X-Customer-Id": customer_id}
-    )
-    session_id = create_response.json()["session_id"]
-
-    # POST confirmation (will fail business logic but endpoint should respond)
-    response = client.post(
-        f"/chat/sessions/{session_id}/confirmation",
-        json={"summary_version": "v1", "decision": "confirm"},
-        headers={"X-Customer-Id": customer_id}
-    )
-
-    # Endpoint exists and returns a response (may be 409/422 due to invalid state)
-    assert response.status_code in [200, 409, 422]
-    data = response.json()
-    # Either success with blocks or error with code
-    assert "blocks" in data or "code" in data
 
 
 def test_get_session_view_rebuilds_screen(client, customer_id, orchestrator, store):

@@ -359,7 +359,9 @@ def run_conversation(app: FastAPI, scenario: Scenario, customer, *, max_turns: i
         chat.append(("agent", reply))
 
         block_types = {b.get("type") for b in body.get("blocks") or []}
-        if (body.get("awaiting") or {}).get("kind") == "confirmation":
+        # Submission is by explicit agreement in chat; stop at that stage so the
+        # simulated customer can never submit a real application.
+        if (body.get("progress") or {}).get("stage") == "awaiting_confirmation":
             return result("awaiting_confirmation", session_id)
         if (scenario.stop_when == "offers_shown" and "offers" in block_types) or (
                 scenario.stop_when == "eligibility_result" and "eligibility_result" in block_types):

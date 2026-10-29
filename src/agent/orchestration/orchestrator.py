@@ -27,8 +27,8 @@ from src.agent.orchestration.actions import (
 from src.agent.orchestration.blocks import all_specs, build_summary, build_turn_response
 from src.agent.orchestration.events import (  # noqa: F401  (event types re-exported)
     EVENT_TEXTS,
+    event_text,
     CodeEventsMixin,
-    ConfirmationDecision,
     CustomerMessage,
     DocumentUploaded,
     OfferSelected,
@@ -147,6 +147,8 @@ class _Turn:
     trace: TurnTrace
     new_messages: list[StoredMessage] = field(default_factory=list)
     eligibility_ran: bool = False  # set when code re-ran eligibility during the current step
+    customer_text: str | None = None  # set only when a customer message started this turn
+    submitted_reply: str | None = None  # fixed reply once the model's submission went through
 
     @property
     def transcript(self) -> list[StoredMessage]:
@@ -253,8 +255,6 @@ class Orchestrator(CodeEventsMixin):
             return self._handle_document_uploaded
         if isinstance(event, OfferSelected):
             return self._handle_offer_selected
-        if isinstance(event, ConfirmationDecision):
-            return self._handle_confirmation
         if isinstance(event, SessionStarted):
             raise ValueError("SessionStarted is handled by start_session")
         raise TypeError(f"Unknown event {type(event).__name__}")
@@ -351,6 +351,7 @@ class Orchestrator(CodeEventsMixin):
         state = turn.state
         loaded = state.model_copy(deep=True)
         self._add_message(turn, "customer", event.text)
+        turn.customer_text = event.text
         state.language = detect_language(event.text, state.language)
         self._run_model_steps(turn, [])
         return self._commit(turn, loaded)
@@ -403,6 +404,10 @@ class Orchestrator(CodeEventsMixin):
                     pending.append(rejection_notice)
                 result = "tool_ok" if outcome.ok else f"tool_rejected:{outcome.error_code}"
                 self._log_step(turn, step, started, "call_tool", action.action.tool, result)
+                if turn.submitted_reply is not None:
+                    # Submission is never paraphrased: end the turn with the fixed text.
+                    self._add_message(turn, "assistant", turn.submitted_reply)
+                    return True
                 continue
 
             if rejection_notice and not reasked and step < self._max_steps:
@@ -521,6 +526,10 @@ class Orchestrator(CodeEventsMixin):
     def _execute_model_tool(self, turn: _Turn, action: ModelAction) -> ToolCallOutcome:
         call = action.action
         self._add_message(turn, "action", json.dumps(action.model_dump(mode="json"), ensure_ascii=False))
+        if call.tool == "submit_application":
+            outcome = self._submit_from_model(turn, call.arguments)
+            self._add_message(turn, "tool", outcome.as_message())
+            return outcome
         outcome, output = turn.trace.execute(self._registry, call.tool, call.arguments, turn.ctx, caller="model")
         if outcome.ok:
             self._store_output(turn, call.tool, output)
@@ -530,6 +539,42 @@ class Orchestrator(CodeEventsMixin):
             self._clear_pricing(turn.state.application)
         self._add_message(turn, "tool", outcome.as_message())
         self._sync_application(turn)
+        return outcome
+
+    def _submit_from_model(self, turn: _Turn, arguments: dict) -> ToolCallOutcome:
+        """Submit only for explicit, current agreement typed by the customer in this turn."""
+        state, app = turn.state, turn.state.application
+
+        def refuse(reason: str) -> ToolCallOutcome:
+            turn.trace.code_event("submission", "refused", reason=reason)
+            return ToolCallOutcome(tool="submit_application", ok=False, output=None,
+                                   error_code=ToolErrorCode.precondition_failed, error_message=reason)
+
+        if app is not None and app.application_id is not None:
+            turn.submitted_reply = event_text("submitted", state.language, id=app.application_id)
+            return ToolCallOutcome(tool="submit_application", ok=True, output={"application_id": app.application_id},
+                                   error_code=None, error_message=None)
+        if turn.customer_text is None:
+            return refuse("Submission needs the customer's own message agreeing to submit.")
+        self._sync_application(turn)
+        if app is None or app.summary is None or [n.kind for n in next_needs(state)][:1] != [NeedKind.confirm_submission]:
+            return refuse("The application is not ready to submit: show the final terms and ask first.")
+        agreement = " ".join(str(arguments.get("customer_agreement") or "").split()).lower()
+        if not agreement or agreement not in " ".join(turn.customer_text.split()).lower():
+            return refuse("customer_agreement must quote the customer's own words agreeing to submit.")
+        key = f"{state.session_id}:{app.summary.summary_version}"
+        outcome, output = self._run_code_tool(turn, "submit_application", {
+            "application_id": app.draft_application_id, "idempotency_key": key,
+            "customer_agreement": turn.customer_text,
+        })
+        if output is None:
+            return outcome
+        app.application_id = output.application_id
+        app.submitted_at = self._clock()
+        app.idempotency_key = key
+        self._add_message(turn, "event", f"APPLICATION_SUBMITTED {app.application_id} {output.status}")
+        turn.trace.code_event("submission", "submitted", application_id=app.application_id, status=output.status)
+        turn.submitted_reply = event_text("submitted", state.language, id=app.application_id)
         return outcome
 
     def _add_reply(self, turn: _Turn, reply: Respond) -> None:

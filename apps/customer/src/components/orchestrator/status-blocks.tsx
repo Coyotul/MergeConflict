@@ -85,7 +85,7 @@ export function EscalationBlock({ block }: { block: EscalationBlock }) {
       <div className="mb-2 flex items-center gap-2">
         <AlertCircle className="size-5 text-amber-800" />
         <p className="text-xs font-semibold text-amber-900">
-          Escalated · Ticket {block.ticket_id}
+          Please contact a bank representative
         </p>
       </div>
       <p className="text-xs leading-relaxed text-amber-800">{block.message}</p>

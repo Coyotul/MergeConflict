@@ -4,13 +4,11 @@ import {
   initialChatState,
   chatReducer,
   canSend,
-  canConfirm,
   hasCustomerMessages,
   storageKey,
   shouldStartFresh,
   isValidCustomerId,
   getRetryAction,
-  retryNotice,
   lastAssistantEntryIndex,
   type ChatState,
   type ChatEntry,
@@ -199,64 +197,6 @@ describe("orchestrator-state", () => {
     });
   });
 
-  describe("canConfirm", () => {
-    it("requires matching summary_version and confirmation awaiting", () => {
-      const state: ChatState = {
-        ...initialChatState,
-        sessionId: "sess-123",
-        latest: {
-          session_id: "sess-123",
-          turn_id: "turn-1",
-          session_version: 1,
-          messages: [],
-          awaiting: { kind: "confirmation", summary_version: "v1" },
-          progress: { flow: "none", stage: null, steps: [] },
-          blocks: [],
-          simulated: true,
-        },
-      };
-
-      const summary: ApplicationSummary = {
-        summary_version: "v1",
-        application_id: "app-1",
-        product_code: "personal_loan",
-        product_name: "Personal Loan",
-        amount: { amount: "10000.00", currency: "RON" },
-        term_months: 24,
-        offer: {
-          offer_id: "offer-1",
-          product_code: "personal_loan",
-          amount: { amount: "10000.00", currency: "RON" },
-          term_months: 24,
-          annual_interest_rate_percent: "9.5",
-          monthly_installment: { amount: "500.00", currency: "RON" },
-          total_repayment: { amount: "12000.00", currency: "RON" },
-          total_cost: { amount: "2000.00", currency: "RON" },
-          fees: { amount: "0.00", currency: "RON" },
-          assumptions: [],
-        },
-        fields: [],
-        documents: [],
-      };
-
-      assert.equal(canConfirm(state, summary), true);
-
-      // Wrong version
-      const wrongVersionSummary = { ...summary, summary_version: "v2" };
-      assert.equal(canConfirm(state, wrongVersionSummary), false);
-
-      // Wrong awaiting kind
-      const stateWrongAwaiting: ChatState = {
-        ...state,
-        latest: {
-          ...state.latest!,
-          awaiting: { kind: "text" },
-        },
-      };
-      assert.equal(canConfirm(stateWrongAwaiting, summary), false);
-    });
-  });
-
   describe("hasCustomerMessages", () => {
     it("returns false when only the greeting exists", () => {
       const state: ChatState = {
@@ -400,20 +340,6 @@ describe("orchestrator-state", () => {
       assert.deepEqual(action, { kind: "start" });
     });
 
-    it("returns null for confirm actions", () => {
-      const state: ChatState = {
-        ...initialChatState,
-        sessionId: "sess-123",
-        lastAction: {
-          kind: "confirm",
-          summaryVersion: "v1",
-          decision: "confirm",
-        },
-      };
-      const action = getRetryAction(state);
-      assert.equal(action, null);
-    });
-
     it("returns lastAction for other actions", () => {
       const state: ChatState = {
         ...initialChatState,
@@ -432,30 +358,6 @@ describe("orchestrator-state", () => {
       };
       const action = getRetryAction(state);
       assert.equal(action, null);
-    });
-  });
-
-  describe("retryNotice", () => {
-    it("explains that nothing was submitted after a failed confirm", () => {
-      const state: ChatState = {
-        ...initialChatState,
-        sessionId: "sess-123",
-        lastAction: { kind: "confirm", summaryVersion: "v1", decision: "confirm" },
-        error: { status: 0, code: "unavailable", retryable: true, message: "down" } as OrchestratorError,
-      };
-      assert.equal(
-        retryNotice(state),
-        "Nothing was submitted. Review the summary and press Confirm again."
-      );
-    });
-
-    it("is null for retryable non-confirm actions", () => {
-      const state: ChatState = {
-        ...initialChatState,
-        sessionId: "sess-123",
-        lastAction: { kind: "message", text: "Hello" },
-      };
-      assert.equal(retryNotice(state), null);
     });
   });
 

@@ -500,7 +500,6 @@ def test_escalation_overrides_stage():
     state = make_session(
         app,
         escalation=EscalationRecord(
-            ticket_id="ESC123",
             reason="Customer request",
             created_at=datetime.now(UTC)
         )

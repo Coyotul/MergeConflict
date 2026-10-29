@@ -25,6 +25,7 @@ from src.services.conversations.store import (
 from src.services.conversations.postgres_store import PostgresSessionStore
 from src.services.document_processing.service import DocumentProcessingService
 from src.storage.secure_documents.store import SecureDocumentStore
+from src.services.human_review.store import ReviewStore
 
 
 def build_chat_model(settings: OrchestratorSettings) -> ChatModel:
@@ -85,13 +86,16 @@ def build_tracer(settings: OrchestratorSettings) -> Tracer:
 def build_registry(
     settings: OrchestratorSettings, stub_data: StubData, policy_search: PolicySearch,
     document_service: DocumentProcessingService | None = None,
+    *, review_store: ReviewStore | None = None,
 ) -> ToolRegistry:
     """Stub registry with get_customer_profile and run_eligibility_check backed by SQLite credit sources.
 
     The ToolSpec fields (flows, preconditions, model visibility) stay those of the stub registry;
     only the handlers change.
     """
-    registry = build_stub_registry(stub_data, policy_search, document_service=document_service)
+    registry = build_stub_registry(
+        stub_data, policy_search, document_service=document_service, review_store=review_store,
+    )
     sources = SqliteCreditSources(settings.credit_sources_db, load_bindings(settings.customer_bindings_path))
     overrides = {
         "get_customer_profile": make_profile_handler(sources),
@@ -109,6 +113,7 @@ def build_orchestrator(
     store: SessionStore | None = None,
     tracer: Tracer | None = None,
     documents: SecureDocumentStore | None = None,
+    review_store: ReviewStore | None = None,
     clock: Callable[[], datetime] = utcnow,
 ) -> Orchestrator:
     """Build an orchestrator with all dependencies.
@@ -141,7 +146,10 @@ def build_orchestrator(
     # Build tool registry
     if documents is None:
         documents = SecureDocumentStore(settings.uploads_dir, max_file_size_bytes=settings.max_upload_bytes)
-    registry = build_registry(settings, stub_data, policy_search, DocumentProcessingService(documents))
+    registry = build_registry(
+        settings, stub_data, policy_search, DocumentProcessingService(documents),
+        review_store=review_store or ReviewStore(settings.review_db_path),
+    )
 
     return Orchestrator(
         store=store,

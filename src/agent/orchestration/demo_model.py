@@ -144,9 +144,10 @@ T: dict[str, dict[str, str]] = {
         "ro": "Alege una dintre oferte din listă.", "en": "Please choose one of the offers in the list.",
     },
     "confirm_submission": {
-        "ro": "Verifică rezumatul cererii și confirmă-l când ești gata. Nu trimit nimic fără confirmarea ta.",
-        "en": "Please review the application summary and confirm it when you're ready. "
-              "Nothing is sent without your confirmation.",
+        "ro": "Cererea este gata. Răspunde „da, trimite” dacă vrei să o trimit spre analiză. "
+              "Nu trimit nimic fără acordul tău.",
+        "en": "Your application is ready. Reply \"yes, submit\" if you want me to send it for review. "
+              "Nothing is sent without your agreement.",
     },
     "not_eligible": {
         "ro": "Cu aceste date nu sunt îndeplinite condițiile preliminare. Poți modifica suma sau perioada, "
@@ -343,6 +344,11 @@ class DemoChatModel:
                     for n in t.needs if n["kind"] in ("confirm_extracted", "resolve_conflict")
                 ]
                 return intent, updates, _call("run_eligibility_check", {})
+
+        if kind == "confirm_submission" and t.customer_text and t.first_step:
+            words = _words(t.customer_text)
+            if words and (" ".join(words) in _YES or words[0] in ("da", "yes")):
+                return intent, [], _call("submit_application", {"customer_agreement": t.customer_text})
 
         if kind == "choose_product" and "get_credit_products" in t.tools:
             product = self._pick_product(t)

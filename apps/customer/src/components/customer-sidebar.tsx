@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowUpRight, CreditCard, FileClock, LayoutDashboard, LogOut, MessageCircle, Settings2, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useDemo } from "@banking/demo/react";
+import { useMyApplications } from "@banking/demo/review-react";
 import { Logo } from "@banking/ui/primitives";
 import { cn } from "@banking/ui/utils";
 
@@ -18,7 +19,8 @@ export const customerNavigation = [
 export function CustomerSidebar() {
   const path = usePathname();
   const { snapshot, logout } = useDemo();
-  const attention = snapshot?.applications.filter((a) => a.status === "MORE_INFORMATION_REQUIRED").length ?? 0;
+  const { applications } = useMyApplications(snapshot?.customer.id);
+  const attention = applications?.filter((a) => a.status === "MORE_INFORMATION_REQUIRED").length ?? 0;
 
   return (
     <aside className="flex w-[76px] shrink-0 flex-col py-2.5 lg:w-[206px] h-full min-h-0 overflow-y-auto" aria-label="Primary navigation">

@@ -232,13 +232,6 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
                 action.offerId
               );
               break;
-            case "confirm":
-              response = await client.confirm(
-                state.sessionId!,
-                action.summaryVersion,
-                action.decision
-              );
-              break;
             default:
               return;
           }
@@ -253,13 +246,8 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
           if (epochRef.current !== currentEpoch) return;
 
           if (error instanceof OrchestratorError) {
-            // Handle 409 session_busy with automatic retry (except for confirm)
-            if (
-              error.status === 409 &&
-              error.code === "session_busy" &&
-              !isRetry &&
-              action.kind !== "confirm"
-            ) {
+            // Handle 409 session_busy with automatic retry
+            if (error.status === 409 && error.code === "session_busy" && !isRetry) {
               retryTimerRef.current = setTimeout(() => {
                 retryTimerRef.current = null;
                 performRequest(true).catch(() => {
@@ -323,16 +311,6 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
     [executeAction]
   );
 
-  const confirm = useCallback(
-    async (
-      summaryVersion: string,
-      decision: "confirm" | "decline"
-    ): Promise<boolean> => {
-      return executeAction({ kind: "confirm", summaryVersion, decision });
-    },
-    [executeAction]
-  );
-
   const retry = useCallback(async (): Promise<boolean> => {
     const action = getRetryAction(state);
     if (!action) return false;
@@ -371,7 +349,6 @@ export function useOrchestratorChat(lumaCustomerId: string | undefined) {
     send,
     upload,
     chooseOffer,
-    confirm,
     retry,
     restart,
   };

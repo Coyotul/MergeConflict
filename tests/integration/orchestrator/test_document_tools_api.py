@@ -108,24 +108,6 @@ def test_all_three_consistent_documents_are_reconciled_and_saved_with_checksums(
     assert all(doc.sha256_hash and doc.validation.valid for doc in app.documents)
 
 
-def test_mismatched_employee_identity_blocks_offers_and_submission(api):
-    assert upload(api, "id_card").status_code == 200
-    response = upload(api, "payslip", pdf_bytes(income_text(name="MARIA IONESCU")))
-    assert response.status_code == 200, response.text
-    state = api[1].state.orchestrator._store.get(api[2]).application
-    assert not state.document_verification.consistent
-    assert document(api, "payslip").human_review_required
-    assert response.json()["progress"]["stage"] == "manual_review"
-    assert "verificare uman" in response.json()["messages"][-1]["text"]
-    assert state.offers is None and state.summary is None
-    confirmation = api[0].post(
-        f"/chat/sessions/{api[2]}/confirmation", headers=HEADERS,
-        json={"summary_version": "invented", "decision": "confirm"},
-    )
-    assert confirmation.status_code == 200
-    assert api[1].state.orchestrator._store.get(api[2]).application.application_id is None
-
-
 def test_replacing_the_conflicting_document_clears_only_resolved_review_flags(api):
     upload(api, "id_card")
     upload(api, "payslip", pdf_bytes(income_text(name="MARIA IONESCU")))
@@ -419,3 +401,18 @@ def test_a_resumed_session_recomputes_age_instead_of_using_an_outdated_verified_
     assert app.fields["age"].value == 39
     assert not app.fields["age"].confirmed
     assert not app.offers and not app.summary
+
+
+def test_mismatched_employee_identity_blocks_offers_and_submission(api):
+    assert upload(api, "id_card").status_code == 200
+    response = upload(api, "payslip", pdf_bytes(income_text(name="MARIA IONESCU")))
+    assert response.status_code == 200, response.text
+    state = api[1].state.orchestrator._store.get(api[2]).application
+    assert not state.document_verification.consistent
+    assert document(api, "payslip").human_review_required
+    assert response.json()["progress"]["stage"] == "manual_review"
+    assert "verificare uman" in response.json()["messages"][-1]["text"]
+    assert state.offers is None and state.summary is None
+    agreement = api[0].post(f"/chat/sessions/{api[2]}/messages", headers=HEADERS, json={"text": "Da, trimite cererea"})
+    assert agreement.status_code == 200
+    assert api[1].state.orchestrator._store.get(api[2]).application.application_id is None

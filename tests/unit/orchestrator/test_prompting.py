@@ -56,7 +56,7 @@ class DummyOutput(BaseModel):
 
 def test_prompt_version():
     """PROMPT_VERSION constant is defined."""
-    assert PROMPT_VERSION == "orchestrator-v4-product-switch"
+    assert PROMPT_VERSION == "orchestrator-v5-merged-chat-submission"
 
 
 def test_load_system_prompt():

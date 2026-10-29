@@ -465,7 +465,7 @@ def test_checks_on_recorded_demo_trace(work_dir):
         chat.upload(doc_type)
     body = chat.say("da")
     body = chat.select_offer(block(body, "offers")["offers"][0]["offer_id"])
-    assert body["awaiting"]["kind"] == "confirmation"
+    assert body["progress"]["stage"] == "awaiting_confirmation"  # agreement is asked for in chat
 
     events = load_events(work_dir / "traces" / f"{chat.session_id}.jsonl")
     assert events, "trace file expected"

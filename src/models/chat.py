@@ -122,12 +122,6 @@ class ApplicationSummary(BaseModel):
     documents: list[DocumentChecklistItem]
 
 
-class ApplicationSummaryBlock(BaseModel):
-    """Block showing application summary."""
-    type: Literal["application_summary"] = "application_summary"
-    summary: ApplicationSummary
-
-
 class ApplicationSubmittedBlock(BaseModel):
     """Block confirming application submission."""
     type: Literal["application_submitted"] = "application_submitted"
@@ -136,9 +130,8 @@ class ApplicationSubmittedBlock(BaseModel):
 
 
 class EscalationBlock(BaseModel):
-    """Block indicating case escalation."""
+    """The chat stopped; the customer should contact a bank representative."""
     type: Literal["escalation"] = "escalation"
-    ticket_id: str
     message: str
 
 
@@ -149,7 +142,6 @@ Block = Annotated[
         ExtractedFieldsBlock,
         EligibilityResultBlock,
         OffersBlock,
-        ApplicationSummaryBlock,
         ApplicationSubmittedBlock,
         EscalationBlock
     ],
@@ -196,12 +188,6 @@ class SendMessageRequest(BaseModel):
 class OfferSelectionRequest(BaseModel):
     """Request to select a loan offer."""
     offer_id: str
-
-
-class ConfirmationRequest(BaseModel):
-    """Request to confirm or decline the application summary."""
-    summary_version: str
-    decision: Literal["confirm", "decline"]
 
 
 class ErrorBody(BaseModel):

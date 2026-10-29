@@ -4,14 +4,17 @@ import Link from "next/link";
 import { ArrowRight, Check, ChevronRight, FileCheck2, ShieldCheck, Sparkles } from "lucide-react";
 import { useDemo } from "@banking/demo/react";
 import { calculateLoan, sumMoney } from "@banking/demo/finance";
-import { documentLabels, formatDate, formatMoney, statusLabels } from "@banking/demo/format";
+import { formatDate, formatMoney } from "@banking/demo/format";
+import { documentLabels as reviewDocumentLabels } from "@banking/demo/review-api";
+import { useMyApplications } from "@banking/demo/review-react";
 import { Panel, Pill, StatusBadge } from "@banking/ui/primitives";
 import { Button } from "@banking/ui/button";
 
 export function ContextPanel() {
   const { snapshot } = useDemo();
+  const { applications } = useMyApplications(snapshot?.customer.id);
   if (!snapshot) return null;
-  const app = snapshot.applications.find((a) => !["APPROVED", "REJECTED", "CANCELLED"].includes(a.status)) ?? snapshot.applications[0];
+  const app = applications?.find((a) => !["APPROVED", "REJECTED"].includes(a.status)) ?? applications?.[0];
   const total = sumMoney(snapshot.loans.map((l) => calculateLoan(l.principal, l.annualRate, l.remainingMonths).monthlyPayment));
 
   return (
@@ -43,39 +46,12 @@ export function ContextPanel() {
             <h2 className="text-sm font-semibold">Active application</h2>
             <span className="text-xs text-slate-500">{app.reference}</span>
           </div>
-          <p className="mb-1 text-lg font-semibold">{formatMoney(app.amount, 0)}</p>
-          <p className="mb-3 text-xs text-slate-500">
-            {snapshot.products.find((p) => p.id === app.productId)?.name} · {app.months} months
-          </p>
-          <StatusBadge status={app.status} label={statusLabels[app.status]} />
-          <div className="my-3.5 flex gap-1.5">
-            {[0, 1, 2, 3].map((n) => (
-              <span
-                key={n}
-                className={`h-1.5 flex-1 rounded-full ${
-                  n < (app.status === "PENDING_HUMAN_REVIEW" ? 3 : app.status === "APPROVED" ? 4 : 2)
-                    ? "bg-primary"
-                    : "bg-slate-100"
-                }`}
-              />
-            ))}
-          </div>
-          <div className="space-y-2">
-            {app.documents
-              .filter((d) => d.kind !== "statement" || app.requestedDocument === "statement" || d.status === "FORMAT_ACCEPTED")
-              .map((d) => (
-                <div key={d.kind} className="flex items-center justify-between text-xs">
-                  <span className="text-slate-600">{documentLabels[d.kind]}</span>
-                  {d.status === "FORMAT_ACCEPTED" ? (
-                    <Check className="size-3.5 text-emerald-500" />
-                  ) : (
-                    <Pill tone="amber" className="px-2 py-0 text-xs">Needed</Pill>
-                  )}
-                </div>
-              ))}
-          </div>
+          {app.amount != null && <p className="mb-1 text-lg font-semibold">{formatMoney(Number(app.amount), 0)}</p>}
+          {app.term_months && <p className="mb-3 text-xs text-slate-500">Personal loan · {app.term_months} months</p>}
+          <StatusBadge status={app.status} label={app.status_label} />
+          {app.open_request && <p className="mt-3 text-xs text-amber-700">{reviewDocumentLabels[app.open_request.doc_type]} requested by the reviewer.</p>}
           <Button asChild variant="secondary" size="sm" className="mt-4 w-full">
-            <Link href="/applications">Continue application<ArrowRight /></Link>
+            <Link href="/applications">View application<ArrowRight /></Link>
           </Button>
         </Panel>
       )}

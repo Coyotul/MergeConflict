@@ -5,15 +5,15 @@
   "messages": [
     {
       "role": "assistant",
-      "text": "Ai ales varianta pe 60 luni. Verifică rezumatul cererii și confirmă-l când ești gata. Nu trimit nimic fără confirmarea ta.",
+      "text": "Ai ales varianta pe 60 luni. Cererea este gata. Răspunde „da, trimite” dacă vrei să o trimit spre analiză. Nu trimit nimic fără acordul tău.",
       "citations": [],
       "created_at": "2026-10-28T09:00:00Z"
     }
   ],
   "awaiting": {
-    "kind": "confirmation",
+    "kind": "text",
     "document_types": [],
-    "summary_version": "example-summary-v1"
+    "summary_version": null
   },
   "progress": {
     "flow": "credit_application",
@@ -305,136 +305,6 @@
         }
       ],
       "selected_offer_id": "personal_loan-60m-5edfd172fc2e65c5"
-    },
-    {
-      "type": "application_summary",
-      "summary": {
-        "summary_version": "example-summary-v1",
-        "application_id": "DRAFT-00000001",
-        "product_code": "personal_loan",
-        "product_name": "Flexicredit (personal loan)",
-        "amount": {
-          "amount": "30000.00",
-          "currency": "RON"
-        },
-        "term_months": 60,
-        "offer": {
-          "offer_id": "personal_loan-60m-5edfd172fc2e65c5",
-          "product_code": "personal_loan",
-          "amount": {
-            "amount": "30000.00",
-            "currency": "RON"
-          },
-          "term_months": 60,
-          "annual_interest_rate_percent": "8.55",
-          "monthly_installment": {
-            "amount": "621.22",
-            "currency": "RON"
-          },
-          "total_repayment": {
-            "amount": "37273.16",
-            "currency": "RON"
-          },
-          "total_cost": {
-            "amount": "7473.16",
-            "currency": "RON"
-          },
-          "fees": {
-            "amount": "500.00",
-            "currency": "RON"
-          },
-          "assumptions": [
-            "Product personal_loan_fixed version 2026-10-15 (synthetic parameters).",
-            "Simulation date 2026-10-28; the credit is paid out in full on that date.",
-            "Instalments are monthly; DAE uses equal months of 1/12 year (OUG 50/2010, Annex 1).",
-            "Amounts are rounded to 0.01 per instalment; the last instalment absorbs rounding.",
-            "Base rate 8.55% (product minimum (no risk-based rate provided)); fixed for the whole term.",
-            "Affordability uses the declared net monthly income and existing payments, unverified.",
-            "Net amount paid out: 29800.00 RON; requested amount is total credit including financed costs.",
-            "DAE/APR: 9.58%; nominal interest is not the total cost of credit.",
-            "No salary-account discount or optional insurance is assumed; annuity repayment, no first-home uplift.",
-            "Total upfront fees/premiums: 200.00 RON; total recurring charges: 300.00 RON.",
-            "Fees include upfront and recurring charges over the full term. Do not add them again to total repayment or total cost.",
-            "ANALYSIS_FEE: 200.00 RON (financed and deducted from payout).",
-            "Simulation debt-service ratio: 0.1647; limit: 0.40; within limit: true. Indicative check against BNR Regulation 17/2012; not an eligibility decision.",
-            "Indicative simulation based on synthetic product parameters and the stated assumptions. It is not an offer, an approval or an authoritative settlement amount."
-          ],
-          "indicative": true,
-          "simulated": true
-        },
-        "fields": [
-          {
-            "label": "Purpose",
-            "value": "pentru renovare",
-            "source": "customer"
-          },
-          {
-            "label": "Amount",
-            "value": "30000.00",
-            "source": "customer"
-          },
-          {
-            "label": "Term (months)",
-            "value": "60",
-            "source": "customer"
-          },
-          {
-            "label": "Full Name",
-            "value": "ALEX MORGAN",
-            "source": "document"
-          },
-          {
-            "label": "Age",
-            "value": "38",
-            "source": "document"
-          },
-          {
-            "label": "Employment Type",
-            "value": "employed",
-            "source": "document"
-          },
-          {
-            "label": "Employment Duration (months)",
-            "value": "66",
-            "source": "document"
-          },
-          {
-            "label": "Monthly Net Income",
-            "value": "6200.00",
-            "source": "document"
-          },
-          {
-            "label": "Employer Name",
-            "value": "TechCorp SRL",
-            "source": "document"
-          },
-          {
-            "label": "Existing Monthly Obligations",
-            "value": "400.00",
-            "source": "document"
-          }
-        ],
-        "documents": [
-          {
-            "doc_type": "id_card",
-            "label": "ID Card",
-            "status": "accepted",
-            "rejection_reason": null
-          },
-          {
-            "doc_type": "payslip",
-            "label": "Payslip (last 3 months)",
-            "status": "accepted",
-            "rejection_reason": null
-          },
-          {
-            "doc_type": "bank_statement",
-            "label": "Bank Statement (last 6 months)",
-            "status": "accepted",
-            "rejection_reason": null
-          }
-        ]
-      }
     }
   ],
   "simulated": true

@@ -1,6 +1,5 @@
 """Retrieval evaluation over the labelled splits in config/rag/eval/ (format: config/rag/eval/README.md)."""
 import math
-import unicodedata
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
@@ -10,6 +9,7 @@ import psycopg
 import yaml
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from src.services.document_ingestion.normalize import fold_accents
 from src.models.knowledge import DocKind, Passage, Product, SearchQuery, SearchResult, SearchStatus, Topic
 from src.storage.vector_index.repository import fetch_in_force_chunks
 
@@ -75,8 +75,7 @@ class EvalReport(BaseModel):
 
 def _fold(text: str) -> str:
     """Accents stripped, lowercased, whitespace collapsed."""
-    decomposed = unicodedata.normalize("NFD", text)
-    return " ".join("".join(c for c in decomposed if unicodedata.category(c) != "Mn").lower().split())
+    return " ".join(fold_accents(text).split())
 
 
 def _matches_chunk(key: str, section_path: list[str], text: str, expected: ExpectedSource) -> bool:

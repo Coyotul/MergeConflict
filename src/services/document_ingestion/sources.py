@@ -1,6 +1,5 @@
 """Source configuration and document classification."""
 import re
-import unicodedata
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, parse_qs
@@ -9,6 +8,7 @@ import yaml
 from pydantic import BaseModel
 
 from src.models.knowledge import DocKind, ChunkKind, Product, Topic
+from src.services.document_ingestion.normalize import fold_accents
 
 
 class PatternRule(BaseModel):
@@ -65,14 +65,6 @@ def _strip_query_fragment(url: str) -> str:
     """Strip query string and fragment from URL."""
     parsed = urlparse(url)
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-
-
-def _remove_accents(text: str) -> str:
-    """Remove accents for case- and accent-insensitive matching."""
-    # Normalize to NFKD (decomposed form)
-    nfkd = unicodedata.normalize('NFKD', text)
-    # Remove combining marks
-    return ''.join(c for c in nfkd if not unicodedata.combining(c))
 
 
 def products_for_url(url: str, cfg: SourceConfig) -> list[Product]:
@@ -167,10 +159,10 @@ def fee_section_products(section_path: list[str], cfg: SourceConfig) -> list[Pro
         return None
 
     top_heading = section_path[0]
-    top_heading_normalized = _remove_accents(top_heading).lower()
+    top_heading_normalized = fold_accents(top_heading)
 
     for rule in cfg.fee_list_sections:
-        pattern_normalized = _remove_accents(rule.pattern).lower()
+        pattern_normalized = fold_accents(rule.pattern)
         if re.search(pattern_normalized, top_heading_normalized):
             return rule.products
 
@@ -212,19 +204,19 @@ def classify_topic(
     # Rule 3b: fee_list sections (heading keyword)
     if doc_kind == DocKind.fee_list and section_path:
         top_heading = section_path[0]
-        top_heading_normalized = _remove_accents(top_heading).lower()
+        top_heading_normalized = fold_accents(top_heading)
 
         for rule in cfg.fee_list_sections:
-            pattern_normalized = _remove_accents(rule.pattern).lower()
+            pattern_normalized = fold_accents(rule.pattern)
             if re.search(pattern_normalized, top_heading_normalized):
                 return rule.topic
 
     # Rule 4: topic keyword rules
     search_text = " ".join(section_path) + " " + text[:300]
-    search_text_normalized = _remove_accents(search_text).lower()
+    search_text_normalized = fold_accents(search_text)
 
     for rule in cfg.topic_keyword_rules:
-        pattern_normalized = _remove_accents(rule.pattern).lower()
+        pattern_normalized = fold_accents(rule.pattern)
         if re.search(pattern_normalized, search_text_normalized):
             return rule.topic
 

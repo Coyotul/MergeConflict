@@ -5,7 +5,6 @@ header; secured (mortgage) sheets draw one bordered table with the offers as col
 """
 import re
 import statistics
-import unicodedata
 from dataclasses import dataclass
 
 import pymupdf as fitz
@@ -13,7 +12,7 @@ import pymupdf as fitz
 from src.core.errors import TemplateMismatch
 from src.models.knowledge import ChunkKind
 from src.services.document_ingestion.chunking import CHUNKER_VERSION, ChunkDraft, ParsedDocument, pack_lines
-from src.services.document_ingestion.normalize import normalize_text
+from src.services.document_ingestion.normalize import fold_accents, normalize_text
 from src.services.document_ingestion.parsers.pdf_rows import Word, page_words, rebuild_rows
 
 FACTS_PATH = ["Costuri complete", "Condiții și costuri"]
@@ -47,12 +46,6 @@ COLUMN_LABELS = (
 )
 
 Line = list[Word]
-
-
-def _fold(text: str) -> str:
-    """Lower-case and strip diacritics, for accent-insensitive matching."""
-    decomposed = unicodedata.normalize("NFD", text.lower())
-    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
 def _yc(word: Word) -> float:
@@ -173,13 +166,13 @@ def _find_header_start(lines: list[Line]) -> tuple[int, float]:
     for i, line in enumerate(lines):
         ordered = sorted(line, key=lambda w: w.x0)
         for a, b in zip(ordered, ordered[1:]):
-            if _fold(a.text) == "tip" and _fold(b.text) == "produs":
+            if fold_accents(a.text) == "tip" and fold_accents(b.text) == "produs":
                 return i, b.x1
     raise TemplateMismatch("no 'Tip produs' header")
 
 
 def _column_label(header_text: str) -> str:
-    folded = _fold(header_text)
+    folded = fold_accents(header_text)
     for keyword, label in COLUMN_LABELS:
         if keyword in folded:
             return label
@@ -248,7 +241,7 @@ def _variant_lines(body_lines: list[Line], columns: list[dict], first_word: str)
 def _early_repayment(lines: list[Line]) -> tuple[str | None, set[int]]:
     """The early repayment line, and the ids of the words it used."""
     for line in lines:
-        if "plata anticipata" not in _fold(_join(sorted(line, key=lambda w: w.x0))):
+        if "plata anticipata" not in fold_accents(_join(sorted(line, key=lambda w: w.x0))):
             continue
         label = _split_line(line, CELL_GAP)[0]
         label_x1 = max(w.x1 for w in label)
@@ -304,12 +297,12 @@ def _parse_template(lines: list[Line], title_idx: int, title: str) -> tuple[str,
 
     texts = [_line_text(line) for line in lines]
     examples_idx = next(
-        (i for i in range(first_variant, len(lines)) if _fold(texts[i]).startswith("exemplu de calcul")),
+        (i for i in range(first_variant, len(lines)) if fold_accents(texts[i]).startswith("exemplu de calcul")),
         len(lines),
     )
 
     # The early repayment value can be drawn just above its label: the body ends at that band.
-    early_ys = [_line_y(lines[i]) for i in range(first_variant, examples_idx) if "plata anticipata" in _fold(texts[i])]
+    early_ys = [_line_y(lines[i]) for i in range(first_variant, examples_idx) if "plata anticipata" in fold_accents(texts[i])]
 
     def ends_body(i: int) -> bool:
         starts_left = min(w.x0 for w in lines[i]) < left_edge
@@ -323,7 +316,7 @@ def _parse_template(lines: list[Line], title_idx: int, title: str) -> tuple[str,
     footnotes = [_line_text([w for w in line if id(w) not in used]) for line in lines[body_end:examples_idx]]
 
     pre_table = [texts[i] for i in range(title_idx + 1, top)]
-    if pre_table and _fold(pre_table[-1]) == "costuri credit:":
+    if pre_table and fold_accents(pre_table[-1]) == "costuri credit:":
         pre_table.pop()
 
     facts = pre_table + ["Costuri credit:"] + variants + [f for f in footnotes if f]
@@ -337,7 +330,7 @@ def _parse_template(lines: list[Line], title_idx: int, title: str) -> tuple[str,
 
 
 def _has_oferta(line: Line) -> bool:
-    return any(_fold(w.text) == "oferta" for w in line)
+    return any(fold_accents(w.text) == "oferta" for w in line)
 
 
 def _rule_ys(rules: list[Rule], x: float, top: float, bottom: float) -> list[float]:
@@ -438,11 +431,11 @@ def _parse_offer_table(lines: list[Line], rules: list[Rule], title_idx: int) -> 
     rows = _offer_rows(body, rules, offers, label_x, top, _line_y(lines[footnote_idx]))
 
     examples_idx = next(
-        (i for i in range(footnote_idx, len(lines)) if _fold(texts[i]).startswith("exemplu de calcul")), len(lines)
+        (i for i in range(footnote_idx, len(lines)) if fold_accents(texts[i]).startswith("exemplu de calcul")), len(lines)
     )
     blocks: list[list[str]] = []
     for i in range(examples_idx, len(lines)):
-        if not blocks or _fold(texts[i]).startswith(("exemplu de calcul", "avertisment")):
+        if not blocks or fold_accents(texts[i]).startswith(("exemplu de calcul", "avertisment")):
             blocks.append([])
         blocks[-1].append(texts[i])
 

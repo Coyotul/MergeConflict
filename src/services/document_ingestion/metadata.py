@@ -1,6 +1,5 @@
 """Metadata extraction: canonical keys, effective dates, campaign windows."""
 import re
-import unicodedata
 from collections import defaultdict
 from datetime import date, datetime
 from typing import Literal

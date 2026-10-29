@@ -1,21 +1,15 @@
 """Pure ranking steps of hybrid retrieval: terms, fusion, thresholds, flags, deferral and conflicts."""
 import re
-import unicodedata
 from collections.abc import Mapping
 from datetime import date
 
 from src.core.settings import RagSettings
 from src.models.knowledge import Authority, ChunkKind, Conflict, DocKind, Passage, PassageFlag, Product, Topic
+from src.services.document_ingestion.normalize import fold_accents
 from src.storage.vector_index.repository import Candidate, PassageRow
 
 
-def _fold(text: str) -> str:
-    """Strip accents and lowercase."""
-    decomposed = unicodedata.normalize("NFD", text)
-    return "".join(c for c in decomposed if unicodedata.category(c) != "Mn").lower()
-
-
-RO_STOPWORDS: frozenset[str] = frozenset(_fold(w) for w in (
+RO_STOPWORDS: frozenset[str] = frozenset(fold_accents(w) for w in (
     "și si sau de la în in pe cu un o ce care este sunt pentru din mi îmi imi pot am ai a al ale lui "
     "să sa nu da cum cât cat dacă daca mai există exista trebuie fi se eu tu meu mea vreau vrea"
 ).split())
@@ -24,7 +18,7 @@ RO_STOPWORDS: frozenset[str] = frozenset(_fold(w) for w in (
 def query_terms(text: str) -> list[str]:
     """Accent-stripped lowercase word tokens of 2+ characters, minus stopwords, deduplicated in order."""
     terms: list[str] = []
-    for token in re.findall(r"\w{2,}", _fold(text)):
+    for token in re.findall(r"\w{2,}", fold_accents(text)):
         if token not in RO_STOPWORDS and token not in terms:
             terms.append(token)
     return terms
@@ -66,7 +60,7 @@ def passes_evidence_threshold(dense_scores: list[float], s: RagSettings) -> bool
 
 
 def _comparable_text(text: str) -> str:
-    return " ".join(_fold(text).split())
+    return " ".join(fold_accents(text).split())
 
 
 def dedupe_passages(passages: list[Passage]) -> list[Passage]:

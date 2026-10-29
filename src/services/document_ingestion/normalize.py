@@ -3,6 +3,12 @@ import re
 import unicodedata
 
 
+def fold_accents(text: str) -> str:
+    """Lowercase with diacritics removed (NFD, combining marks dropped), for accent-insensitive matching."""
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).lower()
+
+
 def normalize_text(text: str) -> str:
     """Normalize text: NFC, fix diacritics, collapse whitespace, trim lines.
 

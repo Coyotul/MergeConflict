@@ -1,6 +1,5 @@
 """Fee list PDF parser."""
 import re
-import unicodedata
 from src.services.document_ingestion.chunking import (
     ChunkDraft,
     ParsedDocument,
@@ -8,14 +7,9 @@ from src.services.document_ingestion.chunking import (
     MAX_TOKENS,
     CHUNKER_VERSION,
 )
+from src.services.document_ingestion.normalize import fold_accents
 from src.services.document_ingestion.parsers.pdf_rows import pdf_lines
 from src.models.knowledge import ChunkKind
-
-
-def _fold(text: str) -> str:
-    """Lower-case and strip diacritics, for accent-insensitive matching."""
-    decomposed = unicodedata.normalize("NFD", text.lower())
-    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
 def is_section_heading(line: str) -> bool:
@@ -41,7 +35,7 @@ def is_section_heading(line: str) -> bool:
 
     # Must not be a value line (accent-insensitive). A unit must not run on
     # into a word, so "1. Europa" stays a heading while "30 EUR/intrare" does not.
-    folded = _fold(line)
+    folded = fold_accents(line)
     unit_end = r"(?![a-z])"
     # Whole line is an amount: "100 lei", "1.5 lei", "2.50 lei", "60 euro sau ..."
     if re.match(r"^\d[\d.,]*\s*(lei|euro|eur|usd|%)" + unit_end, folded):

@@ -62,7 +62,8 @@
     say you would rather buy a flat instead, with a mortgage of 300,000 RON over 300 months.
     Mark exactly that message with "switch": true.
     After the change, answer only what is still asked; do not repeat details you already gave unless asked.
-    When the agent asks for documents, upload each requested one (id_card, payslip, bank_statement).
+    When the agent asks for documents, upload each requested one you have (id_card, payslip, bank_statement).
+    You do not have a property valuation yet: if it is requested, say you will provide it later and say done.
     When the agent shows figures read from your documents, confirm them if they match the above.
     When offers appear, choose the offer with the lowest monthly payment, then say done.
   stop_when: offers_shown

@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from scripts.eval.customer import CustomerView
+from scripts.eval.judge import GENERAL_RUBRIC, normalise_criterion
 from src.api.app import create_app
 from src.core.settings import OrchestratorSettings
 from tests.fixtures.documents import cnp_for, document_bytes
@@ -47,8 +48,22 @@ class ConversationResult(BaseModel):
     error: str | None = None
 
 
+def _check_rubric(path: Path, scenario: Scenario) -> None:
+    """Criteria are matched by normalised text (scripts.eval.judge), so they must be distinct."""
+    seen: dict[str, str] = {}
+    for criterion in scenario.rubric:
+        key = normalise_criterion(criterion)
+        if key in seen:
+            raise ValueError(f"{path}: scenario {scenario.id}: duplicate rubric criterion {criterion!r}")
+        seen[key] = criterion
+    general = {normalise_criterion(c) for c in GENERAL_RUBRIC}
+    overlap = [c for k, c in seen.items() if k in general]
+    if overlap:
+        raise ValueError(f"{path}: scenario {scenario.id}: rubric repeats the general rubric: {overlap}")
+
+
 def load_scenarios(path: Path) -> list[Scenario]:
-    """Scenarios from a YAML list; ids must be unique."""
+    """Scenarios from a YAML list; ids must be unique, rubric criteria distinct (also from the general rubric)."""
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or []
     if not isinstance(data, list):
         raise ValueError(f"{path}: expected a list of scenarios")
@@ -57,6 +72,8 @@ def load_scenarios(path: Path) -> list[Scenario]:
     duplicates = sorted({i for i in ids if ids.count(i) > 1})
     if duplicates:
         raise ValueError(f"{path}: duplicate scenario ids {duplicates}")
+    for s in scenarios:
+        _check_rubric(path, s)
     return scenarios
 
 
@@ -245,7 +262,8 @@ def run_conversation(app: FastAPI, scenario: Scenario, customer, *, max_turns: i
 
     `customer` is anything with `next_action(CustomerView) -> CustomerAction`. An action the
     agent did not ask for (unrequested upload, unknown offer) is rejected and the customer is
-    told once; a second rejection, or a simulator error, stops with `customer_error`.
+    told once; a second rejection in a row (no performed action in between), or a simulator
+    error, stops with `customer_error`.
     """
     client = TestClient(app, raise_server_exceptions=False)
     headers = {"X-Customer-Id": scenario.customer_id}
@@ -314,6 +332,7 @@ def run_conversation(app: FastAPI, scenario: Scenario, customer, *, max_turns: i
             return result("agent_error", session_id, f"HTTP {r.status_code} on {action.type}: {r.text[:500]}")
         body = r.json()
         turns += 1
+        rejected = False  # two strikes means two rejections in a row
         reply = _agent_text(body)
         if action.type == "say" and action.switch:
             switch_turn_ids.append(body["turn_id"])

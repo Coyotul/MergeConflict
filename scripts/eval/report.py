@@ -1,8 +1,8 @@
 """Markdown and JSON report over evaluation runs.
 
-Agent check counts and judge criteria are kept apart from simulator/judge errors:
-a broken simulator (`customer_error`) or judge (`judge_error`) never counts as an
-agent pass or fail.
+Agent check counts and judge criteria are kept apart from simulator/judge/check errors:
+a broken simulator (`customer_error`), judge (`judge_error`) or check run (`check_error`)
+never counts as an agent pass or fail.
 """
 import json
 from pathlib import Path
@@ -24,6 +24,7 @@ class RunRecord(BaseModel):
     checks: list[CheckResult]
     judge: JudgeResult | None = None
     judge_error: str | None = None
+    check_error: str | None = None  # the checks themselves crashed on this run's trace
 
 
 def _label(result: CheckResult) -> str:
@@ -46,15 +47,18 @@ def _summary(records: list[RunRecord]) -> dict:
             "scenario_id": sid, "runs": len(runs), "stop_reasons": stops,
             "customer_errors": sum(r.conversation.stop_reason == "customer_error" for r in runs),
             "judge_errors": sum(r.judge_error is not None for r in runs),
+            "check_errors": sum(r.check_error is not None for r in runs),
         })
         # Checks are matched by position in the scenario's list (one scenario may use a check twice).
+        # A simulator-error run says nothing about the agent: its checks count as not applicable.
         labels: dict[int, str] = {}
         counts: dict[int, dict[str, int]] = {}
         for r in runs:
+            simulator_error = r.conversation.stop_reason == "customer_error"
             for k, c in enumerate(r.checks):
                 labels.setdefault(k, _label(c))
                 bucket = counts.setdefault(k, {s: 0 for s in _STATUSES} | {"runs": 0})
-                bucket[c.status] += 1
+                bucket["not_applicable" if simulator_error else c.status] += 1
                 bucket["runs"] += 1
         checks += [{"scenario_id": sid, "check": labels[k], "counts": counts[k]} for k in sorted(labels)]
         # Judge criteria: general ones over every graded reply, scenario ones once per judged run.
@@ -105,12 +109,14 @@ def _render_trace(record: RunRecord, out_dir: Path) -> str | None:
 def _markdown(records: list[RunRecord], summary: dict, links: dict[int, str | None]) -> str:
     lines = ["# Conversation evaluation", ""]
     lines += ["## Scenarios", "",
-              "Simulator and judge errors are evaluation failures, not agent results.", "",
-              "| scenario | runs | stop reasons | simulator errors | judge errors |",
-              "|---|---|---|---|---|"]
+              "Simulator, judge and check errors are evaluation failures, not agent results "
+              "(a simulator-error run's checks count as n/a).", "",
+              "| scenario | runs | stop reasons | simulator errors | judge errors | check errors |",
+              "|---|---|---|---|---|---|"]
     for s in summary["scenarios"]:
         stops = ", ".join(f"{k}: {v}" for k, v in s["stop_reasons"].items())
-        lines.append(f"| {s['scenario_id']} | {s['runs']} | {stops} | {s['customer_errors']} | {s['judge_errors']} |")
+        lines.append(f"| {s['scenario_id']} | {s['runs']} | {stops} | {s['customer_errors']} | "
+                     f"{s['judge_errors']} | {s['check_errors']} |")
     lines += ["", "## Trace checks", "", "| scenario | check | pass / fail / n/a / runs |", "|---|---|---|"]
     for c in summary["checks"]:
         n = c["counts"]
@@ -152,6 +158,8 @@ def _markdown(records: list[RunRecord], summary: dict, links: dict[int, str | No
                 lines += ["", f"*{'; '.join(meta)}*"]
             lines.append("")
         lines += ["### Checks", ""]
+        if r.check_error:
+            lines.append(f"Check error (not an agent result): {_cell(r.check_error)}")
         for c in r.checks:
             lines.append(f"- **{c.status}** {_cell(_label(c))}")
             lines += [f"  - {_cell(e)}" for e in c.evidence]

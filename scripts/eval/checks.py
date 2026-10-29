@@ -6,7 +6,9 @@ Customer turns are numbered from 1 in `turn_started` order; the greeting turn
 
 A check whose precondition never occurred (no trace, no product chosen, no
 switch marked, the later tool never ran) is `not_applicable`, never `pass`.
+Product codes are compared normalised (`str(value).strip().lower()`).
 """
+import inspect
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,6 +48,11 @@ def load_events(path: Path) -> list[dict]:
 
 
 # ---- trace view -----------------------------------------------------------
+
+def _norm(value: Any) -> str:
+    """Product codes compare case- and whitespace-insensitively."""
+    return str(value).strip().lower()
+
 
 @dataclass
 class _Product:
@@ -89,7 +96,7 @@ class _Trace:
             )
             update = next((u for u in (proposal or {}).get("field_updates") or [] if u.get("field") == "product_code"), None)
             if update is not None:
-                found.append(_Product(i, e.get("turn_id"), e.get("step"), update.get("value")))
+                found.append(_Product(i, e.get("turn_id"), e.get("step"), _norm(update.get("value"))))
         return found
 
     def turn(self, e: dict) -> int:
@@ -182,28 +189,30 @@ def _clarifying_before_product(t: _Trace, min_replies: int = 1) -> Outcome:
     product = _first_product(t)
     if product is None:
         return "not_applicable", ["no accepted product_code"]
-    replies = [e for i, e in t.of_type("turn_finished") if i < product.index and t.turn(e) > 0 and e.get("reply")]
+    replies = [e for i, e in t.of_type("turn_finished") if i < product.index and t.turn(e) > 0
+               and e.get("outcome") == "replied" and e.get("reply")]
     evidence = [f"{t.where(e)}: reply" for e in replies] + [t.describe_product(product)]
     return ("pass" if len(replies) >= min_replies else "fail"), evidence
 
 
+def _allowed_products(product: str | None, products: list[str] | None) -> set[str]:
+    return {_norm(p) for p in products or []} | ({_norm(product)} if product is not None else set())
+
+
 def _product_final(t: _Trace, product: str | None = None, products: list[str] | None = None) -> Outcome:
-    allowed = set(products or []) | ({product} if product is not None else set())
-    if not allowed:
-        raise ValueError("product_final needs product or products")
+    allowed = _allowed_products(product, products)
     if not t.products:
         return "not_applicable", ["no accepted product_code"]
     last = t.products[-1]
     return ("pass" if last.value in allowed else "fail"), [t.describe_product(p) for p in t.products]
 
 
-def _product_changed(t: _Trace, **params: Any) -> Outcome:
-    if "from" not in params or "to" not in params:
-        raise ValueError("product_changed needs from and to")
+def _product_changed(t: _Trace, **params: Any) -> Outcome:  # `from` is a keyword: params by **
     if not t.products:
         return "not_applicable", ["no accepted product_code"]
-    start = next((k for k, p in enumerate(t.products) if p.value == params["from"]), None)
-    changed = start is not None and any(p.value == params["to"] for p in t.products[start + 1:])
+    old, new = _norm(params["from"]), _norm(params["to"])
+    start = next((k for k, p in enumerate(t.products) if p.value == old), None)
+    changed = start is not None and any(p.value == new for p in t.products[start + 1:])
     return ("pass" if changed else "fail"), [t.describe_product(p) for p in t.products]
 
 
@@ -212,13 +221,18 @@ def _no_product_selected(t: _Trace) -> Outcome:
     return ("fail" if t.products else "pass"), [t.describe_product(p) for p in t.products]
 
 
-def _no_tool_after_switch(t: _Trace, tools: list[str]) -> Outcome:
+def _no_tool_after_switch(t: _Trace, tools: list[str], to: str | None = None) -> Outcome:
+    """No model call of `tools` from the switch turn until the product changes (to `to`, when given)."""
     starts = [i for i, e in t.of_type("turn_started") if e.get("turn_id") in set(t.switch_turn_ids)]
     if not starts:
         return "not_applicable", ["no switch marked" if not t.switch_turn_ids else "switch turn not in trace"]
     start = starts[0]
-    current = next((p.value for p in reversed(t.products) if p.index < start), None)
-    change = next((p for p in t.products if p.index > start and p.value != current), None)
+    if to is not None:
+        target = _norm(to)
+        change = next((p for p in t.products if p.index > start and p.value == target), None)
+    else:
+        current = next((p.value for p in reversed(t.products) if p.index < start), None)
+        change = next((p for p in t.products if p.index > start and p.value != current), None)
     end = change.index if change is not None else len(t.events)
     calls = [e for i, e in t.tool_calls(set(tools), caller="model") if start < i < end]
     evidence = [f"{t.where(t.events[start])}: switch"]
@@ -228,8 +242,10 @@ def _no_tool_after_switch(t: _Trace, tools: list[str]) -> Outcome:
 
 
 def _search_per_question(t: _Trace, min: int) -> Outcome:
-    calls = t.tool_calls({SEARCH_TOOL}, caller="model", ok=True)
-    return ("pass" if len(calls) >= min else "fail"), [t.describe_call(e) for _, e in calls] or ["no searches"]
+    """At least `min` distinct customer turns with a successful model search."""
+    calls = [e for _, e in t.tool_calls({SEARCH_TOOL}, caller="model", ok=True) if t.turn(e) > 0]
+    turns = {e.get("turn_id") for e in calls}
+    return ("pass" if len(turns) >= min else "fail"), [t.describe_call(e) for e in calls] or ["no searches"]
 
 
 def _cited_answers(t: _Trace, min: int) -> Outcome:
@@ -260,7 +276,7 @@ _CHECKS: dict[str, tuple[Callable[..., Outcome], dict, tuple[str, ...]]] = {
     "product_final": (_product_final, {}, ()),
     "product_changed": (_product_changed, {}, ("from", "to")),
     "no_product_selected": (_no_product_selected, {}, ()),
-    "no_tool_after_switch": (_no_tool_after_switch, {}, ("tools",)),
+    "no_tool_after_switch": (_no_tool_after_switch, {"to": None}, ("tools",)),
     "search_per_question": (_search_per_question, {}, ("min",)),
     "cited_answers": (_cited_answers, {}, ("min",)),
     "no_model_tool_rejections": (_no_model_tool_rejections, {}, ()),
@@ -268,16 +284,54 @@ _CHECKS: dict[str, tuple[Callable[..., Outcome], dict, tuple[str, ...]]] = {
 }
 
 
-def run_check(spec: dict, events: list[dict], *, switch_turn_ids: list[str] = []) -> CheckResult:
-    """Run one check; `spec["check"]` names it, the other keys are its params. Unknown name or bad params: ValueError."""
+def _accepted_params(name: str) -> set[str]:
+    """Param names a check takes: its keyword parameters, or defaults + required for a `**params` check."""
+    fn, defaults, required = _CHECKS[name]
+    parameters = list(inspect.signature(fn).parameters.values())[1:]  # first one is the trace
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters):
+        return set(defaults) | set(required)
+    return {p.name for p in parameters}
+
+
+def _validated_params(spec: dict) -> tuple[str, dict]:
+    """Check name and params with defaults; unknown name, unknown/missing params or bad values: ValueError."""
     name = spec.get("check")
     if name not in _CHECKS:
         raise ValueError(f"unknown check: {name!r}")
-    fn, defaults, required = _CHECKS[name]
-    params = {**defaults, **{k: v for k, v in spec.items() if k != "check"}}
+    _, defaults, required = _CHECKS[name]
+    given = {k: v for k, v in spec.items() if k != "check"}
+    unknown = sorted(set(given) - _accepted_params(name))
+    if unknown:
+        raise ValueError(f"check {name}: unknown params: {', '.join(unknown)}; "
+                         f"accepted: {', '.join(sorted(_accepted_params(name)))}")
+    params = {**defaults, **given}
     missing = [p for p in required if p not in params]
     if missing:
         raise ValueError(f"check {name} missing params: {', '.join(missing)}")
+    if name == "product_final":
+        if not isinstance(params.get("products") or [], list):
+            raise ValueError("product_final: products must be a list")
+        if not _allowed_products(params.get("product"), params.get("products")):
+            raise ValueError("product_final needs product or products")
+    return name, params
+
+
+def simulator_error_results(specs: list[dict]) -> list[CheckResult]:
+    """Every check not applicable: the simulated customer broke, so the run says nothing about the agent."""
+    results = []
+    for spec in specs:
+        name, params = _validated_params(spec)
+        results.append(CheckResult(check=name, status="not_applicable", evidence=["simulator error"], params=params))
+    return results
+
+
+def run_check(spec: dict, events: list[dict], *, switch_turn_ids: list[str] = []) -> CheckResult:
+    """Run one check; `spec["check"]` names it, the other keys are its params.
+
+    Unknown name or bad params: ValueError, also with no events (so `run_check(spec, [])` validates a spec).
+    """
+    name, params = _validated_params(spec)
+    fn = _CHECKS[name][0]
     if not events:
         return CheckResult(check=name, status="not_applicable", evidence=["no trace"], params=params)
     try:

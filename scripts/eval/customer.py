@@ -30,21 +30,26 @@ class CustomerAction(BaseModel):
 
 
 _ROMANIAN_LETTERS = set("ăâîșțşţĂÂÎȘȚŞŢ")
-# Very common Romanian words that do not occur in English customer messages.
+# Very common Romanian words that do not occur in English customer messages
+# (no "care"/"lunar": they are common English words too).
 _ROMANIAN_WORDS = re.compile(
-    r"\b(vreau|doresc|da|nu|pentru|sunt|este|si|sau|care|multumesc|buna|ziua|imi|meu|mea|"
-    r"lunar|luni|venitul|angajatorul|credit pentru|nevoie de)\b",
+    r"\b(vreau|doresc|da|nu|pentru|sunt|este|si|sau|multumesc|buna|ziua|imi|meu|mea|"
+    r"luni|venitul|angajatorul|masina|alte|credite|nevoie de)\b",
     re.IGNORECASE,
 )
 
 
 def non_english_reason(text: str) -> str | None:
-    """Why `text` looks Romanian rather than English (a simple heuristic), or None."""
+    """Why `text` looks Romanian rather than English (a simple heuristic), or None.
+
+    Romanian diacritics, or at least two distinct common Romanian words; a single one is
+    allowed so the customer may quote a Romanian product name.
+    """
     letters = sorted({c for c in text if c in _ROMANIAN_LETTERS})
     if letters:
         return f"Romanian letters {''.join(letters)}"
     words = sorted({m.group(0).lower() for m in _ROMANIAN_WORDS.finditer(text)})
-    if words:
+    if len(words) >= 2:
         return f"Romanian words {', '.join(words)}"
     return None
 

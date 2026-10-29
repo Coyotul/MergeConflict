@@ -90,12 +90,42 @@ def test_report_separates_judge_errors(out_dir):
     # The scenario row reports 1 simulator error and 1 judge error in their own columns.
     scenario_row = next(line for line in text.splitlines() if line.startswith("| knows_loan | 3 |"))
     cells = [c.strip() for c in scenario_row.strip("|").split("|")]
-    assert cells[-2:] == ["1", "1"]
+    assert cells[3:5] == ["1", "1"]
     assert "judge returned invalid output twice" in text
     assert "simulated customer broke" in text
     results = json.loads((out_dir / "results.json").read_text(encoding="utf-8"))
     assert results["summary"]["scenarios"][0]["customer_errors"] == 1
     assert results["summary"]["scenarios"][0]["judge_errors"] == 1
+
+
+def test_report_customer_error_runs_never_count_as_agent_results(out_dir):
+    records = [
+        record(out_dir, 1, "pass"),
+        record(out_dir, 2, "pass", stop_reason="customer_error", error="simulator broke"),
+        record(out_dir, 3, "fail", stop_reason="customer_error", error="simulator broke"),
+    ]
+    text = write_report(records, out_dir).read_text(encoding="utf-8")
+    row = next(line for line in text.splitlines() if "| no_failed_turns |" in line)
+    assert "1 / 0 / 2 / 3" in row
+    scenario_row = next(line for line in text.splitlines() if line.startswith("| knows_loan | 3 |"))
+    assert [c.strip() for c in scenario_row.strip("|").split("|")][3] == "2"
+
+
+def test_report_shows_check_errors_separately(out_dir):
+    broken = record(out_dir, 2, "pass").model_copy(update={"checks": [], "check_error": "ValueError: boom"})
+    records = [record(out_dir, 1, "pass"), broken]
+    text = write_report(records, out_dir).read_text(encoding="utf-8")
+    row = next(line for line in text.splitlines() if "| no_failed_turns |" in line)
+    assert "1 / 0 / 0 / 1" in row
+    header = next(line for line in text.splitlines() if line.startswith("| scenario | runs |"))
+    scenario_row = next(line for line in text.splitlines() if line.startswith("| knows_loan | 2 |"))
+    columns = [c.strip() for c in header.strip("|").split("|")]
+    cells = [c.strip() for c in scenario_row.strip("|").split("|")]
+    assert cells[columns.index("check errors")] == "1"
+    assert "Check error (not an agent result): ValueError: boom" in text
+    results = json.loads((out_dir / "results.json").read_text(encoding="utf-8"))
+    assert results["summary"]["scenarios"][0]["check_errors"] == 1
+    assert results["records"][1]["check_error"] == "ValueError: boom"
 
 
 def test_report_counts_not_applicable_judge_criteria(out_dir):

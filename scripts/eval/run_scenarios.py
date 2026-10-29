@@ -14,7 +14,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from scripts.eval.checks import load_events, run_check, run_checks
+from scripts.eval.checks import load_events, run_check, run_checks, simulator_error_results
 from scripts.eval.customer import SimulatedCustomer
 from scripts.eval.driver import build_eval_app, customer_documents, load_scenarios, run_conversation
 from scripts.eval.judge import judge_conversation
@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
             scenarios = [s for s in scenarios if s.id in set(args.scenario)]
         for s in scenarios:
             for spec in s.checks:
-                run_check(spec, [])  # unknown check name or missing params: ValueError before any run
+                run_check(spec, [])  # unknown check name, unknown/missing params: ValueError before any run
         base = load_orchestrator_settings()
         update = {"trace": "file", "traces_dir": out / "traces", "session_store": "memory",
                   "uploads_dir": out / "uploads"}
@@ -84,7 +84,15 @@ def main(argv: list[str] | None = None) -> int:
             conv = run_conversation(app, scenario, SimulatedCustomer(customer_model, scenario.brief),
                                     max_turns=args.max_turns, documents=documents[scenario.customer_id],
                                     traces_dir=settings.traces_dir)
-            checks = run_checks(scenario.checks, load_events(conv.trace_path), switch_turn_ids=conv.switch_turn_ids)
+            checks, check_error = [], None
+            try:
+                if conv.stop_reason == "customer_error":  # a broken simulator says nothing about the agent
+                    checks = simulator_error_results(scenario.checks)
+                else:
+                    checks = run_checks(scenario.checks, load_events(conv.trace_path),
+                                        switch_turn_ids=conv.switch_turn_ids)
+            except Exception as e:  # a check crash: an evaluation error for this run, never an agent result
+                check_error = f"{type(e).__name__}: {e}"
             judge, judge_error = None, None
             if conv.transcript:
                 try:
@@ -92,10 +100,12 @@ def main(argv: list[str] | None = None) -> int:
                 except Exception as e:  # judge failure: an evaluation error, never an agent result
                     judge_error = f"{type(e).__name__}: {e}"
             records.append(RunRecord(scenario_id=scenario.id, run_index=run_index, conversation=conv,
-                                     checks=checks, judge=judge, judge_error=judge_error))
+                                     checks=checks, judge=judge, judge_error=judge_error,
+                                     check_error=check_error))
             failed = sum(c.status == "fail" for c in checks)
             _log(f"{scenario.id} run {run_index}/{args.runs}: {conv.stop_reason}, {len(conv.transcript)} turns, "
-                 f"{failed} failed checks" + (", judge error" if judge_error else ""))
+                 f"{failed} failed checks" + (", check error" if check_error else "")
+                 + (", judge error" if judge_error else ""))
     path = write_report(records, out)
     print(path)
     return 0

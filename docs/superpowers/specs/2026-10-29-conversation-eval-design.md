@@ -194,19 +194,27 @@ Each check reads the session's trace events (`docs/superpowers/specs/2026-10-29-
   first accepted `product_code` field update.
 - `no_tool_before_product {tool}`.
 - `clarifying_before_product {min_replies = 1}`: at least N agent replies
-  (`turn_finished` with a reply and no accepted `product_code` yet) before the
-  first accepted `product_code` update.
+  (`turn_finished` with outcome `replied`, a reply and no accepted
+  `product_code` yet) before the first accepted `product_code` update.
 - `product_final {product | products: [...]}` and `product_changed {from, to}`.
   The product value comes from the `action_parsed.field_updates` entry for
-  `product_code` whose matching `field_updates` result is accepted.
-- `no_tool_after_switch {tools}`: no model call of those tools from the
+  `product_code` whose matching `field_updates` result is accepted. Product
+  codes are compared normalised (trimmed, lower case).
+- `no_tool_after_switch {tools, to?}`: no model call of those tools from the
   customer turn the driver recorded as the switch (`switch: true`) until the
-  accepted `product_code` update to the new product. Not applicable (reported
-  as such, not as a pass) if the simulator never marked a switch.
+  accepted `product_code` update to the new product (to `to` when given; any
+  other product otherwise). Not applicable (reported as such, not as a pass)
+  if the simulator never marked a switch.
 - Checks that never got a chance to apply (for example the conversation
   stopped first) are reported as `not_applicable`, separately from pass/fail.
-- `search_per_question {min}`: at least `min` successful
-  `search_banking_policies` calls by the model.
+  A run that stopped with `customer_error` reports every check as
+  `not_applicable` ("simulator error").
+- Check specs are validated before any conversation: unknown check names,
+  unknown or missing params, and `product_final` without a product are
+  configuration errors. A check crashing on a run's trace is recorded as that
+  run's `check_error`, not as an agent result.
+- `search_per_question {min}`: at least `min` distinct customer turns with a
+  successful `search_banking_policies` call by the model.
 - `cited_answers {min}`: at least `min` turns whose `turn_finished.citations`
   is non-empty.
 - `no_model_tool_rejections`: no model-caller `tool_call` with error codes

@@ -17,7 +17,10 @@
   checks:
     - {check: intent_seen, intent: credit_application, within_turns: 2}
     - {check: product_final, product: personal_loan}
-    - {check: tool_called, tool: run_eligibility_check}
+    # The orchestrator runs the eligibility check itself (caller code) once its precondition passes.
+    - {check: tool_called, tool: run_eligibility_check, caller: any}
+    # Eligibility result before offers: offers must be computed, and only after a successful eligibility check.
+    - {check: tool_called, tool: calculate_loan_offer, caller: any}
     - {check: tool_order, before: run_eligibility_check, after: calculate_loan_offer}
     - {check: no_model_tool_rejections}
     - {check: no_failed_turns}
@@ -69,7 +72,8 @@
   stop_when: offers_shown
   checks:
     - {check: product_changed, from: personal_loan, to: mortgage_casa_ta}
-    - {check: no_tool_after_switch, tools: [run_eligibility_check, calculate_loan_offer]}
+    # Model calls only (code-run eligibility on a stale result is the orchestrator's own doing).
+    - {check: no_tool_after_switch, tools: [run_eligibility_check, calculate_loan_offer], to: mortgage_casa_ta}
     - {check: tool_called, tool: get_product_requirements, caller: code, min: 2}
     - {check: product_final, product: mortgage_casa_ta}
     - {check: no_model_tool_rejections}

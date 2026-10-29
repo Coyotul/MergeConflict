@@ -88,6 +88,49 @@ def test_cli_judge_error_is_recorded_not_raised(offline, work_dir, monkeypatch):
     assert rec["judge"] is None and "invalid output twice" in rec["judge_error"]
 
 
+def test_cli_customer_error_marks_checks_not_applicable(offline, work_dir, monkeypatch):
+    original = run_scenarios.build_eval_model
+
+    def broken_customer(role, base):
+        model = original(role, base)
+        if role == "customer":
+            return FakeChatModel(["not json", "still not json"])
+        return model
+
+    monkeypatch.setattr(run_scenarios, "build_eval_model", broken_customer)
+    out = work_dir / "run"
+    assert run_scenarios.main(["--retrieval", "stub", "--runs", "1", "--scenario", "knows_loan", "--out", str(out)]) == 0
+    results = json.loads((out / "results.json").read_text(encoding="utf-8"))
+    rec = results["records"][0]
+    assert rec["conversation"]["stop_reason"] == "customer_error"
+    assert rec["checks"] and all(c["status"] == "not_applicable" and c["evidence"] == ["simulator error"]
+                                 for c in rec["checks"])
+    assert results["summary"]["scenarios"][0]["customer_errors"] == 1
+
+
+def test_cli_check_crash_is_recorded_not_raised(offline, work_dir, monkeypatch):
+    def boom(*args, **kwargs):
+        raise ValueError("unexpected trace shape")
+
+    monkeypatch.setattr(run_scenarios, "run_checks", boom)
+    out = work_dir / "run"
+    assert run_scenarios.main(["--retrieval", "stub", "--runs", "1", "--scenario", "knows_loan", "--out", str(out)]) == 0
+    rec = json.loads((out / "results.json").read_text(encoding="utf-8"))["records"][0]
+    assert rec["checks"] == [] and "unexpected trace shape" in rec["check_error"]
+
+
+def test_cli_rejects_check_param_typo_before_any_run(offline, work_dir, monkeypatch, capsys):
+    scenarios = work_dir / "scenarios.yaml"
+    scenarios.write_text("- {id: a, customer_id: cust-elena-popa, brief: b, rubric: [r],\n"
+                         "   checks: [{check: tool_called, tool: run_eligibility_check, callr: code}]}\n",
+                         encoding="utf-8")
+    monkeypatch.setattr(run_scenarios, "SCENARIOS_PATH", scenarios)
+    out = work_dir / "run"
+    assert run_scenarios.main(["--retrieval", "stub", "--runs", "1", "--out", str(out)]) == 2
+    assert "callr" in capsys.readouterr().err
+    assert not out.exists()
+
+
 def test_cli_unknown_scenario_is_configuration_error(offline, work_dir, capsys):
     code = run_scenarios.main(["--retrieval", "stub", "--scenario", "nope", "--out", str(work_dir / "run")])
     assert code == 2

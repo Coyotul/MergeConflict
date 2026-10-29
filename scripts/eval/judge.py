@@ -82,16 +82,17 @@ def _messages(transcript: list[dict], scenario_rubric: list[str]) -> list[ChatMe
     ]
 
 
-def _normalise(name: str) -> str:
+def normalise_criterion(name: str) -> str:
+    """Criterion text as matched: case-, whitespace- and trailing-punctuation-insensitive."""
     return re.sub(r"\s+", " ", name).strip().rstrip(".!?:;, ").lower()
 
 
 def _keyed(scores: dict[str, Grade], prefix: str, criteria: list[str], where: str) -> dict[str, Grade]:
     """Map the judge's keys (ids or echoed names) onto our criteria; unknown/missing/duplicate: ValueError."""
-    by_key = {f"{prefix}{i}": c for i, c in enumerate(criteria, 1)} | {_normalise(c): c for c in criteria}
+    by_key = {f"{prefix}{i}": c for i, c in enumerate(criteria, 1)} | {normalise_criterion(c): c for c in criteria}
     result: dict[str, Grade] = {}
     for key, grade in scores.items():
-        criterion = by_key.get(key.strip().lower()) or by_key.get(_normalise(key))
+        criterion = by_key.get(key.strip().lower()) or by_key.get(normalise_criterion(key))
         if criterion is None:
             raise ValueError(f"{where}: unknown criterion {key!r}")
         if criterion in result:

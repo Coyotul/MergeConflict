@@ -130,6 +130,19 @@ def test_driver_rejects_unrequested_upload_then_customer_error(work_dir, credit_
     assert result.transcript == []
 
 
+def test_driver_rejection_counter_resets_after_performed_action(work_dir, credit_db):
+    customer = ScriptedCustomer([
+        {"type": "upload", "doc_type": "payslip"},       # rejected, told once
+        {"type": "say", "text": "I want a personal loan"},  # performed: counter resets
+        {"type": "choose_offer", "offer_id": "nope"},    # rejected again, but not twice in a row
+        {"type": "done", "reason": "enough"},
+    ])
+    result = run(work_dir, credit_db, customer)
+    assert result.stop_reason == "customer_done"
+    assert len(result.transcript) == 1
+    assert "nope" in customer.views[3].feedback
+
+
 def test_driver_customer_model_error_is_customer_error(work_dir, credit_db):
     customer = ScriptedCustomer([EvalModelError("bad json twice")])
     result = run(work_dir, credit_db, customer)
@@ -163,8 +176,9 @@ def test_driver_stops_when_eligibility_shown(work_dir, credit_db):
     customer = ScriptedCustomer([{"type": "say", "text": t} for t in ALEX_ANSWERS])
     result = run(work_dir, credit_db, customer, max_turns=15, stop_when="eligibility_result")
     assert result.stop_reason == "stop_when"
-    assert len(result.transcript) == len(ALEX_ANSWERS)
-    assert "run_eligibility_check (model) ok" in result.transcript[-1]["tool_results"]
+    # The orchestrator runs eligibility itself in the turn that supplies the last required field.
+    assert len(result.transcript) == len(ALEX_ANSWERS) - 1
+    assert "run_eligibility_check (code) ok" in result.transcript[-1]["tool_results"]
     assert "missing_field purpose" in result.transcript[1]["awaiting_before"]
     assert any(b.startswith("eligibility_result: ") for b in result.transcript[-1]["blocks"])
 
@@ -298,6 +312,19 @@ def test_load_scenarios_valid():
         names = {c["check"] for c in s.checks}
         assert {"no_model_tool_rejections", "no_failed_turns"} <= names
         assert s.rubric
+    by_id = {s.id: s for s in scenarios}
+    # The orchestrator may run the eligibility check itself (caller "code"): any caller counts.
+    for s in scenarios:
+        for spec in s.checks:
+            if spec["check"] == "tool_called" and spec["tool"] == "run_eligibility_check":
+                assert spec.get("caller") == "any", s.id
+            if spec["check"] == "no_tool_after_switch":
+                assert "caller" not in spec  # model-only by definition
+    knows = by_id["knows_loan"].checks
+    assert {"check": "tool_order", "before": "run_eligibility_check", "after": "calculate_loan_offer"} in knows
+    assert {"check": "tool_called", "tool": "calculate_loan_offer", "caller": "any"} in knows
+    switch = next(c for c in by_id["changes_mind"].checks if c["check"] == "no_tool_after_switch")
+    assert switch["to"] == "mortgage_casa_ta"
     try:
         from scripts.eval.checks import run_check
     except ImportError:
@@ -311,4 +338,22 @@ def test_load_scenarios_rejects_duplicate_ids(work_dir):
     path = work_dir / "s.yaml"
     path.write_text("- {id: a, customer_id: c, brief: b}\n- {id: a, customer_id: c, brief: b}\n", encoding="utf-8")
     with pytest.raises(ValueError):
+        load_scenarios(path)
+
+
+def test_load_scenarios_rejects_duplicate_rubric_criteria(work_dir):
+    path = work_dir / "s.yaml"
+    path.write_text("- {id: a, customer_id: c, brief: b, rubric: [Explains the outcome., explains the  outcome]}\n",
+                    encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate rubric"):
+        load_scenarios(path)
+
+
+def test_load_scenarios_rejects_rubric_duplicating_general_rubric(work_dir):
+    from scripts.eval.judge import GENERAL_RUBRIC
+
+    path = work_dir / "s.yaml"
+    path.write_text(f"- {{id: a, customer_id: c, brief: b, rubric: [{json.dumps(GENERAL_RUBRIC[1])}]}}\n",
+                    encoding="utf-8")
+    with pytest.raises(ValueError, match="general rubric"):
         load_scenarios(path)

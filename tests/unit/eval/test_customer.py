@@ -99,7 +99,8 @@ def test_customer_prompt_contains_brief_and_awaiting():
 @pytest.mark.parametrize("text", [
     "Bună ziua! Aș dori un credit.",          # diacritics
     "Vreau un credit pentru o masina",         # common Romanian words, no diacritics
-    "Da",
+    "Vreau un credit pentru masina",
+    "Da, sunt angajat",
     "nu am alte credite",
 ])
 def test_customer_rejects_romanian_say_then_raises(text):
@@ -110,7 +111,7 @@ def test_customer_rejects_romanian_say_then_raises(text):
 
 
 def test_customer_romanian_retry_recovers_in_english():
-    model = FakeChatModel([json.dumps({"type": "say", "text": "Vreau un credit"}),
+    model = FakeChatModel([json.dumps({"type": "say", "text": "Vreau un credit pentru masina"}),
                            json.dumps({"type": "say", "text": "I want a loan of 20,000 RON, yes."})])
     action = SimulatedCustomer(model, "brief").next_action(_view())
     assert action.text == "I want a loan of 20,000 RON, yes."
@@ -118,6 +119,17 @@ def test_customer_romanian_retry_recovers_in_english():
 
 def test_customer_english_with_romanian_names_is_accepted():
     text = "My employer is FICTIV Employer's Studio 1; I am Elena Popa and I have no loans (0 RON)."
+    model = FakeChatModel([json.dumps({"type": "say", "text": text})])
+    assert SimulatedCustomer(model, "brief").next_action(_view()).text == text
+
+
+@pytest.mark.parametrize("text", [
+    "I don't care which term, the lowest monthly payment is fine.",
+    "I don't care if the payment day follows the lunar calendar.",  # 'care' and 'lunar' are English
+    "Yes, the Prima Casa mortgage, please.",          # one quoted Romanian product term
+    "I would like the 'Credit pentru nevoi personale', please.",  # one Romanian word only
+])
+def test_customer_english_with_common_or_single_romanian_words_is_accepted(text):
     model = FakeChatModel([json.dumps({"type": "say", "text": text})])
     assert SimulatedCustomer(model, "brief").next_action(_view()).text == text
 

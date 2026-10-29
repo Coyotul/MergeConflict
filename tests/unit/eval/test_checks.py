@@ -374,6 +374,68 @@ def test_missing_required_param_raises():
         run_check({"check": "tool_called"}, greeting())
 
 
+@pytest.mark.parametrize("spec", [
+    {"check": "tool_called", "tool": "run_eligibility_check", "callr": "code"},  # typo
+    {"check": "no_failed_turns", "extra": 1},
+    {"check": "product_changed", "from": "a", "to": "b", "too": "c"},
+    {"check": "product_final"},  # needs product or products
+    {"check": "product_final", "products": []},
+])
+def test_bad_spec_rejected_even_without_trace(spec):
+    with pytest.raises(ValueError):
+        run_check(spec, [])
+
+
+def test_product_values_are_normalised():
+    events = greeting() + [say("t1"), *product("t1", 1, " Personal_Loan "), finished("t1"),
+                           say("t2"), *product("t2", 1, "Mortgage_Casa_Ta"), finished("t2")]
+    assert check({"check": "product_final", "product": "mortgage_casa_ta"}, events).status == "pass"
+    assert check({"check": "product_final", "products": ["MORTGAGE_CASA_TA"]}, events).status == "pass"
+    assert check({"check": "product_changed", "from": "personal_loan", "to": "mortgage_casa_ta"},
+                 events).status == "pass"
+
+
+def test_search_per_question_counts_distinct_turns():
+    events = greeting() + [say("t1"), tool("t1", 1, "search_banking_policies"),
+                           tool("t1", 2, "search_banking_policies"), finished("t1")]
+    assert check({"check": "search_per_question", "min": 2}, events).status == "fail"
+    events += [say("t2"), tool("t2", 1, "search_banking_policies", ok=False, error_code="invalid_arguments"),
+               finished("t2")]
+    assert check({"check": "search_per_question", "min": 2}, events).status == "fail"
+    events += [say("t3"), tool("t3", 1, "search_banking_policies"), finished("t3")]
+    assert check({"check": "search_per_question", "min": 2}, events).status == "pass"
+
+
+def test_clarifying_before_product_counts_only_replied_turns():
+    events = greeting() + [say("t1"), finished("t1", outcome="fallback", reply="Sorry, try again."),
+                           say("t2"), *product("t2", 1, "personal_loan"), finished("t2")]
+    assert check({"check": "clarifying_before_product"}, events).status == "fail"
+
+
+def test_no_tool_after_switch_window_ends_only_at_target_product():
+    events = greeting() + [
+        say("t1"), *product("t1", 1, "personal_loan"), finished("t1"),
+        say("t2", "actually a flat"), *product("t2", 1, "refinancing_unsecured"), finished("t2"),
+        say("t3"), tool("t3", 1, "run_eligibility_check"), finished("t3"),
+        say("t4"), *product("t4", 1, "Mortgage_Casa_Ta"), tool("t4", 2, "calculate_loan_offer"), finished("t4"),
+    ]
+    spec = {"check": "no_tool_after_switch", "tools": TOOLS}
+    assert check(spec, events, switch_turn_ids=["t2"]).status == "pass"  # window ended at refinancing
+    r = check({**spec, "to": "mortgage_casa_ta"}, events, switch_turn_ids=["t2"])
+    assert r.status == "fail"
+    assert "turn 3 step 1: run_eligibility_check (model) ok" in r.evidence
+    assert r.params["to"] == "mortgage_casa_ta"
+
+
+def test_simulator_error_results_are_not_applicable():
+    from scripts.eval.checks import simulator_error_results
+
+    results = simulator_error_results(ALL_SPECS)
+    assert [r.check for r in results] == [s["check"] for s in ALL_SPECS]
+    assert all(r.status == "not_applicable" and r.evidence == ["simulator error"] for r in results)
+    assert results[1].params["caller"] == "model"
+
+
 # ---- recorded demo trace --------------------------------------------------
 
 @pytest.fixture

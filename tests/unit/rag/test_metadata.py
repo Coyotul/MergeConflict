@@ -5,6 +5,7 @@ from src.services.document_ingestion.metadata import (
     canonical_key,
     extract_effective_date,
     extract_campaign_window,
+    ROMANIAN_MONTHS,
     shared_dated_folders,
 )
 
@@ -61,3 +62,27 @@ def test_campaign_window_variations():
     assert extract_campaign_window("campania este valabilă: 01.12 - 31.12.2026", date(2026, 10, 28)) == date(2026, 12, 31)
     # Test "campania se desfășoară" variant
     assert extract_campaign_window("campania se desfășoară în perioada 01.01 - 28.02", date(2026, 10, 28)) == date(2026, 2, 28)
+
+
+def test_effective_date_takes_the_first_month_name_date_in_the_text():
+    # "1 noiembrie 2026" comes first in the text; dict order would pick "februarie" first.
+    text = "Tarife valabile din 1 noiembrie 2026\nînlocuiesc ediția din 15 februarie 2026"
+    assert extract_effective_date(DocKind.fee_list, text, D + "x.pdf", None, FETCHED) == (date(2026, 11, 1), "document_text")
+
+
+def test_month_names_have_no_typos_or_duplicates():
+    assert "febrvarie" not in ROMANIAN_MONTHS
+    assert sorted(ROMANIAN_MONTHS.values()) == list(range(1, 13))
+
+
+def test_campaign_range_with_en_dash():
+    assert extract_campaign_window("Perioada campaniei: 15.10 – 26.11.2026", date(2026, 10, 28)) == date(2026, 11, 26)
+    assert extract_campaign_window("campania este valabilă: 01.12–31.12.2026", date(2026, 10, 28)) == date(2026, 12, 31)
+
+
+def test_campaign_range_crossing_the_year_end():
+    # Without years, an end before the start falls in the next year.
+    assert extract_campaign_window("Perioada campaniei: 15.12 - 15.01", date(2026, 12, 1)) == date(2027, 1, 15)
+    # With the start year given and no end year, the end follows the start year.
+    assert extract_campaign_window("Perioada campaniei: 01.12.2026 - 31.01", date(2027, 1, 10)) == date(2027, 1, 31)
+    assert extract_campaign_window("Perioada campaniei: 01.03.2026 - 31.03", date(2027, 1, 10)) == date(2026, 3, 31)

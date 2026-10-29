@@ -10,14 +10,15 @@ from src.models.knowledge import DocKind
 
 EffectiveDateSource = Literal["document_text", "filename", "sitemap_lastmod", "fetched_at"]
 
-# Romanian month names with and without diacritics
+# Romanian month names (none has diacritics)
 ROMANIAN_MONTHS = {
     "ianuarie": 1, "februarie": 2, "martie": 3, "aprilie": 4,
     "mai": 5, "iunie": 6, "iulie": 7, "august": 8,
     "septembrie": 9, "octombrie": 10, "noiembrie": 11, "decembrie": 12,
-    # Variants without diacritics
-    "ianuarie": 1, "febrvarie": 2,
 }
+MONTH_NAME_DATE_RE = re.compile(rf"(\d{{1,2}})\s+({'|'.join(ROMANIAN_MONTHS)})\s+(\d{{4}})", re.IGNORECASE)
+# A campaign range separator: hyphen or en dash
+RANGE_SEP = r"\s*[-–]\s*"
 
 
 def canonical_key(url: str, shared_folders: frozenset[str] = frozenset()) -> str:
@@ -139,16 +140,13 @@ def extract_effective_date(
             except ValueError:
                 pass
 
-        # Pattern 2: <day> <Romanian month name> <YYYY>
-        for month_name, month_num in ROMANIAN_MONTHS.items():
-            pattern = rf'(\d{{1,2}})\s+{re.escape(month_name)}\s+(\d{{4}})'
-            match = re.search(pattern, search_text, re.IGNORECASE)
-            if match:
-                day, year = int(match.group(1)), int(match.group(2))
-                try:
-                    return (date(year, month_num, day), "document_text")
-                except ValueError:
-                    pass
+        # Pattern 2: <day> <Romanian month name> <YYYY>, the first valid one in the text
+        for match in MONTH_NAME_DATE_RE.finditer(search_text):
+            day, year = int(match.group(1)), int(match.group(3))
+            try:
+                return (date(year, ROMANIAN_MONTHS[match.group(2).lower()], day), "document_text")
+            except ValueError:
+                pass
 
         # Pattern 3: line that is exactly DD.MM.YYYY
         for line in search_text.split('\n'):
@@ -185,27 +183,32 @@ def extract_effective_date(
 def extract_campaign_window(text: str, reference: date) -> date | None:
     """Extract campaign end date from text.
 
-    Recognises:
-    - Perioada campaniei: DD.MM[.YYYY] - DD.MM.YYYY
+    Recognises (the range separator is a hyphen or an en dash):
+    - Perioada campaniei: DD.MM[.YYYY] - DD.MM[.YYYY]
     - campania (este valabilă|se desfășoară): DD.MM - DD.MM
 
-    Returns the latest end date found. If year missing, uses reference.year.
+    Returns the latest end date found. A missing end year is the start year (or reference.year
+    when the start has none too), plus one when the end falls before the start in the calendar:
+    "15.12 - 15.01" ends in the year after it starts.
     """
-    # Pattern for campaign phrases
+    date_range = rf'(\d{{1,2}})\.(\d{{1,2}})(?:\.(\d{{4}}))?{RANGE_SEP}(\d{{1,2}})\.(\d{{1,2}})(?:\.(\d{{4}}))?'
     patterns = [
-        r'Perioada campaniei[:\s]+(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\s*-\s*(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?',
-        r'campania\s+(?:este\s+valabil[ăa]|se\s+desf[ăa][șs]oar[ăa])(?:\s+[îi]n\s+perioada)?[:\s]+(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\s*-\s*(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?',
+        r'Perioada campaniei[:\s]+' + date_range,
+        r'campania\s+(?:este\s+valabil[ăa]|se\s+desf[ăa][șs]oar[ăa])(?:\s+[îi]n\s+perioada)?[:\s]+' + date_range,
     ]
 
     latest_end: date | None = None
 
     for pattern in patterns:
         for match in re.finditer(pattern, text, re.IGNORECASE):
-            # Extract end date (groups 4, 5, 6)
-            end_day = int(match.group(4))
-            end_month = int(match.group(5))
-            end_year_str = match.group(6)
-            end_year = int(end_year_str) if end_year_str else reference.year
+            start_day, start_month = int(match.group(1)), int(match.group(2))
+            end_day, end_month = int(match.group(4)), int(match.group(5))
+            if match.group(6):
+                end_year = int(match.group(6))
+            else:
+                end_year = int(match.group(3)) if match.group(3) else reference.year
+                if (end_month, end_day) < (start_month, start_day):
+                    end_year += 1
 
             try:
                 end_date = date(end_year, end_month, end_day)

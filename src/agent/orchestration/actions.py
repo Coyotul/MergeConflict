@@ -40,6 +40,14 @@ class ModelAction(BaseModel):
     field_updates: list[FieldUpdate] = Field(default_factory=list)
     action: CallTool | Respond = Field(discriminator="type")
 
+    @field_validator("intent", mode="before")
+    @classmethod
+    def unknown_intent_is_other(cls, value: Any) -> Any:
+        """An invented label (e.g. "choose_offer") must not discard a valid action; "other" routes nothing."""
+        if isinstance(value, str) and value not in Intent._value2member_map_:
+            return Intent.other
+        return value
+
 
 class ActionParseError(ValueError):
     """Raised when model output cannot be parsed as a valid action."""

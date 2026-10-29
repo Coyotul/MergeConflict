@@ -472,8 +472,9 @@ def can_calculate_offers(state: SessionState) -> str | None:
     app = state.application
 
     # Must have current eligibility
+    # Reasons are shown to the model (TOOL_REJECTED); name the tool that unblocks it.
     if not eligibility_current(app):
-        return "eligibility not current"
+        return "eligibility not current; call run_eligibility_check first"
 
     if app.eligibility is None:
         return "no eligibility result"
@@ -484,7 +485,7 @@ def can_calculate_offers(state: SessionState) -> str | None:
 
     # Must have verified inputs
     if not app.eligibility.verified_inputs:
-        return "eligibility not run with verified inputs"
+        return "eligibility not run with verified inputs; call run_eligibility_check first"
 
     if documents_require_review(app):
         return "document evidence requires human review"

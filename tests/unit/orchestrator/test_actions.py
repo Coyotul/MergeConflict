@@ -77,9 +77,17 @@ def test_all_intent_values_accepted():
         assert result.intent.value == intent
 
 
-def test_parse_requires_valid_intent():
-    """Parser rejects unknown intent values."""
-    text = '{"intent":"invalid_intent","action":{"type":"respond","message":"test"}}'
+def test_unknown_intent_keeps_the_action_as_other():
+    """An invented intent label (e.g. "choose_offer") must not discard a valid reply."""
+    text = '{"intent":"choose_offer","action":{"type":"respond","message":"Here are your offers."}}'
+    result = parse_model_output(text)
+    assert result.intent == Intent.other
+    assert result.action.message == "Here are your offers."
+
+
+def test_parse_requires_intent():
+    """Parser still rejects output without an intent."""
+    text = '{"action":{"type":"respond","message":"test"}}'
     with pytest.raises(ActionParseError):
         parse_model_output(text)
 

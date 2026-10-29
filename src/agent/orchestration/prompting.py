@@ -11,7 +11,7 @@ from src.integrations.llm.chat import ChatMessage
 from src.models.credit import DocumentRequirement, FieldSpec, FieldType
 
 
-PROMPT_VERSION = "orchestrator-v2-pricing"
+PROMPT_VERSION = "orchestrator-v3-needs-tools"
 
 
 def load_system_prompt() -> str:

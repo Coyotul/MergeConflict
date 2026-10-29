@@ -376,10 +376,24 @@ def test_verified_rerun_required_before_offers():
     # Need run_eligibility (group 10)
     assert needs[0].kind == NeedKind.run_eligibility
 
-    # can_calculate_offers is blocked
+    # can_calculate_offers is blocked, and the reason tells the model what to do next
     reason = can_calculate_offers(state)
     assert reason is not None
     assert "verified" in reason.lower()
+    assert "call run_eligibility_check first" in reason
+
+
+def test_stale_eligibility_rejection_names_the_tool_to_call():
+    """A changed input makes eligibility stale; the rejection must say to re-run it."""
+    app = make_app()
+    add_field(app, "monthly_net_income", Decimal("5000"))
+    app.eligibility = EligibilityRecord(
+        result=EligibilityResult(status=EligibilityStatus.satisfied, reasons=[], rule_version="v1"),
+        input_fingerprint="stale",
+        verified_inputs=True,
+    )
+    reason = can_calculate_offers(make_session(app))
+    assert reason == "eligibility not current; call run_eligibility_check first"
 
 
 def test_offer_then_confirmation_then_submitted():

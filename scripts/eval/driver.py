@@ -136,6 +136,47 @@ def _offers(body: dict) -> list[dict]:
     return []
 
 
+def _money(value) -> str:
+    if isinstance(value, dict):
+        return f"{value.get('amount')} {value.get('currency', 'RON')}"
+    return str(value)
+
+
+def _block_line(block: dict) -> str:
+    kind = block.get("type", "?")
+    if kind == "document_checklist":
+        detail = ", ".join(f"{i.get('doc_type')} {i.get('status')}" for i in block.get("items") or [])
+    elif kind == "extracted_fields":
+        detail = ", ".join(f"{f.get('field')}={f.get('value')}" + (" (to confirm)" if f.get("needs_confirmation") else "")
+                           for f in block.get("fields") or [])
+    elif kind == "eligibility_result":
+        detail = str((block.get("result") or {}).get("status"))
+    elif kind == "offers":
+        offers = block.get("offers") or []
+        listed = ", ".join(f"{o.get('term_months')}m {_money(o.get('monthly_installment'))}/month"
+                           + (f" at {o['annual_interest_rate_percent']}%" if o.get("annual_interest_rate_percent") else "")
+                           for o in offers)
+        detail = f"{len(offers)} offers ({listed})"
+        if block.get("selected_offer_id"):
+            detail += f", selected {block['selected_offer_id']}"
+    elif kind == "application_summary":
+        summary = block.get("summary") or {}
+        detail = (f"{summary.get('product_name')}, {_money(summary.get('amount'))} over "
+                  f"{summary.get('term_months')} months")
+    elif kind == "application_submitted":
+        detail = f"{block.get('application_id')} {block.get('status')}"
+    elif kind == "escalation":
+        detail = str(block.get("message"))
+    else:
+        return kind
+    return f"{kind}: {detail}"
+
+
+def _blocks_summary(body: dict) -> list[str]:
+    """One short line per response block: what the customer saw besides the reply text."""
+    return [_block_line(b) for b in body.get("blocks") or [] if isinstance(b, dict)]
+
+
 def _agent_text(body: dict) -> str:
     return "\n\n".join(m["text"] for m in body.get("messages") or [] if m.get("role") == "assistant")
 
@@ -277,7 +318,7 @@ def run_conversation(app: FastAPI, scenario: Scenario, customer, *, max_turns: i
         if action.type == "say" and action.switch:
             switch_turn_ids.append(body["turn_id"])
         transcript.append({"turn": turns, "turn_id": body["turn_id"], "customer": said, "agent": reply,
-                           "awaiting_before": [], "tool_results": []})
+                           "blocks": _blocks_summary(body), "awaiting_before": [], "tool_results": []})
         chat.append(("customer", said))
         chat.append(("agent", reply))
 

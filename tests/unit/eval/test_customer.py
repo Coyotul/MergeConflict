@@ -96,6 +96,32 @@ def test_customer_prompt_contains_brief_and_awaiting():
     assert "switch" in system and "JSON" in system and "English" in system
 
 
+@pytest.mark.parametrize("text", [
+    "Bună ziua! Aș dori un credit.",          # diacritics
+    "Vreau un credit pentru o masina",         # common Romanian words, no diacritics
+    "Da",
+    "nu am alte credite",
+])
+def test_customer_rejects_romanian_say_then_raises(text):
+    model = FakeChatModel([json.dumps({"type": "say", "text": text})] * 2)
+    with pytest.raises(EvalModelError, match="English"):
+        SimulatedCustomer(model, "brief").next_action(_view())
+    assert "English" in model.calls[1][-1].content  # the retry says why
+
+
+def test_customer_romanian_retry_recovers_in_english():
+    model = FakeChatModel([json.dumps({"type": "say", "text": "Vreau un credit"}),
+                           json.dumps({"type": "say", "text": "I want a loan of 20,000 RON, yes."})])
+    action = SimulatedCustomer(model, "brief").next_action(_view())
+    assert action.text == "I want a loan of 20,000 RON, yes."
+
+
+def test_customer_english_with_romanian_names_is_accepted():
+    text = "My employer is FICTIV Employer's Studio 1; I am Elena Popa and I have no loans (0 RON)."
+    model = FakeChatModel([json.dumps({"type": "say", "text": text})])
+    assert SimulatedCustomer(model, "brief").next_action(_view()).text == text
+
+
 def _settings() -> OrchestratorSettings:
     return OrchestratorSettings(featherless_api_key=SecretStr("k"), model="agent/model")
 

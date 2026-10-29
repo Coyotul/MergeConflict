@@ -23,9 +23,11 @@ def work_dir():
 
 
 JUDGE_OUTPUT = json.dumps({
-    "replies": [{"turn": 1, "scores": {c: {"pass": True, "reason": "fine"} for c in GENERAL_RUBRIC}}],
-    "scenario": {"Explains the eligibility outcome in plain words before showing offers.":
-                 {"pass": False, "reason": "no offers reached"}},
+    "replies": [{"turn": 1, "scores": {f"g{i}": {"pass": True, "reason": "fine"}
+                                       for i in range(1, len(GENERAL_RUBRIC) + 1)}}],
+    "scenario": {"s1": {"pass": True, "reason": "fine"},
+                 "s2": {"pass": None, "reason": "no offers reached"},
+                 "s3": {"pass": None, "reason": "no offers reached"}},  # knows_loan has three criteria
 })
 
 

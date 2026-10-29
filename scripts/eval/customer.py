@@ -1,5 +1,6 @@
 """Simulated customer: plays a scenario brief and answers with one JSON action."""
 import json
+import re
 from typing import Literal
 
 from pydantic import BaseModel, model_validator
@@ -28,6 +29,35 @@ class CustomerAction(BaseModel):
         return self
 
 
+_ROMANIAN_LETTERS = set("ăâîșțşţĂÂÎȘȚŞŢ")
+# Very common Romanian words that do not occur in English customer messages.
+_ROMANIAN_WORDS = re.compile(
+    r"\b(vreau|doresc|da|nu|pentru|sunt|este|si|sau|care|multumesc|buna|ziua|imi|meu|mea|"
+    r"lunar|luni|venitul|angajatorul|credit pentru|nevoie de)\b",
+    re.IGNORECASE,
+)
+
+
+def non_english_reason(text: str) -> str | None:
+    """Why `text` looks Romanian rather than English (a simple heuristic), or None."""
+    letters = sorted({c for c in text if c in _ROMANIAN_LETTERS})
+    if letters:
+        return f"Romanian letters {''.join(letters)}"
+    words = sorted({m.group(0).lower() for m in _ROMANIAN_WORDS.finditer(text)})
+    if words:
+        return f"Romanian words {', '.join(words)}"
+    return None
+
+
+def _parse_action(data: object) -> CustomerAction:
+    action = CustomerAction.model_validate(data)
+    if action.type == "say":
+        reason = non_english_reason(action.text)
+        if reason:
+            raise ValueError(f"the message must be written in English, but it contains {reason}")
+    return action
+
+
 class CustomerView(BaseModel):
     transcript: list[tuple[Literal["customer", "agent"], str]]
     awaiting_kind: str
@@ -42,7 +72,7 @@ Rules:
 - Answer only what the agent asked. Do not volunteer extra details.
 - Facts the brief marks as "only if asked" may be revealed only when the agent asks about them.
 - Follow the brief's timed changes (for example a change of mind after a certain point). The message in which you make such a change must have "switch": true; every other message has "switch": false.
-- Always write in English.
+- Always write in English, even if the agent writes in Romanian. Messages in Romanian are rejected.
 - Respond with exactly one JSON object and nothing else, one of:
   {"type": "say", "text": "<your message>", "switch": false}
   {"type": "upload", "doc_type": "<one of the requested document types>"}
@@ -91,7 +121,7 @@ class SimulatedCustomer:
         ]
 
     def next_action(self, view: CustomerView) -> CustomerAction:
-        """Next customer action; one retry on invalid output, then EvalModelError."""
+        """Next customer action; one retry on invalid output (incl. a non-English message), then EvalModelError."""
         return complete_json(
-            self.model, self._messages(view), CustomerAction.model_validate, "simulated customer"
+            self.model, self._messages(view), _parse_action, "simulated customer"
         )

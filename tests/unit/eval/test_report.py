@@ -65,7 +65,7 @@ def test_report_summarises_pass_rates(out_dir):
     assert "evidence 2" in text  # per-run evidence
     assert "short" in text  # judge reasons
     criterion = next(line for line in text.splitlines() if "Uses clear, plain English." in line and "/" in line)
-    assert "1 / 2" in criterion
+    assert "1 / 1 / 0 / 2" in criterion
     assert (out_dir / "traces" / "s1.md").exists() and (out_dir / "traces" / "s2.md").exists()
     assert "traces/s1.md" in text
     results = json.loads((out_dir / "results.json").read_text(encoding="utf-8"))
@@ -86,7 +86,7 @@ def test_report_separates_judge_errors(out_dir):
     assert "2 / 0 / 1 / 3" in row
     # Judge criteria counted only over judged runs.
     criterion = next(line for line in text.splitlines() if "Uses clear, plain English." in line and "/" in line)
-    assert "1 / 1" in criterion
+    assert "1 / 0 / 0 / 1" in criterion
     # The scenario row reports 1 simulator error and 1 judge error in their own columns.
     scenario_row = next(line for line in text.splitlines() if line.startswith("| knows_loan | 3 |"))
     cells = [c.strip() for c in scenario_row.strip("|").split("|")]
@@ -96,3 +96,18 @@ def test_report_separates_judge_errors(out_dir):
     results = json.loads((out_dir / "results.json").read_text(encoding="utf-8"))
     assert results["summary"]["scenarios"][0]["customer_errors"] == 1
     assert results["summary"]["scenarios"][0]["judge_errors"] == 1
+
+
+def test_report_counts_not_applicable_judge_criteria(out_dir):
+    na = JudgeResult.model_validate({
+        "replies": [{"turn": 1, "scores": {"Uses clear, plain English.": {"pass": True, "reason": "ok"}}}],
+        "scenario": {"Explains the outcome.": {"pass": None, "reason": "offers were never shown"}},
+    })
+    records = [record(out_dir, 1, "pass", judge=judged(True)), record(out_dir, 2, "pass", judge=na)]
+    text = write_report(records, out_dir).read_text(encoding="utf-8")
+    row = next(line for line in text.splitlines() if "| scenario | Explains the outcome." in line)
+    assert "1 / 0 / 1 / 2" in row
+    assert "n/a: Explains the outcome. (offers were never shown)" in text
+    results = json.loads((out_dir / "results.json").read_text(encoding="utf-8"))
+    crit = next(c for c in results["summary"]["criteria"] if c["criterion"] == "Explains the outcome.")
+    assert (crit["passed"], crit["failed"], crit["not_applicable"], crit["graded"]) == (1, 0, 1, 2)

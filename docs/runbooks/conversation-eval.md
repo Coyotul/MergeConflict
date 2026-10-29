@@ -73,7 +73,8 @@ from `config/orchestrator/customers.yaml` with a checksum-valid CNP.
 `data/local/eval/<run_id>/` (ignored by Git; never commit it):
 
 - `report.md`: scenario table (stop reasons, simulator errors, judge errors), trace-check table
-  (`pass / fail / n/a / runs` per scenario and check), judge-criteria table (`passed / graded`),
+  (`pass / fail / n/a / runs` per scenario and check), judge-criteria table (`pass / fail / n/a / graded`; the judge marks a criterion n/a when
+  its situation never occurred, e.g. offers never shown),
   then per run: transcript, check results with evidence, judge grades with reasons, trace link;
 - `results.json`: the same, machine-readable;
 - `traces/<session_id>.jsonl` and `traces/<session_id>.md`: the raw and rendered agent trace.

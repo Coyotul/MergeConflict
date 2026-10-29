@@ -58,21 +58,24 @@ def _summary(records: list[RunRecord]) -> dict:
                 bucket["runs"] += 1
         checks += [{"scenario_id": sid, "check": labels[k], "counts": counts[k]} for k in sorted(labels)]
         # Judge criteria: general ones over every graded reply, scenario ones once per judged run.
-        graded: dict[tuple[str, str], list[int]] = {}
+        # `pass: null` (situation never occurred) counts as not applicable, apart from pass/fail.
+        graded: dict[tuple[str, str], dict[str, int]] = {}
+
+        def add(kind: str, name: str, grade) -> None:
+            bucket = graded.setdefault((kind, name), {"passed": 0, "failed": 0, "not_applicable": 0, "graded": 0})
+            bucket["passed" if grade.pass_ else "not_applicable" if grade.pass_ is None else "failed"] += 1
+            bucket["graded"] += 1
+
         for r in runs:
             if r.judge is None:
                 continue
             for reply in r.judge.replies:
                 for name, g in reply.scores.items():
-                    graded.setdefault(("reply", name), [0, 0])
-                    graded[("reply", name)][0] += g.pass_
-                    graded[("reply", name)][1] += 1
+                    add("reply", name, g)
             for name, g in r.judge.scenario.items():
-                graded.setdefault(("scenario", name), [0, 0])
-                graded[("scenario", name)][0] += g.pass_
-                graded[("scenario", name)][1] += 1
-        criteria += [{"scenario_id": sid, "kind": kind, "criterion": name, "passed": p, "graded": n}
-                     for (kind, name), (p, n) in graded.items()]
+                add("scenario", name, g)
+        criteria += [{"scenario_id": sid, "kind": kind, "criterion": name, **counts}
+                     for (kind, name), counts in graded.items()]
     return {"scenarios": scenarios, "checks": checks, "criteria": criteria}
 
 
@@ -82,6 +85,10 @@ def _cell(text: object) -> str:
 
 def _quote(text: str) -> list[str]:
     return [f"> {line}" if line else ">" for line in (text or "(no reply)").splitlines()]
+
+
+def _verdict(grade) -> str:
+    return "n/a" if grade.pass_ is None else "pass" if grade.pass_ else "FAIL"
 
 
 def _render_trace(record: RunRecord, out_dir: Path) -> str | None:
@@ -109,9 +116,11 @@ def _markdown(records: list[RunRecord], summary: dict, links: dict[int, str | No
         n = c["counts"]
         lines.append(f"| {c['scenario_id']} | {_cell(c['check'])} | "
                      f"{n['pass']} / {n['fail']} / {n['not_applicable']} / {n['runs']} |")
-    lines += ["", "## Judge criteria", "", "| scenario | kind | criterion | passed / graded |", "|---|---|---|---|"]
+    lines += ["", "## Judge criteria", "", "| scenario | kind | criterion | pass / fail / n/a / graded |",
+              "|---|---|---|---|"]
     for c in summary["criteria"]:
-        lines.append(f"| {c['scenario_id']} | {c['kind']} | {_cell(c['criterion'])} | {c['passed']} / {c['graded']} |")
+        lines.append(f"| {c['scenario_id']} | {c['kind']} | {_cell(c['criterion'])} | "
+                     f"{c['passed']} / {c['failed']} / {c['not_applicable']} / {c['graded']} |")
 
     for k, r in enumerate(records):
         conv = r.conversation
@@ -137,6 +146,8 @@ def _markdown(records: list[RunRecord], summary: dict, links: dict[int, str | No
                 meta.append("awaiting before: " + ", ".join(item["awaiting_before"]))
             if item.get("tool_results"):
                 meta.append("tools: " + ", ".join(item["tool_results"]))
+            if item.get("blocks"):
+                meta.append("shown: " + "; ".join(item["blocks"]))
             if meta:
                 lines += ["", f"*{'; '.join(meta)}*"]
             lines.append("")
@@ -152,10 +163,10 @@ def _markdown(records: list[RunRecord], summary: dict, links: dict[int, str | No
         else:
             for reply in r.judge.replies:
                 lines.append(f"- Turn {reply.turn}:")
-                lines += [f"  - {'pass' if g.pass_ else 'FAIL'}: {_cell(name)} ({_cell(g.reason)})"
+                lines += [f"  - {_verdict(g)}: {_cell(name)} ({_cell(g.reason)})"
                           for name, g in reply.scores.items()]
             lines.append("- Scenario:")
-            lines += [f"  - {'pass' if g.pass_ else 'FAIL'}: {_cell(name)} ({_cell(g.reason)})"
+            lines += [f"  - {_verdict(g)}: {_cell(name)} ({_cell(g.reason)})"
                       for name, g in r.judge.scenario.items()]
     return "\n".join(lines) + "\n"
 

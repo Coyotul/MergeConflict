@@ -22,7 +22,7 @@
     - {check: no_model_tool_rejections}
     - {check: no_failed_turns}
   rubric:
-    - Asks for one or two missing details at a time and never re-asks something already given.
+    - Asks for missing details in small steps (two at a time is fine) and never re-asks something already given.
     - Explains the eligibility outcome in plain words before showing offers.
     - Presents the offers with their monthly payment and term, without promising approval.
 

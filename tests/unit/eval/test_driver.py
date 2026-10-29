@@ -93,6 +93,7 @@ def test_driver_runs_until_customer_done(work_dir, credit_db):
     item = result.transcript[0]
     assert item["turn"] == 1 and item["customer"] == "Vreau un credit" and item["agent"]
     assert isinstance(item["awaiting_before"], list) and isinstance(item["tool_results"], list)
+    assert isinstance(item["blocks"], list)
     # The customer saw the greeting before its first action, and the reply after it.
     assert customer.views[0].transcript[0][0] == "agent"
     assert customer.views[1].transcript[-1][0] == "agent"
@@ -165,6 +166,7 @@ def test_driver_stops_when_eligibility_shown(work_dir, credit_db):
     assert len(result.transcript) == len(ALEX_ANSWERS)
     assert "run_eligibility_check (model) ok" in result.transcript[-1]["tool_results"]
     assert "missing_field purpose" in result.transcript[1]["awaiting_before"]
+    assert any(b.startswith("eligibility_result: ") for b in result.transcript[-1]["blocks"])
 
 
 def test_driver_uploads_requested_document(work_dir, credit_db):
@@ -230,6 +232,36 @@ def test_requested_documents_stay_open_once_requested():
     assert _requested_documents(text_body, documents_requested=True) == ["payslip", "bank_statement"]
     doc_body = {"awaiting": {"kind": "document", "document_types": ["payslip"]}, "blocks": [checklist]}
     assert _requested_documents(doc_body, documents_requested=True) == ["payslip"]
+
+
+def test_blocks_summary_describes_what_the_customer_saw():
+    from scripts.eval.driver import _blocks_summary
+    money = lambda a: {"amount": a, "currency": "RON"}
+    body = {"blocks": [
+        {"type": "document_checklist", "items": [
+            {"doc_type": "id_card", "label": "ID", "status": "accepted"},
+            {"doc_type": "payslip", "label": "Payslip", "status": "requested"}]},
+        {"type": "extracted_fields", "fields": [
+            {"field": "monthly_net_income", "label": "Income", "value": "4500", "source": "payslip",
+             "needs_confirmation": True},
+            {"field": "full_name", "label": "Name", "value": "ELENA POPA", "source": "id_card",
+             "needs_confirmation": False}]},
+        {"type": "eligibility_result", "result": {"status": "eligible", "reasons": [], "rule_version": "v1"}},
+        {"type": "offers", "selected_offer_id": None, "offers": [
+            {"offer_id": "o1", "term_months": 60, "monthly_installment": money("621.22"),
+             "annual_interest_rate_percent": "9.5"},
+            {"offer_id": "o2", "term_months": 48, "monthly_installment": money("700.10"),
+             "annual_interest_rate_percent": "9.5"}]},
+        {"type": "escalation", "ticket_id": "T1", "message": "A colleague will call you."},
+    ]}
+    assert _blocks_summary(body) == [
+        "document_checklist: id_card accepted, payslip requested",
+        "extracted_fields: monthly_net_income=4500 (to confirm), full_name=ELENA POPA",
+        "eligibility_result: eligible",
+        "offers: 2 offers (60m 621.22 RON/month at 9.5%, 48m 700.10 RON/month at 9.5%)",
+        "escalation: A colleague will call you.",
+    ]
+    assert _blocks_summary({}) == []
 
 
 def test_customer_documents_match_profile(credit_db):

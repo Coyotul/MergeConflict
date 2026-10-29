@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { ArrowUpRight, ChevronRight, ClipboardList, History, LogOut, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, ChevronRight, ClipboardList, LogOut, ShieldCheck } from "lucide-react";
 import { useDemo } from "@banking/demo/react";
+import { useReviewQueue } from "@banking/demo/review-react";
 import { DEMO_ACCOUNTS } from "@banking/demo/demo-accounts";
 import { initials } from "@banking/demo/format";
 import { Logo, Pill } from "@banking/ui/primitives";
@@ -15,8 +16,9 @@ import { cn } from "@banking/ui/utils";
 export function StaffShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const { snapshot, loading, error, login, logout, refresh, clearError } = useDemo();
+  const { queue } = useReviewQueue();
+  const pending = queue?.filter((a) => a.status === "PENDING_HUMAN_REVIEW").length ?? 0;
   if (!snapshot) return <SessionGate role="reviewer" loading={loading} error={error} demoAccount={DEMO_ACCOUNTS.reviewer} onLogin={login} onClearError={clearError} />;
-  const pending = snapshot.applications.filter((a) => a.status === "PENDING_HUMAN_REVIEW").length;
 
   return (
     <div className="app-backdrop flex h-dvh max-h-dvh w-full overflow-hidden p-3 gap-3 md:gap-4 md:p-4 lg:gap-5 lg:p-5">
@@ -30,9 +32,8 @@ export function StaffShell({ children }: { children: ReactNode }) {
         <nav className="space-y-1.5">
           {[
             { href: "/", label: "Application queue", icon: ClipboardList },
-            { href: "/audit", label: "Audit history", icon: History },
           ].map(({ href, label, icon: Icon }) => {
-            const active = href === "/" ? path !== "/audit" : path === href;
+            const active = href === "/";
             return (
               <Link
                 key={href}
@@ -90,7 +91,7 @@ export function StaffShell({ children }: { children: ReactNode }) {
             <span className="hidden text-slate-400 sm:inline">Bank agent</span>
             <ChevronRight className="size-3 text-slate-300" />
             <span className="font-semibold text-slate-600">
-              {path === "/audit" ? "Audit history" : path === "/" ? "Application queue" : "Application review"}
+              {path === "/" ? "Application queue" : "Application review"}
             </span>
           </div>
           <div className="flex items-center gap-3">

@@ -74,3 +74,4 @@ coverage/
 factura_scanata.pdf
 .test_tmp_trace/
 .test_tmp_credit/
+.pytest_tmp/

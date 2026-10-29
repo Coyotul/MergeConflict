@@ -1,0 +1,105 @@
+# Conversation-evaluation scenarios (docs/superpowers/specs/2026-10-29-conversation-eval-design.md).
+# Brief figures equal config/orchestrator/customers.yaml (stated + documents) for that customer;
+# the uploaded documents are generated from the same values (scripts/eval/driver.py::customer_documents).
+# Check names and params: scripts/eval/checks.py. The run never confirms an application.
+
+- id: knows_loan
+  customer_id: cust-elena-popa
+  brief: |
+    You are Elena Popa, 35. You want a personal loan of 20,000 RON over 48 months to buy a used car.
+    You are employed at FICTIV Employer's Studio 1 for 67 months, on an indefinite contract.
+    Your net monthly income is 4,500 RON. You have no existing loans or other monthly credit payments (0 RON).
+    Answer what you are asked, one question at a time if possible.
+    When the agent asks for documents, upload each requested one (id_card, payslip, bank_statement).
+    When the agent shows figures read from your documents, confirm them if they match the above.
+    When offers appear, choose the offer with the lowest monthly payment, then say done.
+  stop_when: offers_shown
+  checks:
+    - {check: intent_seen, intent: credit_application, within_turns: 2}
+    - {check: product_final, product: personal_loan}
+    - {check: tool_called, tool: run_eligibility_check}
+    - {check: tool_order, before: run_eligibility_check, after: calculate_loan_offer}
+    - {check: no_model_tool_rejections}
+    - {check: no_failed_turns}
+  rubric:
+    - Asks for one or two missing details at a time and never re-asks something already given.
+    - Explains the eligibility outcome in plain words before showing offers.
+    - Presents the offers with their monthly payment and term, without promising approval.
+
+- id: unsure_type
+  customer_id: cust-radu-mihai
+  brief: |
+    You are Radu Mihai, 41. Start with: "I need some money but I don't know what kind of loan I should get."
+    Only if asked what the money is for: you want to pay off your two existing loans with one new loan,
+    so you have a single monthly payment. Only if asked about amounts: the two loans have about
+    15,000 RON left in total and you would like to repay over 60 months.
+    You are employed at FICTIV Employer's Studio 1 for 67 months. Your net monthly income is 6,500 RON.
+    Your existing loans cost 300 RON per month in total.
+    Answer what you are asked; do not name a loan product yourself.
+    When the agent asks for documents, upload each requested one (id_card, payslip, bank_statement).
+    When the agent shows figures read from your documents, confirm them if they match the above.
+    When offers appear, choose the offer with the lowest monthly payment, then say done.
+  stop_when: offers_shown
+  checks:
+    - {check: clarifying_before_product, min_replies: 1}
+    - {check: tool_before_product, tools: [get_credit_products, search_banking_policies]}
+    - {check: no_tool_before_product, tool: run_eligibility_check}
+    - {check: product_final, products: [refinancing_unsecured, personal_loan]}
+    - {check: no_model_tool_rejections}
+    - {check: no_failed_turns}
+  rubric:
+    - Asks what the money is for before suggesting a loan type.
+    - Explains why the suggested loan type fits paying off existing loans.
+    - Does not push a product before understanding the customer's need.
+
+- id: changes_mind
+  customer_id: cust-alex-morgan
+  brief: |
+    You are Alex Morgan, 38. Start by asking for a personal loan of 40,000 RON over 60 months to buy a car.
+    You are employed at FICTIV Employer's Studio 1 for 67 months. Your net monthly income is 8,500 RON.
+    You have no existing loans or other monthly credit payments (0 RON).
+    Timed change: right after you have told the agent your net monthly income, change your mind:
+    say you would rather buy a flat instead, with a mortgage of 300,000 RON over 300 months.
+    Mark exactly that message with "switch": true.
+    After the change, answer only what is still asked; do not repeat details you already gave unless asked.
+    When the agent asks for documents, upload each requested one (id_card, payslip, bank_statement).
+    When the agent shows figures read from your documents, confirm them if they match the above.
+    When offers appear, choose the offer with the lowest monthly payment, then say done.
+  stop_when: offers_shown
+  checks:
+    - {check: product_changed, from: personal_loan, to: mortgage_casa_ta}
+    - {check: no_tool_after_switch, tools: [run_eligibility_check, calculate_loan_offer]}
+    - {check: tool_called, tool: get_product_requirements, caller: code, min: 2}
+    - {check: product_final, product: mortgage_casa_ta}
+    - {check: no_model_tool_rejections}
+    - {check: no_failed_turns}
+  rubric:
+    - Acknowledges the change of plan and switches to the mortgage without restarting from scratch.
+    - Does not re-ask details both loans share (employment, tenure, income, obligations) once given.
+    - Asks only for what the mortgage additionally needs.
+
+- id: rag_questions
+  customer_id: cust-maria-stoica
+  brief: |
+    You are Maria Stoica, 35. You are not applying for a loan today; you only have general questions.
+    Ask these three questions, one per message, waiting for each answer:
+    1. Which documents do I need for a personal loan?
+    2. What does DAE mean?
+    3. Is there a fee if I repay a loan early?
+    If the agent offers to start an application, politely decline.
+    After the third answer, say done.
+    Only if asked: you are employed at FICTIV Employer's Studio 1 for 67 months, net monthly income
+    6,500 RON, existing loan payments 500 RON per month.
+  stop_when: never
+  checks:
+    - {check: intent_seen, intent: product_info}
+    - {check: search_per_question, min: 3}
+    - {check: cited_answers, min: 3}
+    - {check: tool_not_called, tool: run_eligibility_check}
+    - {check: tool_not_called, tool: calculate_loan_offer}
+    - {check: no_model_tool_rejections}
+    - {check: no_failed_turns}
+  rubric:
+    - Answers each question directly in plain English, based on the cited sources.
+    - Does not push the customer into an application she did not ask for.
+    - Says so when the sources do not cover a question instead of inventing an answer.

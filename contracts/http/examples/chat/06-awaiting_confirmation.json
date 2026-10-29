@@ -79,7 +79,7 @@
         {
           "field": "full_name",
           "label": "Full Name",
-          "value": "Ana Popescu",
+          "value": "Alex Morgan",
           "source": "document",
           "confidence": 0.95,
           "needs_confirmation": false,
@@ -88,7 +88,7 @@
         {
           "field": "age",
           "label": "Age",
-          "value": "34",
+          "value": "38",
           "source": "document",
           "confidence": 0.95,
           "needs_confirmation": false,
@@ -97,7 +97,7 @@
         {
           "field": "monthly_net_income",
           "label": "Monthly Net Income",
-          "value": "6200.00",
+          "value": "8500.00",
           "source": "document",
           "confidence": 0.95,
           "needs_confirmation": false,
@@ -106,7 +106,7 @@
         {
           "field": "employer_name",
           "label": "Employer Name",
-          "value": "TechCorp SRL",
+          "value": "FICTIV Employer's Studio 1",
           "source": "document",
           "confidence": 0.95,
           "needs_confirmation": false,
@@ -115,7 +115,7 @@
         {
           "field": "existing_monthly_obligations",
           "label": "Existing Monthly Obligations",
-          "value": "400.00",
+          "value": "0.00",
           "source": "document",
           "confidence": 0.95,
           "needs_confirmation": false,
@@ -129,11 +129,19 @@
         "status": "satisfied",
         "reasons": [
           {
+            "code": "dti_computed",
+            "message": "Debt-to-income 7.4%: new instalment 630.06 + existing 0.00 RON over income 8500.00 RON (limit 40%)."
+          },
+          {
+            "code": "no_credit_history",
+            "message": "No active loans in the credit bureau; this is neutral."
+          },
+          {
             "code": "all_preliminary_rules_passed",
             "message": "All preliminary rules passed"
           }
         ],
-        "rule_version": "stub-2026-10-28",
+        "rule_version": "credit-check-2026-10-29",
         "missing_fields": [],
         "simulated": true
       }
@@ -142,7 +150,7 @@
       "type": "offers",
       "offers": [
         {
-          "offer_id": "personal_loan-60m-4bab7e",
+          "offer_id": "personal_loan-60m-da6af9",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -175,7 +183,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-36m-4bab7e",
+          "offer_id": "personal_loan-36m-da6af9",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -208,7 +216,7 @@
           "simulated": true
         },
         {
-          "offer_id": "personal_loan-48m-4bab7e",
+          "offer_id": "personal_loan-48m-da6af9",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -241,7 +249,7 @@
           "simulated": true
         }
       ],
-      "selected_offer_id": "personal_loan-60m-4bab7e"
+      "selected_offer_id": "personal_loan-60m-da6af9"
     },
     {
       "type": "application_summary",
@@ -256,7 +264,7 @@
         },
         "term_months": 60,
         "offer": {
-          "offer_id": "personal_loan-60m-4bab7e",
+          "offer_id": "personal_loan-60m-da6af9",
           "product_code": "personal_loan",
           "amount": {
             "amount": "30000.00",
@@ -306,12 +314,12 @@
           },
           {
             "label": "Full Name",
-            "value": "Ana Popescu",
+            "value": "Alex Morgan",
             "source": "document"
           },
           {
             "label": "Age",
-            "value": "34",
+            "value": "38",
             "source": "document"
           },
           {
@@ -326,17 +334,17 @@
           },
           {
             "label": "Monthly Net Income",
-            "value": "6200.00",
+            "value": "8500.00",
             "source": "document"
           },
           {
             "label": "Employer Name",
-            "value": "TechCorp SRL",
+            "value": "FICTIV Employer's Studio 1",
             "source": "document"
           },
           {
             "label": "Existing Monthly Obligations",
-            "value": "400.00",
+            "value": "0.00",
             "source": "document"
           }
         ],

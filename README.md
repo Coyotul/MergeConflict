@@ -52,7 +52,7 @@ Then start the frontend:
 npm run dev
 ```
 
-The customer workspace will connect to the orchestrator automatically. Each new chat session picks a random synthetic customer (`cust-001`, `cust-002`, or `cust-003`) for demonstration purposes.
+The customer workspace will connect to the orchestrator automatically. The chat runs as the signed-in demo customer; the sign-in screen lists nine customers in different eligibility situations (run `python scripts/credit_sources/setup.py` first to build `data/local/credit_sources.db`).
 
 **Environment variables:**
 

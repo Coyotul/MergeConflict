@@ -85,6 +85,8 @@ class OrchestratorSettings(BaseModel):
     database_url: str = "postgresql://rag:rag@127.0.0.1:5433/rag"
     trace: Literal["file", "off"] = "file"
     traces_dir: Path = Path("data/local/traces")
+    credit_sources_db: Path = Path("data/local/credit_sources.db")
+    customer_bindings_path: Path = Path("config/orchestrator/customer_bindings.yaml")
     cors_origins: list[str] = Field(
         default_factory=lambda: [
             "http://127.0.0.1:3000",
@@ -139,7 +141,7 @@ def load_orchestrator_settings(env: Mapping[str, str] | None = None) -> Orchestr
         kwargs["json_mode"] = val in ("true", "1")
 
     # Path fields
-    for field in ["sessions_dir", "uploads_dir", "config_dir", "traces_dir"]:
+    for field in ["sessions_dir", "uploads_dir", "config_dir", "traces_dir", "credit_sources_db", "customer_bindings_path"]:
         key = f"ORCHESTRATOR_{field.upper()}"
         if key in env:
             kwargs[field] = Path(env[key])

@@ -1,68 +1,197 @@
-# Synthetic customer data for testing
+# Synthetic demo customers (chat + document stubs). IDs match config/orchestrator/customer_bindings.yaml;
+# ages are completed years at the dataset as_of_date 2026-10-28. Eligibility uses SQLite ANAF/bureau data,
+# these values only feed what the customer states and what document extraction returns.
+# Radu's payslip deliberately states 6500 vs 5000 at ANAF to show the income_gap reason.
 
 customers:
-  cust-001:
+  cust-alex-morgan:
     profile:
-      full_name: "Ana Popescu"
-      age: 34
+      full_name: "Alex Morgan"
+      age: 38
 
     stated:
       employment_type: "employed"
-      employment_months: 48
+      employment_months: 67
 
     documents:
       id_card:
-        full_name: "Ana Popescu"
-        age: 34
+        full_name: "Alex Morgan"
+        age: 38
 
       payslip:
-        employer_name: "TechCorp SRL"
-        monthly_net_income: 6200
-
-      bank_statement:
-        existing_monthly_obligations: 400
-
-  cust-002:
-    profile:
-      full_name: "Mihai Ionescu"
-      age: 41
-
-    stated:
-      employment_type: "employed"
-      employment_months: 24
-
-    documents:
-      id_card:
-        full_name: "Mihai Ionescu"
-        age: 41
-
-      payslip:
-        employer_name: "AutoService SA"
-        monthly_net_income: 2100
+        employer_name: "FICTIV Employer's Studio 1"
+        monthly_net_income: 8500
 
       bank_statement:
         existing_monthly_obligations: 0
 
-  cust-003:
+  cust-elena-popa:
     profile:
-      full_name: "Elena Dumitru"
-      age: 29
+      full_name: "Elena Popa"
+      age: 35
 
     stated:
-      employment_type: "self_employed"
-      employment_months: 36
+      employment_type: "employed"
+      employment_months: 67
 
     documents:
       id_card:
-        full_name: "Elena Dumitru"
-        age: 29
+        full_name: "Elena Popa"
+        age: 35
 
       payslip:
-        employer_name: "Dumitru Consulting PFA"
-        monthly_net_income: 8000
+        employer_name: "FICTIV Employer's Studio 1"
+        monthly_net_income: 4500
 
       bank_statement:
-        existing_monthly_obligations: 1000
+        existing_monthly_obligations: 0
+
+  cust-radu-mihai:
+    profile:
+      full_name: "Radu Mihai"
+      age: 41
+
+    stated:
+      employment_type: "employed"
+      employment_months: 67
+
+    documents:
+      id_card:
+        full_name: "Radu Mihai"
+        age: 41
+
+      payslip:
+        employer_name: "FICTIV Employer's Studio 1"
+        monthly_net_income: 6500
+
+      bank_statement:
+        existing_monthly_obligations: 300
+
+  cust-dan-ionescu:
+    profile:
+      full_name: "Dan Ionescu"
+      age: 42
+
+    stated:
+      employment_type: "employed"
+      employment_months: 67
+
+    documents:
+      id_card:
+        full_name: "Dan Ionescu"
+        age: 42
+
+      payslip:
+        employer_name: "FICTIV Employer's Studio 1"
+        monthly_net_income: 5996.25
+
+      bank_statement:
+        existing_monthly_obligations: 2340
+
+  cust-andrei-stan:
+    profile:
+      full_name: "Andrei Stan"
+      age: 30
+
+    stated:
+      employment_type: "employed"
+      employment_months: 67
+
+    documents:
+      id_card:
+        full_name: "Andrei Stan"
+        age: 30
+
+      payslip:
+        employer_name: "FICTIV Employer's Studio 1"
+        monthly_net_income: 2300
+
+      bank_statement:
+        existing_monthly_obligations: 0
+
+  cust-ioana-marin:
+    profile:
+      full_name: "Ioana Marin"
+      age: 39
+
+    stated:
+      employment_type: "employed"
+      employment_months: 67
+
+    documents:
+      id_card:
+        full_name: "Ioana Marin"
+        age: 39
+
+      payslip:
+        employer_name: "FICTIV Employer's Studio 1"
+        monthly_net_income: 6000
+
+      bank_statement:
+        existing_monthly_obligations: 500
+
+  cust-victor-dobre:
+    profile:
+      full_name: "Victor Dobre"
+      age: 47
+
+    stated:
+      employment_type: "employed"
+      employment_months: 67
+
+    documents:
+      id_card:
+        full_name: "Victor Dobre"
+        age: 47
+
+      payslip:
+        employer_name: "FICTIV Employer's Studio 1"
+        monthly_net_income: 5500
+
+      bank_statement:
+        existing_monthly_obligations: 0
+
+  cust-maria-stoica:
+    profile:
+      full_name: "Maria Stoica"
+      age: 35
+
+    stated:
+      employment_type: "employed"
+      employment_months: 67
+
+    documents:
+      id_card:
+        full_name: "Maria Stoica"
+        age: 35
+
+      payslip:
+        employer_name: "FICTIV Employer's Studio 1"
+        monthly_net_income: 6500
+
+      bank_statement:
+        existing_monthly_obligations: 500
+
+  cust-mihai-ilie:
+    profile:
+      full_name: "Mihai Ilie"
+      age: 40
+
+    stated:
+      employment_type: "self_employed"
+      employment_months: 57
+
+    documents:
+      id_card:
+        full_name: "Mihai Ilie"
+        age: 40
+
+      payslip:
+        employer_name: "Ilie Mihai PFA"
+        monthly_net_income: 7000
+
+      bank_statement:
+        existing_monthly_obligations: 0
 
     low_confidence:
       - monthly_net_income

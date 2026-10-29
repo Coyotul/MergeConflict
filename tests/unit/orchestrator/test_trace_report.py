@@ -19,8 +19,8 @@ def generate_realistic_fixture(orchestrator_factory) -> list[dict]:
         call("get_credit_products", intent="product_info"),
         respond("Avem trei produse de credit.", intent="product_info"),
     ], tracer=tracer)
-    sid = orch.start_session("cust-001").session_id
-    orch.handle(sid, "cust-001", CustomerMessage("Ce credite aveți?"))
+    sid = orch.start_session("cust-alex-morgan").session_id
+    orch.handle(sid, "cust-alex-morgan", CustomerMessage("Ce credite aveți?"))
     return tracer.events
 
 
@@ -124,7 +124,7 @@ def test_render_report_full_mode_includes_context(fixture_trace):
 def test_render_report_unknown_event_types():
     from scripts.trace_report import render_report
     events = [
-        {"type": "session_started", "session_id": "test", "customer_id": "cust-001",
+        {"type": "session_started", "session_id": "test", "customer_id": "cust-alex-morgan",
          "model": "test-model", "prompt_version": "v1", "system_prompt": "Test prompt",
          "temperature": 0.7, "json_mode": True, "max_steps": 4, "history_window": 10,
          "ts": "2026-10-29T10:00:00Z", "turn_id": None, "step": None},
@@ -149,8 +149,8 @@ def test_render_report_field_updates_with_checkmarks(orchestrator_factory):
         ]),
         respond("Perfect.", intent="credit_application"),
     ], tracer=tracer)
-    sid = orch.start_session("cust-001").session_id
-    orch.handle(sid, "cust-001", CustomerMessage("vreau 5000 lei"))
+    sid = orch.start_session("cust-alex-morgan").session_id
+    orch.handle(sid, "cust-alex-morgan", CustomerMessage("vreau 5000 lei"))
 
     report = render_report(tracer.events, full=False)
 
@@ -201,7 +201,7 @@ def test_render_raw_output_on_invalid_action(tmp_test_dir):
     from scripts.trace_report import render_report, load_events
 
     events = [
-        {"type": "session_started", "session_id": "test", "customer_id": "cust-001",
+        {"type": "session_started", "session_id": "test", "customer_id": "cust-alex-morgan",
          "model": "test-model", "prompt_version": "v1", "system_prompt": "Test prompt",
          "temperature": 0.7, "json_mode": True, "max_steps": 4, "history_window": 10,
          "ts": "2026-10-29T10:00:00Z", "turn_id": None, "step": None},
@@ -230,7 +230,7 @@ def test_render_tool_arguments_inline(tmp_test_dir):
     from scripts.trace_report import render_report
 
     events = [
-        {"type": "session_started", "session_id": "test", "customer_id": "cust-001",
+        {"type": "session_started", "session_id": "test", "customer_id": "cust-alex-morgan",
          "model": "test-model", "prompt_version": "v1", "system_prompt": "Test",
          "ts": "2026-10-29T10:00:00Z", "turn_id": None, "step": None},
         {"type": "turn_started", "session_id": "test", "turn_id": "turn-1", "step": None,
@@ -262,7 +262,7 @@ def test_render_tool_call_output_summary(tmp_test_dir):
     from scripts.trace_report import render_report
 
     events = [
-        {"type": "session_started", "session_id": "test", "customer_id": "cust-001",
+        {"type": "session_started", "session_id": "test", "customer_id": "cust-alex-morgan",
          "model": "test-model", "prompt_version": "v1", "system_prompt": "Test",
          "ts": "2026-10-29T10:00:00Z", "turn_id": None, "step": None},
         {"type": "turn_started", "session_id": "test", "turn_id": "turn-1", "step": None,
@@ -297,7 +297,7 @@ def test_render_discarded_reply(tmp_test_dir):
     from scripts.trace_report import render_report
 
     events = [
-        {"type": "session_started", "session_id": "test", "customer_id": "cust-001",
+        {"type": "session_started", "session_id": "test", "customer_id": "cust-alex-morgan",
          "model": "test-model", "prompt_version": "v1", "system_prompt": "Test",
          "ts": "2026-10-29T10:00:00Z", "turn_id": None, "step": None},
         {"type": "turn_started", "session_id": "test", "turn_id": "turn-1", "step": None,
@@ -331,7 +331,7 @@ def test_render_code_event_detail(tmp_test_dir):
     from scripts.trace_report import render_report
 
     events = [
-        {"type": "session_started", "session_id": "test", "customer_id": "cust-001",
+        {"type": "session_started", "session_id": "test", "customer_id": "cust-alex-morgan",
          "model": "test-model", "prompt_version": "v1", "system_prompt": "Test",
          "ts": "2026-10-29T10:00:00Z", "turn_id": None, "step": None},
         {"type": "turn_started", "session_id": "test", "turn_id": "turn-1", "step": None,
@@ -355,7 +355,7 @@ def test_render_turn_finished_error_and_awaiting(tmp_test_dir):
     from scripts.trace_report import render_report
 
     events = [
-        {"type": "session_started", "session_id": "test", "customer_id": "cust-001",
+        {"type": "session_started", "session_id": "test", "customer_id": "cust-alex-morgan",
          "model": "test-model", "prompt_version": "v1", "system_prompt": "Test",
          "ts": "2026-10-29T10:00:00Z", "turn_id": None, "step": None},
         {"type": "turn_started", "session_id": "test", "turn_id": "turn-1", "step": None,
@@ -381,7 +381,7 @@ def test_render_citations_with_ids(tmp_test_dir):
     from scripts.trace_report import render_report
 
     events = [
-        {"type": "session_started", "session_id": "test", "customer_id": "cust-001",
+        {"type": "session_started", "session_id": "test", "customer_id": "cust-alex-morgan",
          "model": "test-model", "prompt_version": "v1", "system_prompt": "Test",
          "ts": "2026-10-29T10:00:00Z", "turn_id": None, "step": None},
         {"type": "turn_started", "session_id": "test", "turn_id": "turn-1", "step": None,
@@ -464,7 +464,7 @@ def test_render_unknown_session_level_event(tmp_test_dir):
     from scripts.trace_report import render_report
 
     events = [
-        {"type": "session_started", "session_id": "test", "customer_id": "cust-001",
+        {"type": "session_started", "session_id": "test", "customer_id": "cust-alex-morgan",
          "model": "test-model", "prompt_version": "v1", "system_prompt": "Test",
          "ts": "2026-10-29T10:00:00Z", "turn_id": None, "step": None},
         {"type": "unknown_session_event", "session_id": "test", "turn_id": None, "step": None,

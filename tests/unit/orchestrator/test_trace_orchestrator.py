@@ -15,7 +15,7 @@ from src.integrations.llm.chat import FakeChatModel
 from src.models.knowledge import Product
 from tests.unit.orchestrator.factories import call, make_verified_app, respond, seed_application
 
-CUSTOMER = "cust-001"
+CUSTOMER = "cust-alex-morgan"
 GREET = respond("Bună! Cu ce te pot ajuta?")
 
 

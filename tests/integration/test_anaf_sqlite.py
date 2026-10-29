@@ -268,7 +268,7 @@ class SqliteAnafTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result.financial_assessment)
         self.assertFalse(missing.exists())
 
-    async def test_all_323_fixture_people_are_queryable_without_other_source_reads(self):
+    async def test_all_332_fixture_people_are_queryable_without_other_source_reads(self):
         with closing(sqlite3.connect(self.path.as_uri() + "?mode=ro", uri=True)) as database:
             people = database.execute("SELECT cnp, persona_tag FROM persons ORDER BY cnp").fetchall()
         configured = AnafIdentityBindings.model_validate({
@@ -286,7 +286,7 @@ class SqliteAnafTests(unittest.IsolatedAsyncioTestCase):
                 self.assertLessEqual(result.data.period_end, result.data.reference_date)
                 if result.data.income_basis == IncomeBasis.ANNUAL_AVERAGE:
                     self.assertFalse(result.data.recurring)
-        self.assertEqual(provider.calls, 323)
+        self.assertEqual(provider.calls, 332)
 
     async def test_changed_database_salary_changes_the_real_assessment(self):
         service = build_demo_service(self.root / "demo-assessments.sqlite3", lambda: NOW, anaf_database_path=self.path)

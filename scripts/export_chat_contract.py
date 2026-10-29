@@ -1,7 +1,7 @@
 """Export the chat API contract for the frontend.
 
 Writes contracts/http/chat.openapi.yaml and, by running the mock-mode happy
-path for cust-001, one example TurnResponse per progress stage
+path for cust-alex-morgan, one example TurnResponse per progress stage
 (examples/chat/NN-<stage>.json) plus error-503.json and error-422.json.
 Volatile values (ids, timestamps) are replaced by fixed placeholders so a
 re-run doesn't change the files.
@@ -29,7 +29,7 @@ from src.core.composition import build_orchestrator  # noqa: E402
 from src.core.settings import OrchestratorSettings  # noqa: E402
 from src.integrations.llm.chat import FakeChatModel  # noqa: E402
 
-CUSTOMER_ID = "cust-001"
+CUSTOMER_ID = "cust-alex-morgan"
 FIXED_TIME = "2026-10-28T09:00:00Z"
 NO_STAGE = "start"
 
@@ -42,8 +42,8 @@ HAPPY_PATH: list[tuple[str, str | None]] = [
     ("say", "employed"),
     ("say", "48"),
     ("say", "7000"),
-    ("say", "TechCorp SRL"),
-    ("say", "400"),
+    ("say", "FICTIV Employer's Studio 1"),
+    ("say", "0"),
     ("upload", "id_card"),
     ("upload", "payslip"),
     ("upload", "bank_statement"),
@@ -185,7 +185,9 @@ def _scratch_dir() -> Path:
 def mock_settings(uploads_dir: Path) -> OrchestratorSettings:
     """Mock-mode settings built explicitly: the export never reads .env."""
     return OrchestratorSettings(
-        model="fake", session_store="memory", uploads_dir=uploads_dir, config_dir=REPO_ROOT / "config" / "orchestrator"
+        model="fake", session_store="memory", uploads_dir=uploads_dir, config_dir=REPO_ROOT / "config" / "orchestrator",
+        credit_sources_db=REPO_ROOT / "data" / "local" / "credit_sources.db",
+        customer_bindings_path=REPO_ROOT / "config" / "orchestrator" / "customer_bindings.yaml",
     )
 
 

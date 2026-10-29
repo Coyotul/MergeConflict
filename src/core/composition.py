@@ -1,4 +1,5 @@
 """Factory functions for building orchestrator components."""
+from dataclasses import replace
 from pathlib import Path
 
 import psycopg
@@ -6,11 +7,13 @@ import psycopg
 from src.agent.orchestration.demo_model import DemoChatModel
 from src.agent.orchestration.orchestrator import Orchestrator
 from src.agent.orchestration.trace import FileTracer, NullTracer, Tracer
+from src.agent.tools.credit_check import make_eligibility_handler, make_profile_handler
 from src.agent.tools.registry import ToolRegistry
 from src.agent.tools.retrieval import PolicySearch, build_policy_search
 from src.agent.tools.stubs import StubData, build_stub_registry
 from src.core.errors import ConfigurationError
 from src.core.settings import OrchestratorSettings
+from src.integrations.credit_sources import SqliteCreditSources, load_bindings
 from src.integrations.llm.chat import ChatModel, FeatherlessChatModel
 from src.services.conversations.store import (
     InMemorySessionStore,
@@ -75,6 +78,23 @@ def build_tracer(settings: OrchestratorSettings) -> Tracer:
         raise ConfigurationError(f"Unknown trace type: {settings.trace}")
 
 
+def build_registry(settings: OrchestratorSettings, stub_data: StubData, policy_search: PolicySearch) -> ToolRegistry:
+    """Stub registry with get_customer_profile and run_eligibility_check backed by SQLite credit sources.
+
+    The ToolSpec fields (flows, preconditions, model visibility) stay those of the stub registry;
+    only the handlers change.
+    """
+    registry = build_stub_registry(stub_data, policy_search)
+    sources = SqliteCreditSources(settings.credit_sources_db, load_bindings(settings.customer_bindings_path))
+    overrides = {
+        "get_customer_profile": make_profile_handler(sources),
+        "run_eligibility_check": make_eligibility_handler(sources, stub_data),
+    }
+    for name, handler in overrides.items():
+        registry.register(replace(registry.get(name), handler=handler))
+    return registry
+
+
 def build_orchestrator(
     settings: OrchestratorSettings,
     *,
@@ -108,7 +128,7 @@ def build_orchestrator(
     policy_search = build_policy_search(settings)
 
     # Build tool registry
-    registry = build_stub_registry(stub_data, policy_search)
+    registry = build_registry(settings, stub_data, policy_search)
 
     return Orchestrator(
         store=store,
